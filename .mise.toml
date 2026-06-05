@@ -1,0 +1,17 @@
+[tools]
+python = "3.11"
+
+[hooks]
+enter = "docker compose up -d postgres"
+
+[tasks.infra-up]
+description = "Start local PostgreSQL with pgvector"
+run = "docker compose up -d postgres"
+
+[tasks.infra-down]
+description = "Stop local infrastructure"
+run = "docker compose down"
+
+[tasks.infra-logs]
+description = "Tail PostgreSQL logs"
+run = "docker compose logs -f postgres"
