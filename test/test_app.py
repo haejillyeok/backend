@@ -1,19 +1,93 @@
 import importlib.util
 
 from fastapi.testclient import TestClient
+from grpc import StatusCode
 
 from app.agent.main import create_app as create_agent_app
 from app.be.main import create_app as create_be_app
+from app.shared.core.exceptions import AppException
+from app.shared.core.responses import fail, ok
 
 
 def test_be_health_endpoints_return_ok():
     client = TestClient(create_be_app())
 
-    for path in ("/health", "/api/v1/health"):
-        response = client.get(path)
+    root_response = client.get("/health")
+    api_response = client.get("/api/v1/health")
 
-        assert response.status_code == 200
-        assert response.json() == {"status": "ok"}
+    assert root_response.status_code == 200
+    assert root_response.json() == {"status": "ok"}
+    assert api_response.status_code == 200
+    assert api_response.json() == {
+        "success": True,
+        "data": {"status": "ok"},
+        "error": None,
+    }
+
+
+def test_be_custom_exception_returns_common_error_response():
+    app = create_be_app()
+
+    @app.get("/api/v1/test-error")
+    def raise_test_error():
+        raise AppException(
+            code="TEST_CONFLICT",
+            message="테스트 충돌입니다.",
+            details={"field": "nickname"},
+            http_status_code=409,
+            grpc_status_code=StatusCode.ALREADY_EXISTS,
+        )
+
+    client = TestClient(app)
+
+    response = client.get("/api/v1/test-error")
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "success": False,
+        "data": None,
+        "error": {
+            "code": "TEST_CONFLICT",
+            "message": "테스트 충돌입니다.",
+            "details": {"field": "nickname"},
+        },
+    }
+
+
+def test_shared_envelope_can_be_used_at_protocol_boundaries():
+    success = ok({"status": "ok"})
+    error = fail(
+        code="TEST_CONFLICT",
+        message="테스트 충돌입니다.",
+        details={"field": "nickname"},
+    )
+
+    assert success.model_dump(mode="json") == {
+        "success": True,
+        "data": {"status": "ok"},
+        "error": None,
+    }
+    assert error.model_dump(mode="json") == {
+        "success": False,
+        "data": None,
+        "error": {
+            "code": "TEST_CONFLICT",
+            "message": "테스트 충돌입니다.",
+            "details": {"field": "nickname"},
+        },
+    }
+
+
+def test_shared_exception_carries_http_and_grpc_status_metadata():
+    exception = AppException(
+        code="TEST_CONFLICT",
+        message="테스트 충돌입니다.",
+        http_status_code=409,
+        grpc_status_code=StatusCode.ALREADY_EXISTS,
+    )
+
+    assert exception.http_status_code == 409
+    assert exception.grpc_status_code is StatusCode.ALREADY_EXISTS
 
 
 def test_agent_health_endpoints_return_ok():

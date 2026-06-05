@@ -3,6 +3,7 @@ from contextlib import AsyncExitStack, asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.be.api.exception_handlers import register_exception_handlers
 from app.be.api.endpoints.health import router as health_router
 from app.be.api.router import router as api_router
 from app.be.grpc.server import create_grpc_server
@@ -35,6 +36,7 @@ def create_app() -> FastAPI:
         debug=settings.debug,
         lifespan=app_lifespan,
     )
+    register_exception_handlers(app)
     app.include_router(health_router)
     app.include_router(api_router)
 

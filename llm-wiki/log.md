@@ -2,6 +2,19 @@
 
 이 파일은 `llm-wiki/`의 시간순 작업 이력입니다. 새 항목은 위에 추가합니다.
 
+## [2026-06-05] maintenance | Add common protocol response and exceptions
+
+- HTTP/gRPC 같은 프로토콜 경계에서 쓰는 `success`, `data`, `error` 공통 response envelope를 `app/shared/core` 기준으로 정리했다.
+- 커스텀 예외는 `AppException` 기준으로 관리하고 각 프로토콜 handler에서 변환한다고 기록했다.
+- BE `/api/v1/*`는 shared envelope를 HTTP JSON으로 반환하고, root `/health`는 운영 probe 용도이므로 raw response를 유지한다고 남겼다.
+
+## [2026-06-05] maintenance | Add auth session login decision
+
+- 가입 겸 로그인 API는 `POST /api/v1/auth/login` 하나로 처리한다고 정리했다.
+- 닉네임이 없으면 가입하고, 있으면 비밀번호를 검증하는 PoC 인증 흐름을 기록했다.
+- 성공 시 opaque session token을 `session_token` HttpOnly cookie로 발급하고 DB에는 `token_hash`를 저장한다고 결정했다.
+- `users.user_sessions` table의 역할과 멀티 서버 확장 기준을 위키에 남겼다.
+
 ## [2026-06-05] maintenance | Use domain schema for users
 
 - PostgreSQL schema namespace는 프로젝트명이 아니라 도메인 기준으로 관리한다고 정리했다.

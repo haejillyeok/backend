@@ -34,6 +34,8 @@
 | [wiki/decisions/2026-06-05-docs-vs-llm-wiki.md](wiki/decisions/2026-06-05-docs-vs-llm-wiki.md) | `docs/`는 사람 전용 문서, `llm-wiki/`는 AI 작업 지식 전체로 분리한다는 결정 |
 | [wiki/decisions/2026-06-05-backend-practices.md](wiki/decisions/2026-06-05-backend-practices.md) | FastAPI/gRPC/WebSocket 기준과 코드 컨벤션을 `llm-wiki`에 작업 기준으로 둔 결정 |
 | [wiki/decisions/2026-06-05-users-table-poc.md](wiki/decisions/2026-06-05-users-table-poc.md) | PoC 유저 테이블의 UUID v7 내부/외부 관리번호, 닉네임, 비밀번호 hash, 접속 IP 관리 결정 |
+| [wiki/decisions/2026-06-05-auth-session-login.md](wiki/decisions/2026-06-05-auth-session-login.md) | 가입 겸 로그인 API와 opaque session token, HttpOnly cookie 기반 인증 결정 |
+| [wiki/decisions/2026-06-05-common-api-response-and-exceptions.md](wiki/decisions/2026-06-05-common-api-response-and-exceptions.md) | `app/shared/core` 공통 response envelope와 `AppException` 기반 HTTP/gRPC 예외 처리 결정 |
 
 ## Sources
 
