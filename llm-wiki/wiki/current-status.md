@@ -25,6 +25,8 @@ updated: 2026-06-05
 - 에이전트 서버 실행: `mise run dev-agent`
 - proto 생성: `mise run grpc-generate`
 - 테스트: `mise run test`
+- 포맷 적용: `mise run format`
+- 포맷 확인: `mise run format-check`
 - migration 생성: `mise run db-revision "message"`
 - migration 적용: `mise run db-upgrade-head`
 - migration 대상 DB는 기본적으로 앱과 같은 `BE_DB_*` 설정을 사용한다.

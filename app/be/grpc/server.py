@@ -12,9 +12,7 @@ SERVICE_NAME = "haejillyeok-be"
 
 
 def create_grpc_server() -> grpc.aio.Server:
-    server = grpc.aio.server(
-        interceptors=(AuditServerInterceptor(service_name=SERVICE_NAME),)
-    )
+    server = grpc.aio.server(interceptors=(AuditServerInterceptor(service_name=SERVICE_NAME),))
     register_internal_health_service(server)
     return server
 

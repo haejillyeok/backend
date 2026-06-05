@@ -14,6 +14,12 @@
 - 커스텀 예외는 `AppException` 기준으로 관리하고 각 프로토콜 handler에서 변환한다고 기록했다.
 - BE `/api/v1/*`는 shared envelope를 HTTP JSON으로 반환하고, root `/health`는 운영 probe 용도이므로 raw response를 유지한다고 남겼다.
 
+## [2026-06-05] maintenance | Add format check management
+
+- 개발 의존성에 `ruff`를 추가했다.
+- `mise run format`과 `mise run format-check` 태스크로 포맷 적용과 확인을 분리했다.
+- README, 개발 문서, 코드 컨벤션, AI용 현재 상태 위키에 포맷 관리 기준을 반영했다.
+
 ## [2026-06-05] maintenance | Add auth session login decision
 
 - 가입 겸 로그인 API는 `POST /api/v1/auth/login` 하나로 처리한다고 정리했다.

@@ -56,9 +56,7 @@ def load_grpc_env_values(
         if not value
     ]
     if missing:
-        raise ValueError(
-            "Missing required gRPC environment variables: " + ", ".join(missing)
-        )
+        raise ValueError("Missing required gRPC environment variables: " + ", ".join(missing))
 
     return {
         "host": str(host),

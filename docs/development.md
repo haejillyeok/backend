@@ -90,3 +90,17 @@ mise run grpc-generate
 ```bash
 mise run test
 ```
+
+## Format
+
+포맷은 `ruff`로 관리합니다. 변경 전 확인은 아래 명령으로 실행합니다.
+
+```bash
+mise run format-check
+```
+
+로컬에서 자동 정리가 필요하면 아래 명령을 사용합니다.
+
+```bash
+mise run format
+```

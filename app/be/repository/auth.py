@@ -16,9 +16,7 @@ class AuthRepository:
 
     async def get_user_by_nickname(self, nickname: str) -> User | None:
         """닉네임으로 유저를 조회하고, 없으면 None을 반환합니다."""
-        result = await self.db_session.execute(
-            select(User).where(User.nickname == nickname)
-        )
+        result = await self.db_session.execute(select(User).where(User.nickname == nickname))
         return result.scalar_one_or_none()
 
     async def create_user(

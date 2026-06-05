@@ -12,12 +12,7 @@ def hash_password(password: str) -> str:
     """비밀번호를 salt가 포함된 PBKDF2-HMAC-SHA256 문자열로 변환합니다."""
     salt = token_hex(PASSWORD_SALT_BYTES)
     digest = _derive_password_digest(password, salt, PASSWORD_HASH_ITERATIONS)
-    return (
-        f"{PASSWORD_HASH_ALGORITHM}$"
-        f"{PASSWORD_HASH_ITERATIONS}$"
-        f"{salt}$"
-        f"{digest}"
-    )
+    return f"{PASSWORD_HASH_ALGORITHM}${PASSWORD_HASH_ITERATIONS}${salt}${digest}"
 
 
 def verify_password(password: str, encoded_password_hash: str) -> bool:

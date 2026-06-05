@@ -54,6 +54,8 @@ mise run dev-be
 mise run dev-agent
 mise run grpc-generate
 mise run test
+mise run format
+mise run format-check
 mise run db-revision "change description"
 mise run db-upgrade-head
 mise run db-current
@@ -140,6 +142,14 @@ agent: GET /api/v1/health
 
 ```bash
 mise run test
+```
+
+포맷은 `ruff`로 관리합니다. 변경 전 확인은 `format-check`, 로컬 자동 정리는 `format`을
+사용합니다.
+
+```bash
+mise run format-check
+mise run format
 ```
 
 ```bash

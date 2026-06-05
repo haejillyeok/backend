@@ -87,8 +87,7 @@ def test_grpc_servers_register_audit_interceptor(monkeypatch):
 
     assert isinstance(server, FakeGrpcServer)
     assert any(
-        isinstance(interceptor, AuditServerInterceptor)
-        for interceptor in captured_interceptors
+        isinstance(interceptor, AuditServerInterceptor) for interceptor in captured_interceptors
     )
 
 

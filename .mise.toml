@@ -34,6 +34,16 @@ description = "Python 테스트를 실행합니다"
 depends = ["grpc-generate"]
 run = ".venv/bin/python -m pytest"
 
+[tasks.format]
+description = "Python 코드 포맷을 적용합니다"
+depends = ["install"]
+run = ".venv/bin/python -m ruff format app test migrations"
+
+[tasks.format-check]
+description = "Python 코드 포맷 상태를 확인합니다"
+depends = ["install"]
+run = ".venv/bin/python -m ruff format --check app test migrations"
+
 [tasks.db-revision]
 description = "Alembic autogenerate로 새 DB migration revision을 생성합니다"
 depends = ["install"]

@@ -36,11 +36,7 @@ def format_audit_event(event: AuditEvent) -> str:
         "peer": event.peer,
         "error_code": event.error_code,
     }
-    parts = [
-        f"{key}={value}"
-        for key, value in fields.items()
-        if value is not None
-    ]
+    parts = [f"{key}={value}" for key, value in fields.items() if value is not None]
     return "audit " + " ".join(parts)
 
 

@@ -18,6 +18,13 @@
 - 로컬 import는 `app...` absolute import를 기본으로 한다.
 - 순환 import가 생기면 구조를 조정하고, 함수 내부 import로 숨기는 방식은 마지막 수단으로 둔다.
 
+## Formatting
+
+- Python 포맷은 `ruff`로 관리한다.
+- 로컬 자동 정리는 `mise run format`을 사용한다.
+- 변경 전 포맷 확인은 `mise run format-check`를 사용한다.
+- 포맷 설정은 `pyproject.toml`의 `[tool.ruff]`를 기준으로 한다.
+
 ## Async
 
 - I/O 작업은 async API를 우선한다.
