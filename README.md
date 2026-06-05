@@ -4,6 +4,13 @@
 
 이 프로젝트는 로컬 런타임과 인프라 실행을 위해 `mise`를 사용합니다.
 
+## 문서
+
+프로젝트 문서는 [docs/index.md](/Users/723poil/Documents/git/haejillyeok/backend/docs/index.md)에서 확인할 수 있습니다.
+
+- FastAPI, gRPC, WebSocket 가이드: [docs/backend-guidelines.md](/Users/723poil/Documents/git/haejillyeok/backend/docs/backend-guidelines.md)
+- 코드 컨벤션: [docs/code-conventions.md](/Users/723poil/Documents/git/haejillyeok/backend/docs/code-conventions.md)
+
 ### mise 설정
 
 아직 셸에 mise 활성화 설정이 없다면 아래 명령어를 실행합니다.
