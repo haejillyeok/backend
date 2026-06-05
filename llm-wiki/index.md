@@ -15,6 +15,7 @@
 | [wiki/current-status.md](wiki/current-status.md) | 현재 backend 레포의 실행 구조, 문서 상태, 다음에 확인할 지점 |
 | [wiki/project-map.md](wiki/project-map.md) | 주요 디렉터리와 소유 책임 요약 |
 | [wiki/backend-guidelines.md](wiki/backend-guidelines.md) | FastAPI, gRPC, WebSocket 구현 시 AI가 따라야 하는 작업 기준 |
+| [wiki/database-migrations.md](wiki/database-migrations.md) | Alembic 기반 DB migration 형상관리와 운영 기준 |
 | [wiki/code-conventions.md](wiki/code-conventions.md) | Python 코드 스타일, 주석/docstring, 레이어 책임, 테스트 기준 |
 | [wiki/backend-guidelines-summary.md](wiki/backend-guidelines-summary.md) | FastAPI, gRPC, WebSocket, 코드 컨벤션의 빠른 요약 |
 

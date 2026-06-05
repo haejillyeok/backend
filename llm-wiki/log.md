@@ -2,6 +2,20 @@
 
 이 파일은 `llm-wiki/`의 시간순 작업 이력입니다. 새 항목은 위에 추가합니다.
 
+## [2026-06-05] maintenance | Clarify Alembic commands and target DB
+
+- Alembic logger 설정을 제거해 앱 로깅 설정과 겹칠 여지를 줄였다.
+- migration 대상 DB는 기본적으로 앱과 같은 `BE_DB_*` 설정을 쓰고, 일회성 override만 Alembic `-x database_url=...`로 하도록 정리했다.
+- `mise` DB migration 태스크 이름과 사용법을 위키에 반영했다.
+- 별도 migration 설정 테스트는 제거했다.
+
+## [2026-06-05] maintenance | Add Alembic migration knowledge
+
+- DB schema migration을 Alembic으로 관리하는 기준을 `llm-wiki/wiki/database-migrations.md`에 정리했다.
+- `app/be/models/`를 SQLAlchemy ORM 모델과 Alembic metadata base 위치로 기록했다.
+- `migrations/`를 Alembic 환경과 revision 파일 위치로 기록했다.
+- 앱 시작 시 migration을 자동 실행하지 않고 배포 절차에서 앱 실행 전에 `alembic upgrade head`를 실행하는 운영 기준을 남겼다.
+
 ## [2026-06-05] maintenance | Treat docs as human-only and llm-wiki as AI knowledge
 
 - `docs/`를 사람이 보는 문서로 재정의했다.
