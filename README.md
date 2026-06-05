@@ -127,6 +127,14 @@ mise run dev-agent
 mise run grpc-generate
 ```
 
+FastAPI 문서와 OpenAPI schema는 각 서버 실행 후 아래 경로에서 확인할 수 있습니다.
+
+```text
+Swagger UI:   GET /docs
+OpenAPI JSON: GET /openapi.json
+ReDoc:        GET /redoc
+```
+
 기본 헬스 체크 엔드포인트는 아래 경로에서 확인할 수 있습니다.
 
 ```text
