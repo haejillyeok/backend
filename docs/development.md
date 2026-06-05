@@ -30,10 +30,21 @@ DB URL은 위 접속 정보를 코드에서 조립합니다.
 mise run dev-be
 ```
 
+`dev-be`는 REST API와 `be` gRPC 서버를 함께 실행합니다.
+
 에이전트 서버:
 
 ```bash
 mise run dev-agent
+```
+
+`dev-agent`는 REST API와 `agent` gRPC 서버를 함께 실행합니다.
+
+`dev-be`, `dev-agent`, `test`는 실행 전에 proto Python binding을 자동 생성합니다.
+필요할 때 직접 다시 생성할 수도 있습니다.
+
+```bash
+mise run grpc-generate
 ```
 
 ## Test
