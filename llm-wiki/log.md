@@ -2,6 +2,23 @@
 
 이 파일은 `llm-wiki/`의 시간순 작업 이력입니다. 새 항목은 위에 추가합니다.
 
+## [2026-06-05] maintenance | Use domain schema for users
+
+- PostgreSQL schema namespace는 프로젝트명이 아니라 도메인 기준으로 관리한다고 정리했다.
+- 유저 도메인은 `users` schema를 사용하고, 유저 테이블은 `users.users`로 관리한다고 기록했다.
+- ORM 모델은 `__table_args__`로 schema를 명시하고 migration은 domain schema를 생성한 뒤 table을 만들도록 기준을 남겼다.
+
+## [2026-06-05] maintenance | Add users external identifier
+
+- `users.public_id`를 UUID v7 외부용 관리번호로 두고 `users.id`는 내부 join용 관리번호로 유지한다고 정리했다.
+- PoC 유저 테이블 결정 기록에서 외부 응답/API 식별자는 `public_id`, 내부 참조는 `id`를 사용하도록 갱신했다.
+
+## [2026-06-05] maintenance | Add PoC users table decision
+
+- PoC 유저 테이블 결정을 `llm-wiki/wiki/decisions/2026-06-05-users-table-poc.md`에 추가했다.
+- `users.id`는 UUID v7 내부용 관리번호로 두고 외부용 관리번호는 현재 만들지 않기로 정리했다.
+- 닉네임은 `text` column과 코드 단 15자 제한으로 관리하고, 비밀번호는 PBKDF2-HMAC-SHA256 hash로 저장한다고 기록했다.
+
 ## [2026-06-05] maintenance | Add database schema conventions
 
 - `llm-wiki/wiki/database-schema-conventions.md`를 추가했다.
