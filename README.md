@@ -45,6 +45,7 @@ mise run infra-logs
 mise run install
 mise run dev-be
 mise run dev-agent
+mise run grpc-generate
 mise run test
 ```
 
@@ -76,10 +77,21 @@ mise run install
 mise run dev-be
 ```
 
+`dev-be`는 REST API와 `be` gRPC 서버를 함께 실행합니다.
+
 에이전트 서버를 실행합니다.
 
 ```bash
 mise run dev-agent
+```
+
+`dev-agent`는 REST API와 `agent` gRPC 서버를 함께 실행합니다.
+
+`dev-be`, `dev-agent`, `test`는 실행 전에 proto Python binding을 자동 생성합니다.
+필요할 때 직접 다시 생성할 수도 있습니다.
+
+```bash
+mise run grpc-generate
 ```
 
 기본 헬스 체크 엔드포인트는 아래 경로에서 확인할 수 있습니다.
@@ -90,6 +102,8 @@ be:    GET /api/v1/health
 agent: GET /health
 agent: GET /api/v1/health
 ```
+
+내부 gRPC 헬스 체크 계약은 각 서버의 proto 디렉터리에서 관리합니다.
 
 테스트는 아래 명령으로 실행합니다.
 

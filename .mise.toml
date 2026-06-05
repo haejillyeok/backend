@@ -15,18 +15,23 @@ run = ".venv/bin/python -m pip install -e '.[dev]'"
 
 
 [tasks.dev-be]
-description = "백엔드 개발 서버를 실행합니다"
-depends = ["install"]
+description = "백엔드 REST API와 gRPC 개발 서버를 함께 실행합니다"
+depends = ["grpc-generate"]
 run = ".venv/bin/uvicorn app.be.main:app --reload --port 8000"
 
 [tasks.dev-agent]
-description = "에이전트 개발 서버를 실행합니다"
-depends = ["install"]
+description = "에이전트 REST API와 gRPC 개발 서버를 함께 실행합니다"
+depends = ["grpc-generate"]
 run = ".venv/bin/uvicorn app.agent.main:app --reload --port 8001"
+
+[tasks.grpc-generate]
+description = "서버별 gRPC proto Python binding을 생성합니다"
+depends = ["install"]
+run = ".venv/bin/python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. app/be/grpc/proto/internal_health.proto app/agent/grpc/proto/internal_health.proto"
 
 [tasks.test]
 description = "Python 테스트를 실행합니다"
-depends = ["install"]
+depends = ["grpc-generate"]
 run = ".venv/bin/python -m pytest"
 
 [tasks.infra-up]

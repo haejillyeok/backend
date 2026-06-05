@@ -8,6 +8,7 @@ from app.shared.core.config.database import (
     create_database_sessionmaker,
     database_lifespan,
 )
+from app.shared.core.config.grpc import GrpcSettings
 
 __all__ = [
     "AppSettings",
@@ -15,6 +16,7 @@ __all__ = [
     "DatabasePoolConfig",
     "DatabaseSettings",
     "EnvironmentName",
+    "GrpcSettings",
     "create_database_engine",
     "create_database_sessionmaker",
     "database_lifespan",
