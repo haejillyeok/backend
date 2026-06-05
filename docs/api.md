@@ -11,8 +11,7 @@ Success:
 ```json
 {
   "success": true,
-  "data": {},
-  "error": null
+  "data": {}
 }
 ```
 
@@ -32,6 +31,19 @@ Error:
 
 커스텀 예외는 shared `AppException` 계열로 관리합니다. 예외는 공통 `code`, `message`, `details`와 함께
 HTTP status, gRPC status metadata를 가질 수 있고, 각 프로토콜 handler가 자기 응답 형식으로 변환합니다.
+공개 에러 코드는 shared `ErrorCode` enum과 `ErrorDefinition` catalog에서 관리합니다.
+각 error definition은 error type, 기본 message, HTTP status, gRPC status, WebSocket close code를 함께 가집니다.
+Swagger 실패 응답은 `ErrorResponse` schema를 참조하고, endpoint별 예시에 실제 `code` 값을 함께 표시합니다.
+같은 HTTP status에서 여러 application error code가 나올 수 있으면 Swagger `examples`로 각각의 code 예시를 모두 표시합니다.
+
+### Error Codes
+
+| Code | Type | HTTP | gRPC | WebSocket | Meaning |
+| --- | --- | --- | --- | --- | --- |
+| `INVALID_CREDENTIALS` | `AUTHENTICATION` | `401` | `UNAUTHENTICATED` | `1008` | 기존 닉네임의 비밀번호가 일치하지 않음 |
+| `SESSION_EXPIRED` | `AUTHENTICATION` | `401` | `UNAUTHENTICATED` | `1008` | 세션 만료 |
+| `VALIDATION_ERROR` | `VALIDATION` | `422` | `INVALID_ARGUMENT` | `1008` | 요청 body validation 실패 |
+| `HTTP_ERROR` | `INTERNAL` | `500` | `UNKNOWN` | `1011` | FastAPI `HTTPException` fallback |
 
 ## BE Health
 
@@ -40,7 +52,7 @@ HTTP status, gRPC status metadata를 가질 수 있고, 각 프로토콜 handler
 | Method | Path | Response |
 | --- | --- | --- |
 | GET | `/health` | `{"status": "ok"}` |
-| GET | `/api/v1/health` | `{"success": true, "data": {"status": "ok"}, "error": null}` |
+| GET | `/api/v1/health` | `{"success": true, "data": {"status": "ok"}}` |
 
 ## BE Auth
 
@@ -70,8 +82,7 @@ Response:
     },
     "is_new_user": true,
     "expires_at": "2026-06-12T00:00:00Z"
-  },
-  "error": null
+  }
 }
 ```
 

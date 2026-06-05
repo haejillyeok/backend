@@ -21,7 +21,6 @@ def test_be_health_endpoints_return_ok():
     assert api_response.json() == {
         "success": True,
         "data": {"status": "ok"},
-        "error": None,
     }
 
 
@@ -65,7 +64,6 @@ def test_shared_envelope_can_be_used_at_protocol_boundaries():
     assert success.model_dump(mode="json") == {
         "success": True,
         "data": {"status": "ok"},
-        "error": None,
     }
     assert error.model_dump(mode="json") == {
         "success": False,
@@ -88,6 +86,140 @@ def test_shared_exception_carries_http_and_grpc_status_metadata():
 
     assert exception.http_status_code == 409
     assert exception.grpc_status_code is StatusCode.ALREADY_EXISTS
+
+
+def test_shared_error_code_registry_exists():
+    assert importlib.util.find_spec("app.shared.core.error_codes") is not None
+
+
+def test_shared_error_definition_maps_protocol_statuses():
+    module = importlib.import_module("app.shared.core.error_codes")
+
+    definition = module.get_error_definition(module.ErrorCode.INVALID_CREDENTIALS)
+
+    assert definition.code is module.ErrorCode.INVALID_CREDENTIALS
+    assert definition.type is module.ErrorType.AUTHENTICATION
+    assert definition.message == "닉네임 또는 비밀번호가 올바르지 않습니다."
+    assert definition.http_status_code == 401
+    assert definition.grpc_status_code is StatusCode.UNAUTHENTICATED
+    assert definition.websocket_close_code == 1008
+
+
+def test_shared_app_exception_uses_error_definition_defaults():
+    from app.shared.core.error_codes import ErrorCode, ErrorType
+
+    exception = AppException(code=ErrorCode.INVALID_CREDENTIALS)
+
+    assert exception.code == "INVALID_CREDENTIALS"
+    assert exception.error_type is ErrorType.AUTHENTICATION
+    assert exception.message == "닉네임 또는 비밀번호가 올바르지 않습니다."
+    assert exception.http_status_code == 401
+    assert exception.grpc_status_code is StatusCode.UNAUTHENTICATED
+    assert exception.websocket_close_code == 1008
+    assert exception.to_error_payload() == {
+        "success": False,
+        "data": None,
+        "error": {
+            "code": "INVALID_CREDENTIALS",
+            "message": "닉네임 또는 비밀번호가 올바르지 않습니다.",
+            "details": None,
+        },
+    }
+
+
+def test_shared_openapi_error_response_spec_includes_error_code_example():
+    spec = importlib.util.find_spec("app.shared.core.openapi")
+    assert spec is not None
+
+    module = importlib.import_module("app.shared.core.openapi")
+    response_spec = module.error_response(
+        code="INVALID_CREDENTIALS",
+        message="닉네임 또는 비밀번호가 올바르지 않습니다.",
+        description="닉네임의 비밀번호가 일치하지 않음",
+    )
+
+    example = response_spec["content"]["application/json"]["example"]
+    assert response_spec["model"].__name__ == "ErrorResponse"
+    assert example["success"] is False
+    assert example["data"] is None
+    assert example["error"]["code"] == "INVALID_CREDENTIALS"
+
+
+def test_shared_openapi_error_responses_spec_supports_multiple_examples():
+    module = importlib.import_module("app.shared.core.openapi")
+    response_spec = module.error_responses(
+        description="인증 실패",
+        examples=[
+            module.error_example(
+                name="invalid_credentials",
+                summary="비밀번호 불일치",
+                code="INVALID_CREDENTIALS",
+                message="닉네임 또는 비밀번호가 올바르지 않습니다.",
+            ),
+            module.error_example(
+                name="session_expired",
+                summary="세션 만료",
+                code="SESSION_EXPIRED",
+                message="세션이 만료되었습니다.",
+            ),
+        ],
+    )
+
+    examples = response_spec["content"]["application/json"]["examples"]
+    assert response_spec["model"].__name__ == "ErrorResponse"
+    assert examples["invalid_credentials"]["summary"] == "비밀번호 불일치"
+    assert examples["invalid_credentials"]["value"]["error"]["code"] == "INVALID_CREDENTIALS"
+    assert examples["session_expired"]["summary"] == "세션 만료"
+    assert examples["session_expired"]["value"]["error"]["code"] == "SESSION_EXPIRED"
+
+
+def test_shared_openapi_groups_error_codes_by_http_status():
+    from app.shared.core.error_codes import ErrorCode
+
+    module = importlib.import_module("app.shared.core.openapi")
+    responses = module.error_responses_by_status(
+        codes=[
+            ErrorCode.INVALID_CREDENTIALS,
+            ErrorCode.VALIDATION_ERROR,
+        ],
+    )
+
+    assert set(responses) == {401, 422}
+    assert responses[401]["description"] == "Authentication errors"
+    assert (
+        responses[401]["content"]["application/json"]["examples"]["invalid_credentials"]["value"][
+            "error"
+        ]["code"]
+        == "INVALID_CREDENTIALS"
+    )
+    assert responses[422]["description"] == "Validation errors"
+    assert (
+        responses[422]["content"]["application/json"]["examples"]["validation_error"]["value"][
+            "error"
+        ]["code"]
+        == "VALIDATION_ERROR"
+    )
+
+
+def test_be_openapi_documents_success_and_error_envelopes():
+    schema = create_be_app().openapi()
+    login_operation = schema["paths"]["/api/v1/auth/login"]["post"]
+
+    success_schema_ref = login_operation["responses"]["200"]["content"]["application/json"][
+        "schema"
+    ]["$ref"]
+    success_schema_name = success_schema_ref.removeprefix("#/components/schemas/")
+    success_schema = schema["components"]["schemas"][success_schema_name]
+    assert success_schema["properties"]["success"]["const"] is True
+    assert "error" not in success_schema["properties"]
+
+    invalid_credentials_example = login_operation["responses"]["401"]["content"][
+        "application/json"
+    ]["examples"]["invalid_credentials"]["value"]
+    assert invalid_credentials_example["success"] is False
+    assert invalid_credentials_example["data"] is None
+    assert invalid_credentials_example["error"]["code"] == "INVALID_CREDENTIALS"
+    assert invalid_credentials_example["error"]["details"] is None
 
 
 def test_agent_health_endpoints_return_ok():

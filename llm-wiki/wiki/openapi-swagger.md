@@ -1,7 +1,7 @@
 ---
 title: OpenAPI and Swagger
 type: guide
-updated: 2026-06-05
+updated: 2026-06-06
 audience: ai
 ---
 
@@ -25,6 +25,13 @@ audience: ai
 - `operation_id`는 서버와 도메인이 드러나도록 snake_case로 쓴다.
   - 예: `be_auth_login`, `be_api_health_check`
 - 주요 실패 응답은 `responses`에 status code와 description을 남긴다.
+- 공통 error envelope를 반환하는 실패 응답은 `app/shared/core/openapi.py`의 helper를 사용한다.
+- endpoint는 가능한 한 `error_responses_by_status(codes=[...])`에 `ErrorCode` 목록을 넘겨 HTTP status별 `responses`를 자동 생성한다.
+- 같은 HTTP status에 application error code가 여러 개 있으면 Swagger `examples`에 모두 표시한다.
+- Swagger에 노출되는 공개 error code와 프로토콜별 status mapping은 `app/shared/core/error_codes.py`의 `ERROR_DEFINITIONS` catalog에서 관리한다.
+- endpoint별 실패 응답 example/examples에는 실제 `ErrorCode` 값을 넣어 클라이언트가 status code와 application error code를 함께 볼 수 있게 한다.
+- 성공 응답 문서는 `SuccessResponse[T]`, 실패 응답 문서는 `ErrorResponse`를 사용해 ReDoc sample이 성공 응답에는 `error`를 표시하지 않고 실패 응답에만 error object를 보여주게 한다.
+- FastAPI가 OpenAPI example의 `None` 값을 제거하는 경우 `install_openapi_schema(app)` 후처리로 error example의 `data: null`, `details: null`을 복원한다.
 - request/response field 설명이 필요한 경우 Pydantic `Field(description=..., examples=[...])`를 사용한다.
 - 내부 ORM model이나 proto message를 response model로 직접 노출하지 않는다.
 

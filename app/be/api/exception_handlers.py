@@ -4,6 +4,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from app.shared.core.error_codes import ErrorCode, get_error_definition
 from app.shared.core.exceptions import AppException
 from app.shared.core.responses import fail
 
@@ -22,11 +23,7 @@ async def handle_app_exception(
     """공통 애플리케이션 예외를 HTTP error envelope로 변환합니다."""
     return JSONResponse(
         status_code=exc.http_status_code,
-        content=fail(
-            code=exc.code,
-            message=exc.message,
-            details=exc.details,
-        ).model_dump(mode="json"),
+        content=exc.to_error_payload(),
     )
 
 
@@ -35,11 +32,12 @@ async def handle_validation_error(
     exc: RequestValidationError,
 ) -> JSONResponse:
     """FastAPI 요청 validation error를 필드 단위 details로 변환합니다."""
+    definition = get_error_definition(ErrorCode.VALIDATION_ERROR)
     return JSONResponse(
-        status_code=422,
+        status_code=definition.http_status_code,
         content=fail(
-            code="VALIDATION_ERROR",
-            message="요청 값이 올바르지 않습니다.",
+            code=definition.code,
+            message=definition.message,
             details=[format_validation_error(error) for error in exc.errors()],
         ).model_dump(mode="json"),
     )
@@ -53,7 +51,7 @@ async def handle_http_exception(
     return JSONResponse(
         status_code=exc.status_code,
         content=fail(
-            code="HTTP_ERROR",
+            code=ErrorCode.HTTP_ERROR,
             message=str(exc.detail),
         ).model_dump(mode="json"),
         headers=exc.headers,

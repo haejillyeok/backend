@@ -152,7 +152,7 @@ def test_login_endpoint_sets_session_cookie_for_auth_success():
     body = response.json()
     assert body["success"] is True
     assert body["data"]["is_new_user"] is True
-    assert body["error"] is None
+    assert "error" not in body
     assert response.cookies.get("session_token") == "plain-session-token"
     assert "httponly" in response.headers["set-cookie"].lower()
 

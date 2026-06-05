@@ -2,6 +2,16 @@
 
 이 파일은 `llm-wiki/`의 시간순 작업 이력입니다. 새 항목은 위에 추가합니다.
 
+## [2026-06-06] maintenance | Add centralized error codes and Swagger error examples
+
+- 공개 error code를 `app/shared/core/error_codes.py`의 `ErrorCode` enum에서 관리하도록 정리했다.
+- `ErrorDefinition` catalog가 error type, HTTP status, gRPC status, WebSocket close code를 함께 관리하도록 확장했다.
+- Swagger 실패 응답은 `ErrorResponse` schema와 endpoint별 example/examples를 함께 표시하도록 `error_response(...)`, `error_responses(...)`, `error_example(...)` helper 기준을 추가했다.
+- endpoint는 `error_responses_by_status(codes=[...])`로 error code 목록을 넘겨 HTTP status별 Swagger responses를 자동 생성하도록 정리했다.
+- BE auth login의 `401`, `422` 실패 응답에 실제 application error code example을 노출했다.
+- 성공 응답에는 `error` 필드를 넣지 않도록 `SuccessResponse[T]`를 도입하고, error example의 `data: null`, `details: null`은 OpenAPI 후처리로 복원하도록 정리했다.
+- 일반 Swagger 문구 고정 테스트는 추가하지 않고, shared error code/helper 동작과 기존 endpoint runtime 응답 테스트를 유지했다.
+
 ## [2026-06-05] maintenance | Add request audit logging
 
 - HTTP/gRPC 요청의 시작, 완료, 실패를 `audit.request` logger로 남기는 AOP 관측 기준을 정리했다.
