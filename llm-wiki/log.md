@@ -20,6 +20,19 @@
 - `mise run format`과 `mise run format-check` 태스크로 포맷 적용과 확인을 분리했다.
 - README, 개발 문서, 코드 컨벤션, AI용 현재 상태 위키에 포맷 관리 기준을 반영했다.
 
+## [2026-06-05] maintenance | Relax Swagger metadata testing rule
+
+- 일반 Swagger 표시용 `summary`, 설명 문구, 단순 `operation_id`는 전용 OpenAPI schema 테스트로 고정하지 않기로 정리했다.
+- `test_be_openapi_has_stable_swagger_metadata` 테스트를 제거했다.
+- OpenAPI schema 테스트는 프론트 SDK 자동 생성, CI schema diff, breaking change 감지처럼 schema 자체가 제품 계약일 때만 추가한다고 남겼다.
+
+## [2026-06-05] maintenance | Add OpenAPI Swagger metadata guide
+
+- `llm-wiki/wiki/openapi-swagger.md`에 FastAPI OpenAPI schema와 Swagger UI 운영 기준을 추가했다.
+- public HTTP endpoint는 `response_model`, `status_code`, `summary`, `operation_id`, 주요 실패 `responses`를 명시한다고 정리했다.
+- OpenAPI Generator나 프론트 client 생성을 대비해 `operation_id`를 안정적인 snake_case 이름으로 고정하는 기준을 남겼다.
+- BE auth/health endpoint의 Swagger metadata를 OpenAPI schema 테스트로 고정했다.
+
 ## [2026-06-05] maintenance | Add auth session login decision
 
 - 가입 겸 로그인 API는 `POST /api/v1/auth/login` 하나로 처리한다고 정리했다.

@@ -17,6 +17,7 @@ source_docs:
 - router는 `app/{server}/api/router.py`에서 `/api/v1` prefix로 묶는다.
 - endpoint는 protocol/request/response 처리만 담당하고 비즈니스 로직은 service 계층으로 넘긴다.
 - DB session, auth, service provider는 FastAPI dependency로 주입한다.
+- public endpoint는 Swagger/OpenAPI용 `summary`, `operation_id`, 주요 실패 `responses`를 명시한다.
 - public API 변경은 `docs/api.md`에 반영한다.
 
 ## gRPC

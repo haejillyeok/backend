@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, Request, Response, status
 
 from app.be.dependencies.services import get_auth_service
 from app.be.schemas.request.auth import LoginRequest
@@ -16,7 +16,21 @@ settings = AppSettings(app_name="haejillyeok-be")
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@router.post("/login", response_model=ResponseEnvelope[LoginResponse])
+@router.post(
+    "/login",
+    response_model=ResponseEnvelope[LoginResponse],
+    status_code=status.HTTP_200_OK,
+    summary="가입 겸 로그인",
+    operation_id="be_auth_login",
+    responses={
+        status.HTTP_401_UNAUTHORIZED: {
+            "description": "닉네임의 비밀번호가 일치하지 않음",
+        },
+        422: {
+            "description": "요청 body validation 실패",
+        },
+    },
+)
 async def login(
     payload: LoginRequest,
     request: Request,

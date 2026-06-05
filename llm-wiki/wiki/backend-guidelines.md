@@ -55,6 +55,14 @@ audience: ai
 - endpoint는 dict를 직접 누적하기보다 response model을 통해 반환 shape를 고정한다.
 - public API response에 내부 ORM model이나 proto message를 그대로 노출하지 않는다.
 
+### OpenAPI and Swagger
+
+- FastAPI 기본 OpenAPI schema와 Swagger UI를 사용한다.
+- public HTTP endpoint는 `response_model`, `status_code`, `summary`, `operation_id`를 명시한다.
+- 주요 실패 응답은 `responses`에 status code와 description을 남긴다.
+- OpenAPI Generator나 프론트 client 생성에 대비해 `operation_id`는 안정적인 snake_case 이름으로 고정한다.
+- 자세한 기준은 [openapi-swagger.md](openapi-swagger.md)를 따른다.
+
 ## gRPC
 
 ### Contract Ownership
