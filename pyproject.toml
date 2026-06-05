@@ -1,0 +1,28 @@
+[project]
+name = "haejillyeok-backend"
+version = "0.1.0"
+description = "FastAPI backend and agent server for haejillyeok"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "asyncpg>=0.30.0",
+    "fastapi>=0.115.0",
+    "greenlet>=3.1.0",
+    "pydantic-settings>=2.6.0",
+    "sqlalchemy>=2.0.36",
+    "starlette>=0.46.0,<1.0.0",
+    "uvicorn[standard]>=0.32.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "httpx>=0.27.0",
+    "pytest>=8.3.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["test"]
+pythonpath = ["."]
+
+[tool.setuptools.packages.find]
+include = ["app*"]

@@ -1,0 +1,42 @@
+[tools]
+python = "3.11"
+
+[hooks]
+enter = "docker compose up -d postgres"
+
+[tasks.venv]
+description = "프로젝트 가상환경을 생성합니다"
+run = "python -m venv .venv"
+
+[tasks.install]
+description = ".venv에 Python 의존성을 설치합니다"
+depends = ["venv"]
+run = ".venv/bin/python -m pip install -e '.[dev]'"
+
+
+[tasks.dev-be]
+description = "백엔드 개발 서버를 실행합니다"
+depends = ["install"]
+run = ".venv/bin/uvicorn app.be.main:app --reload --port 8000"
+
+[tasks.dev-agent]
+description = "에이전트 개발 서버를 실행합니다"
+depends = ["install"]
+run = ".venv/bin/uvicorn app.agent.main:app --reload --port 8001"
+
+[tasks.test]
+description = "Python 테스트를 실행합니다"
+depends = ["install"]
+run = ".venv/bin/python -m pytest"
+
+[tasks.infra-up]
+description = "pgvector를 포함한 로컬 PostgreSQL을 시작합니다"
+run = "docker compose up -d postgres"
+
+[tasks.infra-down]
+description = "로컬 인프라를 중지합니다"
+run = "docker compose down"
+
+[tasks.infra-logs]
+description = "PostgreSQL 로그를 실시간으로 확인합니다"
+run = "docker compose logs -f postgres"
