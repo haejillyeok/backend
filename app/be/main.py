@@ -8,6 +8,7 @@ from app.be.api.endpoints.health import router as health_router
 from app.be.api.router import router as api_router
 from app.be.grpc.server import create_grpc_server
 from app.shared.core.config import AppSettings, GrpcSettings, database_lifespan
+from app.shared.core.http_audit import add_audit_log_middleware
 from app.shared.core.logging_config import configure_logging
 from app.shared.grpc import grpc_server_lifespan
 
@@ -36,6 +37,7 @@ def create_app() -> FastAPI:
         debug=settings.debug,
         lifespan=app_lifespan,
     )
+    add_audit_log_middleware(app, settings.app_name)
     register_exception_handlers(app)
     app.include_router(health_router)
     app.include_router(api_router)

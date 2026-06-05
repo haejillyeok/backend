@@ -5,13 +5,16 @@ import grpc
 
 from app.agent.grpc.health import register_internal_health_service
 from app.shared.core.config import GrpcSettings
+from app.shared.grpc.audit import AuditServerInterceptor
 
 
 SERVICE_NAME = "haejillyeok-agent"
 
 
 def create_grpc_server() -> grpc.aio.Server:
-    server = grpc.aio.server()
+    server = grpc.aio.server(
+        interceptors=(AuditServerInterceptor(service_name=SERVICE_NAME),)
+    )
     register_internal_health_service(server)
     return server
 

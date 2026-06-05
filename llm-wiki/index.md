@@ -36,6 +36,7 @@
 | [wiki/decisions/2026-06-05-users-table-poc.md](wiki/decisions/2026-06-05-users-table-poc.md) | PoC 유저 테이블의 UUID v7 내부/외부 관리번호, 닉네임, 비밀번호 hash, 접속 IP 관리 결정 |
 | [wiki/decisions/2026-06-05-auth-session-login.md](wiki/decisions/2026-06-05-auth-session-login.md) | 가입 겸 로그인 API와 opaque session token, HttpOnly cookie 기반 인증 결정 |
 | [wiki/decisions/2026-06-05-common-api-response-and-exceptions.md](wiki/decisions/2026-06-05-common-api-response-and-exceptions.md) | `app/shared/core` 공통 response envelope와 `AppException` 기반 HTTP/gRPC 예외 처리 결정 |
+| [wiki/decisions/2026-06-05-request-audit-logging.md](wiki/decisions/2026-06-05-request-audit-logging.md) | HTTP/gRPC 요청 시작, 완료, 실패를 shared 감사 로그 포맷으로 기록하는 AOP 관측 결정 |
 
 ## Sources
 

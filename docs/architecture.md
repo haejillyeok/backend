@@ -23,6 +23,12 @@ DB 설정과 SQLAlchemy async engine 생명주기는 `app/shared/core/config/dat
 세션을 제공합니다. `agent`는 DB 적용 코드, repository, schema를 갖지 않고, 필요한 데이터는
 백엔드 API 또는 서버 간 client를 통해 요청합니다.
 
+요청 감사 로그는 `app/shared/core/audit.py`의 공통 이벤트 포맷을 사용합니다.
+REST 요청은 `app/shared/core/http_audit.py`의 FastAPI middleware가, gRPC 요청은
+`app/shared/grpc/audit.py`의 server interceptor가 시작/완료/실패 이벤트를 기록합니다.
+로그에는 method/path 또는 RPC method, status, duration, peer 같은 메타데이터만 남기고
+request/response body와 비밀번호 같은 민감 payload는 남기지 않습니다.
+
 실행 환경은 `local`, `dev`, `prod`만 허용합니다. DB 접속 정보는 프로젝트 루트의
 `.env`에서 따로 관리하고, URL은 코드에서 조립합니다.
 pool 크기와 timeout 같은 값은 코드에서 관리합니다.

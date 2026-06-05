@@ -2,6 +2,12 @@
 
 이 파일은 `llm-wiki/`의 시간순 작업 이력입니다. 새 항목은 위에 추가합니다.
 
+## [2026-06-05] maintenance | Add request audit logging
+
+- HTTP/gRPC 요청의 시작, 완료, 실패를 `audit.request` logger로 남기는 AOP 관측 기준을 정리했다.
+- 공통 감사 이벤트 포맷은 `app/shared/core/audit.py`에 두고, HTTP middleware와 gRPC interceptor가 같은 포맷을 쓰도록 기록했다.
+- payload, password, session token, cookie, authorization header는 감사 로그에 남기지 않는 privacy rule을 남겼다.
+
 ## [2026-06-05] maintenance | Add common protocol response and exceptions
 
 - HTTP/gRPC 같은 프로토콜 경계에서 쓰는 `success`, `data`, `error` 공통 response envelope를 `app/shared/core` 기준으로 정리했다.
