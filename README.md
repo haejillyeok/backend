@@ -58,7 +58,7 @@ postgresql+asyncpg://haejillyeok:haejillyeok@localhost:5432/haejillyeok
 ```
 
 실행 환경은 `local`, `dev`, `prod` 중 하나를 사용합니다. DB connection pool 값은
-[app/be/database.py](/Users/723poil/Documents/git/haejillyeok/backend/app/be/database.py)에서 코드로 관리합니다.
+[app/shared/core/config/database.py](/Users/723poil/Documents/git/haejillyeok/backend/app/shared/core/config/database.py)에서 코드로 관리합니다.
 DB URL은 위 접속 정보를 코드에서 조립합니다. DB 연결은 `be` 서버에서만 관리하며,
 SQLAlchemy async engine의 connection pool을 통해 세션을 가져옵니다.
 
@@ -122,7 +122,6 @@ mise run test
 │   │           └── __init__.py
 │   ├── be
 │   │   ├── __init__.py
-│   │   ├── database.py
 │   │   ├── main.py
 │   │   ├── api
 │   │   │   ├── __init__.py
@@ -157,7 +156,10 @@ mise run test
 │   │   │   └── __init__.py
 │   │   ├── core
 │   │   │   ├── __init__.py
-│   │   │   ├── config.py
+│   │   │   ├── config
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── app.py
+│   │   │   │   └── database.py
 │   │   │   └── logging_config.py
 ├── docs
 │   ├── api.md

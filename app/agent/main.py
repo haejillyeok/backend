@@ -10,7 +10,7 @@ settings = AppSettings(app_name="haejillyeok-agent")
 
 
 def create_app() -> FastAPI:
-    configure_logging()
+    configure_logging(settings.app_name, settings.environment)
 
     app = FastAPI(
         title=settings.app_name,

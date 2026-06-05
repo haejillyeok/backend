@@ -1,12 +1,14 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+import logging
 from typing import Literal
 from urllib.parse import quote
 
 from fastapi import FastAPI
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -15,12 +17,12 @@ from sqlalchemy.ext.asyncio import (
 )
 
 EnvironmentName = Literal["local", "dev", "prod"]
+logger = logging.getLogger(__name__)
+sql_logger = logging.getLogger(f"{__name__}.sql")
 
 
 @dataclass(frozen=True)
 class DatabasePoolConfig:
-    # BE_DB_ECHO 역할: SQLAlchemy가 실행하는 SQL을 로그로 출력할지 정합니다. 운영에서는 False를 권장합니다.
-    echo: bool = False
     # pool에 기본으로 유지할 DB 연결 수입니다.
     pool_size: int = 5
     # pool_size를 초과해 임시로 더 만들 수 있는 연결 수입니다.
@@ -99,15 +101,35 @@ def create_database_engine(
     pool_config: DatabasePoolConfig = DATABASE_POOL_CONFIG,
 ) -> AsyncEngine:
     db_settings = settings or DatabaseSettings()
-    return create_async_engine(
+    engine = create_async_engine(
         db_settings.database_url,
-        echo=pool_config.echo,
+        echo=False,
         pool_pre_ping=pool_config.pool_pre_ping,
         pool_size=pool_config.pool_size,
         max_overflow=pool_config.max_overflow,
         pool_timeout=pool_config.pool_timeout,
         pool_recycle=pool_config.pool_recycle,
     )
+    enable_sql_debug_logging(engine, db_settings)
+    return engine
+
+
+def enable_sql_debug_logging(engine: AsyncEngine, settings: DatabaseSettings) -> None:
+    if settings.environment == "prod":
+        return
+
+    @event.listens_for(engine.sync_engine, "before_cursor_execute")
+    def log_sql_debug(
+        conn,
+        cursor,
+        statement,
+        parameters,
+        context,
+        executemany,
+    ) -> None:
+        sql_logger.debug(statement)
+        if parameters:
+            sql_logger.debug("parameters=%s", parameters)
 
 
 def create_database_sessionmaker(
@@ -123,8 +145,18 @@ def create_database_sessionmaker(
 @asynccontextmanager
 async def database_lifespan(app: FastAPI) -> AsyncIterator[None]:
     engine = create_database_engine()
+
+    try:
+        async with engine.connect() as connection:
+            await connection.execute(text("SELECT 1"))
+    except Exception:
+        logger.exception("Database connection failed.")
+        await engine.dispose()
+        raise
+
     app.state.db_engine = engine
     app.state.db_sessionmaker = create_database_sessionmaker(engine)
+    logger.info("Database connection established.")
 
     try:
         yield

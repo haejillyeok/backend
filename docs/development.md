@@ -16,7 +16,7 @@ postgresql+asyncpg://haejillyeok:haejillyeok@localhost:5432/haejillyeok
 ```
 
 실행 환경은 `local`, `dev`, `prod` 중 하나를 사용합니다. DB connection pool 값은
-`app/be/database.py`의 `DATABASE_POOL_CONFIG`에서 코드로 관리합니다.
+`app/shared/core/config/database.py`의 pool config에서 코드로 관리합니다.
 DB URL은 위 접속 정보를 코드에서 조립합니다.
 `be` 서버는 시작 시 SQLAlchemy async engine과 sessionmaker를 만들고,
 요청 처리에서 `app.be.dependencies.database.get_db_session`을 통해 pool 기반 세션을 가져옵니다.

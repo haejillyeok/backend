@@ -5,7 +5,6 @@
 - `app/be/main.py`: 백엔드 FastAPI 앱 생성
 - `app/be/api`: 백엔드 API 라우터와 엔드포인트
 - `app/be/dependencies`: 백엔드 FastAPI dependency provider
-- `app/be/database.py`: 백엔드 전용 PostgreSQL async engine과 sessionmaker 생명주기
 - `app/be/repository`: 백엔드 데이터 접근 계층
 - `app/be/schemas`: 백엔드 요청/응답 모델
 - `app/be/services`: 백엔드 비즈니스 로직
@@ -16,9 +15,9 @@
 - `app/shared`: 두 서버가 공유하는 설정, 로깅, 통신 클라이언트
 - `app/main.py`: 기존 실행 경로 호환을 위한 백엔드 앱 alias
 
-DB 연결은 `be` 서버에서만 관리합니다. `app/be/database.py`가 SQLAlchemy async engine의
-connection pool과 sessionmaker를 만들고, `app/be/dependencies/database.py`가 요청 단위
-세션을 제공합니다. `agent`는 DB 모듈, repository, schema를 갖지 않고, 필요한 데이터는
+DB 설정과 SQLAlchemy async engine 생명주기는 `app/shared/core/config/database.py`에 두고,
+`be` 서버에서만 lifespan으로 적용합니다. `app/be/dependencies/database.py`는 요청 단위
+세션을 제공합니다. `agent`는 DB 적용 코드, repository, schema를 갖지 않고, 필요한 데이터는
 백엔드 API 또는 서버 간 client를 통해 요청합니다.
 
 실행 환경은 `local`, `dev`, `prod`만 허용합니다. DB 접속 정보는 프로젝트 루트의
