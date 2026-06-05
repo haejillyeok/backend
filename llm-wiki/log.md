@@ -2,6 +2,13 @@
 
 이 파일은 `llm-wiki/`의 시간순 작업 이력입니다. 새 항목은 위에 추가합니다.
 
+## [2026-06-05] maintenance | Add database schema conventions
+
+- `llm-wiki/wiki/database-schema-conventions.md`를 추가했다.
+- UUID는 v7을 사용하고, PostgreSQL 문자열은 기본적으로 `text`를 사용하도록 정리했다.
+- 외부 노출이 필요한 경우에만 외부용 관리번호를 두고, join과 foreign key는 내부용 관리번호를 기준으로 한다는 규칙을 남겼다.
+- DB migration 작업 전 schema 규칙을 확인하도록 `database-migrations.md`와 `index.md`에 연결했다.
+
 ## [2026-06-05] maintenance | Clarify Alembic commands and target DB
 
 - Alembic logger 설정을 제거해 앱 로깅 설정과 겹칠 여지를 줄였다.

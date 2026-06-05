@@ -27,22 +27,23 @@ ORM 모델은 `app/be/models/`에 둔다.
 ## Workflow
 
 1. ORM 모델을 `app/be/models/`에 추가하거나 변경한다.
-2. Alembic autogenerate가 모델 metadata를 볼 수 있도록 `migrations/env.py`에서 모델 모듈을 import한다.
-3. Local DB와 `.env`를 준비한 뒤 revision을 생성한다.
+2. Schema 규칙은 [database-schema-conventions.md](database-schema-conventions.md)를 따른다.
+3. Alembic autogenerate가 모델 metadata를 볼 수 있도록 `migrations/env.py`에서 모델 모듈을 import한다.
+4. Local DB와 `.env`를 준비한 뒤 revision을 생성한다.
 
 ```bash
 mise run db-revision "change description"
 ```
 
-4. 생성된 `migrations/versions/*.py`를 직접 검토한다. Autogenerate 결과를 그대로 신뢰하지 않는다.
-5. Local DB에 적용해 검증한다.
+5. 생성된 `migrations/versions/*.py`를 직접 검토한다. Autogenerate 결과를 그대로 신뢰하지 않는다.
+6. Local DB에 적용해 검증한다.
 
 ```bash
 mise run db-upgrade-head
 mise run db-current
 ```
 
-6. 모델 변경, migration revision, 관련 테스트/문서를 같은 변경 묶음으로 커밋한다.
+7. 모델 변경, migration revision, 관련 테스트/문서를 같은 변경 묶음으로 커밋한다.
 
 ## Runtime Rules
 
@@ -51,6 +52,7 @@ mise run db-current
 - 여러 앱 인스턴스가 동시에 migration을 실행하지 않게 한다.
 - rollback이 필요할 수 있는 변경은 `downgrade()`를 의미 있게 작성한다. 되돌릴 수 없는 변경이면 주석으로 이유를 남긴다.
 - column rename, type change, data backfill처럼 데이터 손실 가능성이 있는 변경은 autogenerate 결과를 수동으로 고친다.
+- UUID v7, PostgreSQL `text`, 내부/외부 관리번호, join 기준은 [database-schema-conventions.md](database-schema-conventions.md)를 따른다.
 
 ## Target DB
 
