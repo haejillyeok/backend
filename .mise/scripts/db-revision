@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ "$#" -eq 0 ]; then
+  echo 'Usage: mise run db-revision "change description"' >&2
+  exit 2
+fi
+
+.venv/bin/python -m alembic revision --autogenerate -m "$*"

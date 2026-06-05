@@ -54,6 +54,10 @@ mise run dev-be
 mise run dev-agent
 mise run grpc-generate
 mise run test
+mise run db-revision "change description"
+mise run db-upgrade-head
+mise run db-current
+mise run db-history
 ```
 
 PostgreSQL은 `localhost:5432`에서 실행됩니다.
@@ -69,6 +73,26 @@ postgresql+asyncpg://haejillyeok:haejillyeok@localhost:5432/haejillyeok
 [app/shared/core/config/database.py](/Users/723poil/Documents/git/haejillyeok/backend/app/shared/core/config/database.py)에서 코드로 관리합니다.
 DB URL은 위 접속 정보를 코드에서 조립합니다. DB 연결은 `be` 서버에서만 관리하며,
 SQLAlchemy async engine의 connection pool을 통해 세션을 가져옵니다.
+
+### DB 마이그레이션
+
+DB schema migration은 Alembic으로 관리합니다.
+
+```bash
+mise run db-revision "change description"
+mise run db-upgrade-head
+mise run db-current
+mise run db-history
+mise run db-downgrade-one
+```
+
+Migration 대상 DB는 기본적으로 앱이 쓰는 `.env`와 `BE_DB_*` 환경 변수에서 조립한 URL입니다.
+별도 DB용 환경 변수를 추가로 관리하지 않습니다. 일회성으로 다른 DB를 지정해야 할 때만
+Alembic의 `-x database_url=...` 옵션을 직접 사용합니다.
+
+```bash
+.venv/bin/python -m alembic -x database_url="postgresql+asyncpg://user:password@localhost:5432/db" upgrade head
+```
 
 ## FastAPI 실행
 

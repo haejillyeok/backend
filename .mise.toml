@@ -34,6 +34,41 @@ description = "Python 테스트를 실행합니다"
 depends = ["grpc-generate"]
 run = ".venv/bin/python -m pytest"
 
+[tasks.db-revision]
+description = "Alembic autogenerate로 새 DB migration revision을 생성합니다"
+depends = ["install"]
+run = ".mise/scripts/db-revision"
+
+[tasks.db-upgrade]
+description = "지정한 Alembic revision까지 DB migration을 적용합니다"
+depends = ["install"]
+run = ".venv/bin/python -m alembic upgrade"
+
+[tasks.db-upgrade-head]
+description = "DB migration을 최신 Alembic revision까지 적용합니다"
+depends = ["install"]
+run = ".venv/bin/python -m alembic upgrade head"
+
+[tasks.db-downgrade]
+description = "지정한 Alembic revision까지 DB migration을 되돌립니다"
+depends = ["install"]
+run = ".venv/bin/python -m alembic downgrade"
+
+[tasks.db-downgrade-one]
+description = "DB migration을 바로 이전 Alembic revision으로 되돌립니다"
+depends = ["install"]
+run = ".venv/bin/python -m alembic downgrade -1"
+
+[tasks.db-current]
+description = "현재 DB에 적용된 Alembic revision을 확인합니다"
+depends = ["install"]
+run = ".venv/bin/python -m alembic current"
+
+[tasks.db-history]
+description = "Alembic migration revision 이력을 확인합니다"
+depends = ["install"]
+run = ".venv/bin/python -m alembic history"
+
 [tasks.infra-up]
 description = "pgvector를 포함한 로컬 PostgreSQL을 시작합니다"
 run = "docker compose up -d postgres"

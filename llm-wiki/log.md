@@ -2,6 +2,44 @@
 
 이 파일은 `llm-wiki/`의 시간순 작업 이력입니다. 새 항목은 위에 추가합니다.
 
+## [2026-06-05] maintenance | Use domain schema for users
+
+- PostgreSQL schema namespace는 프로젝트명이 아니라 도메인 기준으로 관리한다고 정리했다.
+- 유저 도메인은 `users` schema를 사용하고, 유저 테이블은 `users.users`로 관리한다고 기록했다.
+- ORM 모델은 `__table_args__`로 schema를 명시하고 migration은 domain schema를 생성한 뒤 table을 만들도록 기준을 남겼다.
+
+## [2026-06-05] maintenance | Add users external identifier
+
+- `users.public_id`를 UUID v7 외부용 관리번호로 두고 `users.id`는 내부 join용 관리번호로 유지한다고 정리했다.
+- PoC 유저 테이블 결정 기록에서 외부 응답/API 식별자는 `public_id`, 내부 참조는 `id`를 사용하도록 갱신했다.
+
+## [2026-06-05] maintenance | Add PoC users table decision
+
+- PoC 유저 테이블 결정을 `llm-wiki/wiki/decisions/2026-06-05-users-table-poc.md`에 추가했다.
+- `users.id`는 UUID v7 내부용 관리번호로 두고 외부용 관리번호는 현재 만들지 않기로 정리했다.
+- 닉네임은 `text` column과 코드 단 15자 제한으로 관리하고, 비밀번호는 PBKDF2-HMAC-SHA256 hash로 저장한다고 기록했다.
+
+## [2026-06-05] maintenance | Add database schema conventions
+
+- `llm-wiki/wiki/database-schema-conventions.md`를 추가했다.
+- UUID는 v7을 사용하고, PostgreSQL 문자열은 기본적으로 `text`를 사용하도록 정리했다.
+- 외부 노출이 필요한 경우에만 외부용 관리번호를 두고, join과 foreign key는 내부용 관리번호를 기준으로 한다는 규칙을 남겼다.
+- DB migration 작업 전 schema 규칙을 확인하도록 `database-migrations.md`와 `index.md`에 연결했다.
+
+## [2026-06-05] maintenance | Clarify Alembic commands and target DB
+
+- Alembic logger 설정을 제거해 앱 로깅 설정과 겹칠 여지를 줄였다.
+- migration 대상 DB는 기본적으로 앱과 같은 `BE_DB_*` 설정을 쓰고, 일회성 override만 Alembic `-x database_url=...`로 하도록 정리했다.
+- `mise` DB migration 태스크 이름과 사용법을 위키에 반영했다.
+- 별도 migration 설정 테스트는 제거했다.
+
+## [2026-06-05] maintenance | Add Alembic migration knowledge
+
+- DB schema migration을 Alembic으로 관리하는 기준을 `llm-wiki/wiki/database-migrations.md`에 정리했다.
+- `app/be/models/`를 SQLAlchemy ORM 모델과 Alembic metadata base 위치로 기록했다.
+- `migrations/`를 Alembic 환경과 revision 파일 위치로 기록했다.
+- 앱 시작 시 migration을 자동 실행하지 않고 배포 절차에서 앱 실행 전에 `alembic upgrade head`를 실행하는 운영 기준을 남겼다.
+
 ## [2026-06-05] maintenance | Treat docs as human-only and llm-wiki as AI knowledge
 
 - `docs/`를 사람이 보는 문서로 재정의했다.

@@ -11,8 +11,10 @@ updated: 2026-06-05
 ## Current Shape
 
 - `app/be/`는 백엔드 FastAPI 앱, API 라우터, dependency, repository, schema, service 계층을 가진다.
+- `app/be/models/`는 백엔드 SQLAlchemy ORM 모델과 Alembic autogenerate용 metadata base를 가진다.
 - `app/agent/`는 에이전트 FastAPI 앱, API 라우터, dependency, service 계층을 가진다.
 - `app/shared/`는 설정, 로깅, gRPC 서버/helper, 클라이언트 기반 코드를 공유한다.
+- `migrations/`는 Alembic DB schema migration 환경과 revision 파일을 관리한다.
 - `docs/`는 사람이 보는 문서이며 architecture, API, development 문서가 있다.
 - `llm-wiki/`는 AI가 작업할 때 사용하는 전체 지식 레이어다.
 
@@ -23,6 +25,9 @@ updated: 2026-06-05
 - 에이전트 서버 실행: `mise run dev-agent`
 - proto 생성: `mise run grpc-generate`
 - 테스트: `mise run test`
+- migration 생성: `mise run db-revision "message"`
+- migration 적용: `mise run db-upgrade-head`
+- migration 대상 DB는 기본적으로 앱과 같은 `BE_DB_*` 설정을 사용한다.
 
 ## Open Questions
 

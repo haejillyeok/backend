@@ -26,11 +26,13 @@ updated: 2026-06-05
 
 ## Data and Services
 
+- `app/be/models/`: 백엔드 SQLAlchemy ORM 모델과 Alembic metadata base
 - `app/be/repository/`: 백엔드 데이터 접근 계층
 - `app/be/schemas/`: 백엔드 request/response schema
 - `app/be/services/`: 백엔드 비즈니스 로직
 - `app/agent/services/`: 에이전트 비즈니스 로직
 - `app/shared/core/config/`: 앱, DB, gRPC 설정
+- `migrations/`: Alembic 환경과 DB schema migration revision
 
 ## Docs and Knowledge
 
