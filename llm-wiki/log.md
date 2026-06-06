@@ -43,6 +43,20 @@
 - OpenAPI Generator나 프론트 client 생성을 대비해 `operation_id`를 안정적인 snake_case 이름으로 고정하는 기준을 남겼다.
 - BE auth/health endpoint의 Swagger metadata를 OpenAPI schema 테스트로 고정했다.
 
+## [2026-06-06] maintenance | Add Tempo object-level tracing
+
+- OpenTelemetry trace pipeline을 debug exporter뿐 아니라 Tempo로도 전달하도록 Docker Compose와 Collector 설정을 확장했다.
+- Grafana에 Tempo datasource와 `Haejillyeok FastAPI Traces` dashboard를 provision하고, 객체별 실행 시간은 trace table과 waterfall에서 확인하도록 정리했다.
+- `app/shared/core/observability.py`에 `@traced_method` helper를 추가하고 인증 service/repository 경계에 child span을 붙였다.
+- span attribute에는 객체명, 계층, 코드 namespace/function만 넣고 payload, token, cookie 같은 민감값은 넣지 않는 기준을 남겼다.
+
+## [2026-06-06] maintenance | Add local APM observability stack
+
+- FastAPI 앱은 `app/shared/core/observability.py`에서 OpenTelemetry trace instrumentation과 HTTP metric middleware를 등록한다고 정리했다.
+- OpenTelemetry Collector, Prometheus, Grafana를 Docker Compose 로컬 인프라로 추가했다.
+- Grafana는 provisioned Prometheus datasource와 `fastapi-apm.json` dashboard로 throughput, 5xx error rate, p95, p99 latency를 시각화한다.
+- route label은 실제 path가 아니라 FastAPI route template을 사용해 metric cardinality를 낮춘다고 기록했다.
+
 ## [2026-06-05] maintenance | Add auth session login decision
 
 - 가입 겸 로그인 API는 `POST /api/v1/auth/login` 하나로 처리한다고 정리했다.

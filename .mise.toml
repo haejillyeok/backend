@@ -80,13 +80,13 @@ depends = ["install"]
 run = ".venv/bin/python -m alembic history"
 
 [tasks.infra-up]
-description = "pgvector를 포함한 로컬 PostgreSQL을 시작합니다"
-run = "docker compose up -d postgres"
+description = "PostgreSQL, OpenTelemetry Collector, Prometheus, Grafana를 시작합니다"
+run = "docker compose up -d postgres otel-collector prometheus tempo grafana"
 
 [tasks.infra-down]
 description = "로컬 인프라를 중지합니다"
 run = "docker compose down"
 
 [tasks.infra-logs]
-description = "PostgreSQL 로그를 실시간으로 확인합니다"
-run = "docker compose logs -f postgres"
+description = "로컬 인프라 로그를 실시간으로 확인합니다"
+run = "docker compose logs -f postgres otel-collector prometheus tempo grafana"

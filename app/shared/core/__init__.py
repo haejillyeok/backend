@@ -10,6 +10,14 @@ from app.shared.core.error_codes import (
 )
 from app.shared.core.exceptions import AppException, InvalidCredentialsError
 from app.shared.core.http_audit import AuditLogMiddleware, add_audit_log_middleware
+from app.shared.core.observability import (
+    HttpServerMetricsMiddleware,
+    ObservabilitySettings,
+    add_observability,
+    configure_observability_sdk,
+    start_span,
+    traced_method,
+)
 from app.shared.core.openapi import (
     error_example,
     error_response,
@@ -36,10 +44,14 @@ __all__ = [
     "ErrorInfo",
     "ErrorResponse",
     "ErrorType",
+    "HttpServerMetricsMiddleware",
     "InvalidCredentialsError",
+    "ObservabilitySettings",
     "ResponseEnvelope",
     "SuccessResponse",
     "add_audit_log_middleware",
+    "add_observability",
+    "configure_observability_sdk",
     "error_example",
     "error_response",
     "error_responses",
@@ -50,4 +62,6 @@ __all__ = [
     "install_openapi_schema",
     "log_audit_event",
     "ok",
+    "start_span",
+    "traced_method",
 ]

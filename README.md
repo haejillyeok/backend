@@ -62,7 +62,20 @@ mise run db-current
 mise run db-history
 ```
 
-PostgreSQL은 `localhost:5432`에서 실행됩니다.
+`infra-up`은 PostgreSQL, OpenTelemetry Collector, Prometheus, Grafana를 실행합니다.
+주요 로컬 주소는 아래와 같습니다.
+
+```text
+PostgreSQL:           localhost:5432
+Grafana:              http://localhost:3000
+Prometheus:           http://localhost:9090
+Tempo:                http://localhost:3200
+OpenTelemetry gRPC:   localhost:4317
+OpenTelemetry HTTP:   localhost:4318
+```
+
+Grafana 기본 계정은 `admin` / `admin`이며, FastAPI metric dashboard, trace dashboard,
+Prometheus/Tempo datasource는 자동으로 provision 됩니다.
 
 백엔드 서버 실행 전 프로젝트 루트의 `.env`에 DB 접속 정보를 설정해야 합니다.
 로컬 설정 예시를 사용하면 PostgreSQL URL은 다음처럼 조립됩니다.

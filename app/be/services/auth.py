@@ -8,6 +8,7 @@ from app.be.models.user_session import SESSION_TTL
 from app.be.security.password import hash_password, verify_password
 from app.be.security.session import generate_session_token, hash_session_token
 from app.shared.core.exceptions import InvalidCredentialsError
+from app.shared.core.observability import traced_method
 
 
 class AuthRepositoryProtocol(Protocol):
@@ -67,6 +68,23 @@ class AuthService:
         user_agent: str | None,
     ) -> AuthLoginResult:
         """닉네임이 없으면 가입하고, 있으면 비밀번호를 검증한 뒤 세션을 발급합니다."""
+        return await self._login_or_register(
+            nickname=nickname,
+            password=password,
+            last_access_ip=last_access_ip,
+            user_agent=user_agent,
+        )
+
+    @traced_method("AuthService.login_or_register", layer="service")
+    async def _login_or_register(
+        self,
+        *,
+        nickname: str,
+        password: str,
+        last_access_ip: str | None,
+        user_agent: str | None,
+    ) -> AuthLoginResult:
+        """가입 겸 로그인 유스케이스 전체 실행 시간을 trace span으로 기록합니다."""
         user = await self.repository.get_user_by_nickname(nickname)
         is_new_user = user is None
 

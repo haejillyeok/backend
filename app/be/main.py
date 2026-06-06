@@ -10,6 +10,7 @@ from app.be.grpc.server import create_grpc_server
 from app.shared.core.config import AppSettings, GrpcSettings, database_lifespan
 from app.shared.core.http_audit import add_audit_log_middleware
 from app.shared.core.logging_config import configure_logging
+from app.shared.core.observability import add_observability
 from app.shared.core.openapi import install_openapi_schema
 from app.shared.grpc import grpc_server_lifespan
 
@@ -38,6 +39,7 @@ def create_app() -> FastAPI:
         debug=settings.debug,
         lifespan=app_lifespan,
     )
+    add_observability(app, settings.app_name, settings.environment)
     add_audit_log_middleware(app, settings.app_name)
     register_exception_handlers(app)
     app.include_router(health_router)

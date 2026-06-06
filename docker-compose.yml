@@ -22,5 +22,65 @@ services:
       timeout: 5s
       retries: 10
 
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: haejillyeok-otel-collector
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol-contrib/config.yml"]
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "9464:9464"
+    volumes:
+      - ./docker/otel-collector/config.yml:/etc/otelcol-contrib/config.yml:ro
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: haejillyeok-prometheus
+    restart: unless-stopped
+    depends_on:
+      - otel-collector
+    ports:
+      - "9090:9090"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-lifecycle"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+
+  tempo:
+    image: grafana/tempo:latest
+    container_name: haejillyeok-tempo
+    restart: unless-stopped
+    command: ["-config.file=/etc/tempo/tempo.yml"]
+    ports:
+      - "3200:3200"
+    volumes:
+      - ./docker/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+      - tempo_data:/var/tempo
+
+  grafana:
+    image: grafana/grafana-oss:latest
+    container_name: haejillyeok-grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+      - tempo
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
+
 volumes:
   postgres_data:
+  prometheus_data:
+  grafana_data:
+  tempo_data:

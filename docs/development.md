@@ -22,6 +22,53 @@ DB URL은 위 접속 정보를 코드에서 조립합니다.
 요청 처리에서 `app.be.dependencies.database.get_db_session`을 통해 pool 기반 세션을 가져옵니다.
 `agent` 서버는 DB 연결을 갖지 않습니다.
 
+## Observability
+
+로컬 APM 관측 인프라는 Docker Compose로 실행합니다.
+
+```bash
+mise run infra-up
+```
+
+구성은 FastAPI 앱이 OpenTelemetry OTLP로 metric/trace를 내보내고,
+OpenTelemetry Collector가 metric은 Prometheus scrape endpoint로 변환하고 trace는 Tempo에 저장한 뒤,
+Prometheus, Tempo, Grafana가 집계와 시각화를 담당하는 흐름입니다.
+
+```text
+FastAPI -> OTLP :4317/:4318 -> OpenTelemetry Collector -> Prometheus / Tempo -> Grafana
+```
+
+로컬 접속 주소는 아래와 같습니다.
+
+```text
+Grafana:              http://localhost:3000
+Prometheus:           http://localhost:9090
+Tempo:                http://localhost:3200
+OpenTelemetry gRPC:   localhost:4317
+OpenTelemetry HTTP:   localhost:4318
+Collector metrics:    http://localhost:9464/metrics
+```
+
+Grafana 기본 계정은 `admin` / `admin`입니다. 필요한 경우 `.env` 또는 실행 환경에서
+`GRAFANA_ADMIN_USER`, `GRAFANA_ADMIN_PASSWORD`를 설정합니다.
+
+FastAPI 앱은 기본적으로 `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317`로 전송합니다.
+관측 전송을 끄려면 `OTEL_ENABLED=false`를 설정합니다.
+
+Grafana metric dashboard는 `docker/grafana/dashboards/fastapi-apm.json`에서 provision 됩니다.
+주요 panel은 throughput, 5xx error rate, p95 latency, p99 latency, status별 throughput입니다.
+Prometheus metric은 route template label을 사용해 `/items/{item_id}`처럼 집계하며,
+개별 path parameter 값은 label에 넣지 않습니다.
+
+객체별 실행 시간은 trace span으로 확인합니다. FastAPI 요청 span 아래에 service/repository span을
+수동으로 붙이려면 `app/shared/core/observability.py`의 `@traced_method`를 사용합니다.
+예를 들어 인증 흐름은 `AuthService.login_or_register`,
+`AuthRepository.get_user_by_nickname`, `AuthRepository.create_user_session` 같은 child span을
+Tempo에 저장합니다. Grafana trace dashboard는
+`docker/grafana/dashboards/fastapi-traces.json`에서 provision 됩니다. Dashboard 이름은
+`Haejillyeok FastAPI Traces`이며, request trace와 service/repository object span search panel을
+포함합니다.
+
 ### Migration
 
 DB schema migration은 Alembic으로 관리합니다. Migration 파일은 `migrations/versions/`에 두고
