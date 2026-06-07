@@ -1,1 +1,1 @@
-"""HTTP clients for communication between local services."""
+"""gRPC client wrappers for communication between local services."""

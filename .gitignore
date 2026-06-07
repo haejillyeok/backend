@@ -36,6 +36,10 @@ dist/
 .eggs/
 pip-wheel-metadata/
 
+# Generated protobuf Python bindings
+*_pb2.py
+*_pb2_grpc.py
+
 # FastAPI/Uvicorn runtime artifacts
 *.log
 logs/

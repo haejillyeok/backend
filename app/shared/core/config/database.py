@@ -73,8 +73,7 @@ class DatabaseSettings(BaseSettings):
 
         if missing:
             raise ValueError(
-                "Missing required database environment variables: "
-                + ", ".join(missing)
+                "Missing required database environment variables: " + ", ".join(missing)
             )
 
         return self

@@ -15,28 +15,78 @@ run = ".venv/bin/python -m pip install -e '.[dev]'"
 
 
 [tasks.dev-be]
-description = "백엔드 개발 서버를 실행합니다"
-depends = ["install"]
+description = "백엔드 REST API와 gRPC 개발 서버를 함께 실행합니다"
+depends = ["grpc-generate"]
 run = ".venv/bin/uvicorn app.be.main:app --reload --port 8000"
 
 [tasks.dev-agent]
-description = "에이전트 개발 서버를 실행합니다"
-depends = ["install"]
+description = "에이전트 REST API와 gRPC 개발 서버를 함께 실행합니다"
+depends = ["grpc-generate"]
 run = ".venv/bin/uvicorn app.agent.main:app --reload --port 8001"
+
+[tasks.grpc-generate]
+description = "서버별 gRPC proto Python binding을 생성합니다"
+depends = ["install"]
+run = ".venv/bin/python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. app/be/grpc/proto/internal_health.proto app/agent/grpc/proto/internal_health.proto"
 
 [tasks.test]
 description = "Python 테스트를 실행합니다"
-depends = ["install"]
+depends = ["grpc-generate"]
 run = ".venv/bin/python -m pytest"
 
+[tasks.format]
+description = "Python 코드 포맷을 적용합니다"
+depends = ["install"]
+run = ".venv/bin/python -m ruff format app test migrations"
+
+[tasks.format-check]
+description = "Python 코드 포맷 상태를 확인합니다"
+depends = ["install"]
+run = ".venv/bin/python -m ruff format --check app test migrations"
+
+[tasks.db-revision]
+description = "Alembic autogenerate로 새 DB migration revision을 생성합니다"
+depends = ["install"]
+run = ".mise/scripts/db-revision"
+
+[tasks.db-upgrade]
+description = "지정한 Alembic revision까지 DB migration을 적용합니다"
+depends = ["install"]
+run = ".venv/bin/python -m alembic upgrade"
+
+[tasks.db-upgrade-head]
+description = "DB migration을 최신 Alembic revision까지 적용합니다"
+depends = ["install"]
+run = ".venv/bin/python -m alembic upgrade head"
+
+[tasks.db-downgrade]
+description = "지정한 Alembic revision까지 DB migration을 되돌립니다"
+depends = ["install"]
+run = ".venv/bin/python -m alembic downgrade"
+
+[tasks.db-downgrade-one]
+description = "DB migration을 바로 이전 Alembic revision으로 되돌립니다"
+depends = ["install"]
+run = ".venv/bin/python -m alembic downgrade -1"
+
+[tasks.db-current]
+description = "현재 DB에 적용된 Alembic revision을 확인합니다"
+depends = ["install"]
+run = ".venv/bin/python -m alembic current"
+
+[tasks.db-history]
+description = "Alembic migration revision 이력을 확인합니다"
+depends = ["install"]
+run = ".venv/bin/python -m alembic history"
+
 [tasks.infra-up]
-description = "pgvector를 포함한 로컬 PostgreSQL을 시작합니다"
-run = "docker compose up -d postgres"
+description = "PostgreSQL, OpenTelemetry Collector, Prometheus, Grafana를 시작합니다"
+run = "docker compose up -d postgres otel-collector prometheus tempo grafana"
 
 [tasks.infra-down]
 description = "로컬 인프라를 중지합니다"
 run = "docker compose down"
 
 [tasks.infra-logs]
-description = "PostgreSQL 로그를 실시간으로 확인합니다"
-run = "docker compose logs -f postgres"
+description = "로컬 인프라 로그를 실시간으로 확인합니다"
+run = "docker compose logs -f postgres otel-collector prometheus tempo grafana"
