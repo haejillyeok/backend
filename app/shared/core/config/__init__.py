@@ -9,6 +9,7 @@ from app.shared.core.config.database import (
     database_lifespan,
 )
 from app.shared.core.config.grpc import GrpcSettings
+from app.shared.core.config.http import HttpSettings
 
 __all__ = [
     "AppSettings",
@@ -17,6 +18,7 @@ __all__ = [
     "DatabaseSettings",
     "EnvironmentName",
     "GrpcSettings",
+    "HttpSettings",
     "create_database_engine",
     "create_database_sessionmaker",
     "database_lifespan",

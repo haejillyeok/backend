@@ -18,7 +18,9 @@ FastAPI app -> OTLP -> OpenTelemetry Collector -> Prometheus / Tempo -> Grafana
 - `app/shared/core/observability.py`는 FastAPI 앱에 OpenTelemetry trace instrumentation과
   HTTP metric middleware를 등록한다.
 - `be`와 `agent` 앱은 `create_app()`에서 `add_observability()`를 호출한다.
-- 앱은 기본적으로 `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317`로 OTLP gRPC를 보낸다.
+- 앱은 기본적으로 APM exporter를 연결하고, 기본 endpoint인 `http://localhost:4317`로
+  OTLP gRPC를 보낸다. 특정 상황에서만 서버 `.env`의 값을 비활성화해 전송을 끈다.
+  Collector host port를 바꾸면 이 endpoint도 같은 포트로 맞춘다.
 - Docker Compose의 `otel-collector`는 OTLP gRPC `4317`, OTLP HTTP `4318`을 열고,
   Prometheus scrape endpoint `9464`로 metric을 노출하며 trace는 Tempo로 전달한다.
 - Prometheus는 `otel-collector:9464`를 scrape한다.
@@ -70,6 +72,8 @@ Grafana dashboard는 다음 Prometheus 이름을 기준으로 query한다.
 
 `mise` enter hook은 기존처럼 PostgreSQL만 자동 시작한다. Grafana와 Prometheus는 명시적으로
 `infra-up`을 실행할 때만 시작한다.
+Docker Compose의 host port는 인프라 실행 환경에서 바꿀 수 있다. 이 값들은 서버 `.env`
+관리 대상이 아니다.
 
 ## Dashboard
 

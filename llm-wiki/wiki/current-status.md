@@ -29,7 +29,7 @@ updated: 2026-06-05
 - 포맷 확인: `mise run format-check`
 - migration 생성: `mise run db-revision "message"`
 - migration 적용: `mise run db-upgrade-head`
-- migration 대상 DB는 기본적으로 앱과 같은 `BE_DB_*` 설정을 사용한다.
+- migration 대상 DB는 기본적으로 앱과 같은 DB 접속 설정을 사용한다.
 
 ## Open Questions
 

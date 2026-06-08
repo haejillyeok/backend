@@ -8,7 +8,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-haejillyeok}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-haejillyeok}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
@@ -28,9 +28,9 @@ services:
     restart: unless-stopped
     command: ["--config=/etc/otelcol-contrib/config.yml"]
     ports:
-      - "4317:4317"
-      - "4318:4318"
-      - "9464:9464"
+      - "${OTEL_GRPC_HOST_PORT:-4317}:4317"
+      - "${OTEL_HTTP_HOST_PORT:-4318}:4318"
+      - "${OTEL_PROMETHEUS_HOST_PORT:-9464}:9464"
     volumes:
       - ./docker/otel-collector/config.yml:/etc/otelcol-contrib/config.yml:ro
 
@@ -41,7 +41,7 @@ services:
     depends_on:
       - otel-collector
     ports:
-      - "9090:9090"
+      - "${PROMETHEUS_HOST_PORT:-9090}:9090"
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
@@ -56,7 +56,7 @@ services:
     restart: unless-stopped
     command: ["-config.file=/etc/tempo/tempo.yml"]
     ports:
-      - "3200:3200"
+      - "${TEMPO_HOST_PORT:-3200}:3200"
     volumes:
       - ./docker/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
       - tempo_data:/var/tempo
@@ -73,7 +73,7 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
       GF_USERS_ALLOW_SIGN_UP: "false"
     ports:
-      - "3000:3000"
+      - "${GRAFANA_HOST_PORT:-3000}:3000"
     volumes:
       - grafana_data:/var/lib/grafana
       - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro

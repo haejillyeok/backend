@@ -67,6 +67,10 @@ mise run db-history
 
 ```text
 PostgreSQL:           localhost:5432
+be HTTP:              http://127.0.0.1:8000
+agent HTTP:           http://127.0.0.1:8001
+be gRPC:              localhost:50051
+agent gRPC:           localhost:50052
 Grafana:              http://localhost:3000
 Prometheus:           http://localhost:9090
 Tempo:                http://localhost:3200
@@ -74,8 +78,12 @@ OpenTelemetry gRPC:   localhost:4317
 OpenTelemetry HTTP:   localhost:4318
 ```
 
+서버 포트가 이미 사용 중이면 `.env`의 서버 포트 값을 바꾸거나, 실행 시 같은 값을
+셸 환경변수로 넘길 수 있습니다.
+
 Grafana 기본 계정은 `admin` / `admin`이며, FastAPI metric dashboard, trace dashboard,
-Prometheus/Tempo datasource는 자동으로 provision 됩니다.
+Prometheus/Tempo datasource는 자동으로 provision 됩니다. 앱은 기본적으로 metric/trace를
+내보내며, 필요한 상황에서만 서버 `.env`의 APM exporter 값을 꺼둡니다.
 
 백엔드 서버 실행 전 프로젝트 루트의 `.env`에 DB 접속 정보를 설정해야 합니다.
 로컬 설정 예시를 사용하면 PostgreSQL URL은 다음처럼 조립됩니다.
@@ -101,7 +109,7 @@ mise run db-history
 mise run db-downgrade-one
 ```
 
-Migration 대상 DB는 기본적으로 앱이 쓰는 `.env`와 `BE_DB_*` 환경 변수에서 조립한 URL입니다.
+Migration 대상 DB는 기본적으로 앱이 쓰는 `.env`의 DB 접속 값에서 조립한 URL입니다.
 별도 DB용 환경 변수를 추가로 관리하지 않습니다. 일회성으로 다른 DB를 지정해야 할 때만
 Alembic의 `-x database_url=...` 옵션을 직접 사용합니다.
 
@@ -124,6 +132,8 @@ mise run dev-be
 ```
 
 `dev-be`는 REST API와 `be` gRPC 서버를 함께 실행합니다.
+HTTP host는 `127.0.0.1`, gRPC host는 `localhost`로 고정하고, port는 서버 `.env`의
+백엔드 포트 값으로 제어합니다.
 
 에이전트 서버를 실행합니다.
 
@@ -132,6 +142,8 @@ mise run dev-agent
 ```
 
 `dev-agent`는 REST API와 `agent` gRPC 서버를 함께 실행합니다.
+HTTP host는 `127.0.0.1`, gRPC host는 `localhost`로 고정하고, port는 서버 `.env`의
+에이전트 포트 값으로 제어합니다.
 
 `dev-be`, `dev-agent`, `test`는 실행 전에 proto Python binding을 자동 생성합니다.
 필요할 때 직접 다시 생성할 수도 있습니다.

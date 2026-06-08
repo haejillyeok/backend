@@ -1,64 +1,56 @@
-import os
 from pathlib import Path
 
-from dotenv import dotenv_values
-from pydantic import BaseModel, ConfigDict
+from app.shared.core.config.endpoint import (
+    EndpointSettings,
+    format_service_env_prefix,
+    load_endpoint_port_value,
+)
 
 
-class GrpcSettings(BaseModel):
-    app_name: str
-    host: str
-    port: int
+DEFAULT_GRPC_HOST = "localhost"
+DEFAULT_GRPC_PORTS = {
+    "BE_GRPC": 50051,
+    "AGENT_GRPC": 50052,
+}
 
-    model_config = ConfigDict(frozen=True)
 
+class GrpcSettings(EndpointSettings):
     @classmethod
     def from_app_name(
         cls,
         app_name: str,
         env_file: str | Path = ".env",
     ) -> "GrpcSettings":
+        """앱 이름에 맞는 gRPC bind 설정을 환경변수에서 읽습니다."""
         env_prefix = format_grpc_env_prefix(app_name)
-        values = load_grpc_env_values(env_prefix, env_file)
+        port = load_endpoint_port_value(
+            env_prefix,
+            env_file,
+            default_port=DEFAULT_GRPC_PORTS.get(env_prefix),
+        )
         return cls(
             app_name=app_name,
-            host=values["host"],
-            port=int(values["port"]),
+            host=DEFAULT_GRPC_HOST,
+            port=int(port),
         )
-
-    @property
-    def bind_address(self) -> str:
-        return f"{self.host}:{self.port}"
 
 
 def format_grpc_env_prefix(app_name: str) -> str:
-    service_name = app_name.rsplit("-", maxsplit=1)[-1]
-    return service_name.upper().replace("-", "_") + "_GRPC"
+    """앱 이름에서 gRPC 환경변수 prefix를 만듭니다."""
+    return format_service_env_prefix(app_name) + "_GRPC"
 
 
 def load_grpc_env_values(
     env_prefix: str,
     env_file: str | Path = ".env",
 ) -> dict[str, str]:
-    dotenv = dotenv_values(env_file)
-    host_key = f"{env_prefix}_HOST"
-    port_key = f"{env_prefix}_PORT"
-
-    host = os.environ.get(host_key) or dotenv.get(host_key)
-    port = os.environ.get(port_key) or dotenv.get(port_key)
-
-    missing = [
-        key
-        for key, value in (
-            (host_key, host),
-            (port_key, port),
-        )
-        if not value
-    ]
-    if missing:
-        raise ValueError("Missing required gRPC environment variables: " + ", ".join(missing))
-
+    """기존 호출부를 위해 gRPC endpoint 값을 읽는 helper를 유지합니다."""
+    port = load_endpoint_port_value(
+        env_prefix,
+        env_file,
+        default_port=DEFAULT_GRPC_PORTS.get(env_prefix),
+    )
     return {
-        "host": str(host),
-        "port": str(port),
+        "host": DEFAULT_GRPC_HOST,
+        "port": port,
     }

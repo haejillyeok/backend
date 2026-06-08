@@ -17,12 +17,12 @@ run = ".venv/bin/python -m pip install -e '.[dev]'"
 [tasks.dev-be]
 description = "백엔드 REST API와 gRPC 개발 서버를 함께 실행합니다"
 depends = ["grpc-generate"]
-run = ".venv/bin/uvicorn app.be.main:app --reload --port 8000"
+run = ".venv/bin/uvicorn app.be.main:app --reload --port ${BE_HTTP_PORT:-8000}"
 
 [tasks.dev-agent]
 description = "에이전트 REST API와 gRPC 개발 서버를 함께 실행합니다"
 depends = ["grpc-generate"]
-run = ".venv/bin/uvicorn app.agent.main:app --reload --port 8001"
+run = ".venv/bin/uvicorn app.agent.main:app --reload --port ${AGENT_HTTP_PORT:-8001}"
 
 [tasks.grpc-generate]
 description = "서버별 gRPC proto Python binding을 생성합니다"
@@ -80,7 +80,7 @@ depends = ["install"]
 run = ".venv/bin/python -m alembic history"
 
 [tasks.infra-up]
-description = "PostgreSQL, OpenTelemetry Collector, Prometheus, Grafana를 시작합니다"
+description = "PostgreSQL, OpenTelemetry Collector, Prometheus, Tempo, Grafana를 시작합니다"
 run = "docker compose up -d postgres otel-collector prometheus tempo grafana"
 
 [tasks.infra-down]

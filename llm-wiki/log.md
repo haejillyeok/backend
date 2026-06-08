@@ -2,6 +2,13 @@
 
 이 파일은 `llm-wiki/`의 시간순 작업 이력입니다. 새 항목은 위에 추가합니다.
 
+## [2026-06-08] maintenance | Add environment-controlled runtime ports
+
+- HTTP 개발 서버는 host를 `127.0.0.1`로 고정하고 서버 `.env`의 port 값만 제어한다.
+- gRPC 서버는 host를 `localhost`로 고정하고 서버 `.env`의 port 값만 제어한다.
+- Docker Compose 인프라 host port는 서버 `.env` 관리 대상에서 제외한다고 정리했다.
+- 앱은 기본적으로 APM exporter를 연결하고, 특정 상황에서만 서버 `.env` 값으로 비활성화한다는 기준을 남겼다.
+
 ## [2026-06-06] maintenance | Add centralized error codes and Swagger error examples
 
 - 공개 error code를 `app/shared/core/error_codes.py`의 `ErrorCode` enum에서 관리하도록 정리했다.
@@ -91,7 +98,7 @@
 ## [2026-06-05] maintenance | Clarify Alembic commands and target DB
 
 - Alembic logger 설정을 제거해 앱 로깅 설정과 겹칠 여지를 줄였다.
-- migration 대상 DB는 기본적으로 앱과 같은 `BE_DB_*` 설정을 쓰고, 일회성 override만 Alembic `-x database_url=...`로 하도록 정리했다.
+- migration 대상 DB는 기본적으로 앱과 같은 DB 접속 설정을 쓰고, 일회성 override만 Alembic `-x database_url=...`로 하도록 정리했다.
 - `mise` DB migration 태스크 이름과 사용법을 위키에 반영했다.
 - 별도 migration 설정 테스트는 제거했다.
 

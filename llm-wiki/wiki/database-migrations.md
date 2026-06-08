@@ -56,11 +56,11 @@ mise run db-current
 
 ## Target DB
 
-기본 migration 대상 DB는 `.env` 또는 환경 변수의 `BE_DB_*` 값으로 `DatabaseSettings`가 조립한 URL이다.
+기본 migration 대상 DB는 `.env` 또는 실행 환경의 DB 접속 값으로 `DatabaseSettings`가 조립한 URL이다.
 Migration 전용 환경 변수는 추가로 관리하지 않는다. 특정 DB를 명시해야 하는 일회성 작업에서는
 Alembic CLI `-x database_url=...`를 사용한다.
 
-- 기본: `.env`/환경 변수의 `BE_DB_*`
+- 기본: `.env` 또는 실행 환경의 DB 접속 값
 - 일회성 override: Alembic CLI `-x database_url=...`
 
 ```bash
