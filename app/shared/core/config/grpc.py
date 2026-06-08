@@ -1,4 +1,7 @@
 from pathlib import Path
+import os
+
+from dotenv import dotenv_values
 
 from app.shared.core.config.endpoint import (
     EndpointSettings,
@@ -12,6 +15,8 @@ DEFAULT_GRPC_PORTS = {
     "BE_GRPC": 50051,
     "AGENT_GRPC": 50052,
 }
+FALSE_VALUES = {"0", "false", "no", "off"}
+TRUE_VALUES = {"1", "true", "yes", "on"}
 
 
 class GrpcSettings(EndpointSettings):
@@ -38,6 +43,29 @@ class GrpcSettings(EndpointSettings):
 def format_grpc_env_prefix(app_name: str) -> str:
     """앱 이름에서 gRPC 환경변수 prefix를 만듭니다."""
     return format_service_env_prefix(app_name) + "_GRPC"
+
+
+def load_embedded_grpc_enabled(
+    app_name: str,
+    env_file: str | Path = ".env",
+    *,
+    default: bool = True,
+) -> bool:
+    """HTTP 앱 lifespan에서 gRPC 서버를 함께 실행할지 환경변수에서 읽습니다."""
+    env_key = f"{format_grpc_env_prefix(app_name)}_EMBEDDED"
+    dotenv = dotenv_values(env_file)
+    value = os.environ.get(env_key) or dotenv.get(env_key)
+
+    if value is None:
+        return default
+
+    normalized = value.strip().lower()
+    if normalized in TRUE_VALUES:
+        return True
+    if normalized in FALSE_VALUES:
+        return False
+
+    raise ValueError(f"Invalid boolean value for {env_key}: {value}")
 
 
 def load_grpc_env_values(

@@ -8,7 +8,7 @@ from app.shared.core.config.database import (
     create_database_sessionmaker,
     database_lifespan,
 )
-from app.shared.core.config.grpc import GrpcSettings
+from app.shared.core.config.grpc import GrpcSettings, load_embedded_grpc_enabled
 from app.shared.core.config.http import HttpSettings
 
 __all__ = [
@@ -22,4 +22,5 @@ __all__ = [
     "create_database_engine",
     "create_database_sessionmaker",
     "database_lifespan",
+    "load_embedded_grpc_enabled",
 ]
