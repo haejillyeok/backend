@@ -5,9 +5,9 @@
 ## Project Docs
 
 - [Architecture](architecture.md): 서버 구조와 모듈 경계
-- [API](api.md): REST/gRPC API 계약
+- [API](api.md): REST API 계약
 - [Development](development.md): 개발 환경, DB, 실행, 테스트 절차
-- [Backend Guidelines](backend-guidelines.md): FastAPI, gRPC, WebSocket 적용 기준
+- [Backend Guidelines](backend-guidelines.md): FastAPI, WebSocket 적용 기준
 - [Code Conventions](code-conventions.md): Python 코드 스타일, 레이어 규칙, 테스트 기준
 
 ## Docs vs LLM Wiki

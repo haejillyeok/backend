@@ -15,43 +15,18 @@ run = ".venv/bin/python -m pip install -e '.[dev]'"
 
 
 [tasks.dev-be]
-description = "백엔드 REST API와 gRPC 개발 서버를 함께 실행합니다"
-depends = ["grpc-generate"]
+description = "백엔드 REST API 개발 서버를 실행합니다"
+depends = ["install"]
 run = ".venv/bin/uvicorn app.be.main:app --reload --port ${BE_HTTP_PORT:-8000}"
 
-[tasks.dev-be-http]
-description = "백엔드 REST API 개발 서버만 실행합니다"
-depends = ["install"]
-run = "BE_GRPC_EMBEDDED=false .venv/bin/uvicorn app.be.main:app --reload --port ${BE_HTTP_PORT:-8000}"
-
-[tasks.grpc-be]
-description = "백엔드 gRPC 서버만 실행합니다"
-depends = ["grpc-generate"]
-run = ".venv/bin/python -m app.be.grpc.server"
-
 [tasks.dev-agent]
-description = "에이전트 REST API와 gRPC 개발 서버를 함께 실행합니다"
-depends = ["grpc-generate"]
+description = "에이전트 REST API 개발 서버를 실행합니다"
+depends = ["install"]
 run = ".venv/bin/uvicorn app.agent.main:app --reload --port ${AGENT_HTTP_PORT:-8001}"
-
-[tasks.dev-agent-http]
-description = "에이전트 REST API 개발 서버만 실행합니다"
-depends = ["install"]
-run = "AGENT_GRPC_EMBEDDED=false .venv/bin/uvicorn app.agent.main:app --reload --port ${AGENT_HTTP_PORT:-8001}"
-
-[tasks.grpc-agent]
-description = "에이전트 gRPC 서버만 실행합니다"
-depends = ["grpc-generate"]
-run = ".venv/bin/python -m app.agent.grpc.server"
-
-[tasks.grpc-generate]
-description = "서버별 gRPC proto Python binding을 생성합니다"
-depends = ["install"]
-run = ".venv/bin/python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. app/be/grpc/proto/internal_health.proto app/agent/grpc/proto/internal_health.proto"
 
 [tasks.test]
 description = "Python 테스트를 실행합니다"
-depends = ["grpc-generate"]
+depends = ["install"]
 run = ".venv/bin/python -m pytest"
 
 [tasks.format]

@@ -8,7 +8,7 @@
 
 프로젝트 문서는 [docs/index.md](/Users/723poil/Documents/git/haejillyeok/backend/docs/index.md)에서 확인할 수 있습니다.
 
-- FastAPI, gRPC, WebSocket 가이드: [docs/backend-guidelines.md](/Users/723poil/Documents/git/haejillyeok/backend/docs/backend-guidelines.md)
+- FastAPI, WebSocket 가이드: [docs/backend-guidelines.md](/Users/723poil/Documents/git/haejillyeok/backend/docs/backend-guidelines.md)
 - 코드 컨벤션: [docs/code-conventions.md](/Users/723poil/Documents/git/haejillyeok/backend/docs/code-conventions.md)
 
 ### mise 설정
@@ -52,7 +52,6 @@ mise run infra-logs
 mise run install
 mise run dev-be
 mise run dev-agent
-mise run grpc-generate
 mise run test
 mise run format
 mise run format-check
@@ -69,12 +68,9 @@ mise run db-history
 PostgreSQL:           localhost:5432
 be HTTP:              http://127.0.0.1:8000
 agent HTTP:           http://127.0.0.1:8001
-be gRPC:              localhost:50051
-agent gRPC:           localhost:50052
 Grafana:              http://localhost:3000
 Prometheus:           http://localhost:9090
 Tempo:                http://localhost:3200
-OpenTelemetry gRPC:   localhost:4317
 OpenTelemetry HTTP:   localhost:4318
 ```
 
@@ -131,9 +127,8 @@ mise run install
 mise run dev-be
 ```
 
-`dev-be`는 REST API와 `be` gRPC 서버를 함께 실행합니다.
-HTTP host는 `127.0.0.1`, gRPC host는 `localhost`로 고정하고, port는 서버 `.env`의
-백엔드 포트 값으로 제어합니다.
+`dev-be`는 백엔드 REST API 서버를 실행합니다.
+HTTP host는 `127.0.0.1`로 고정하고, port는 서버 `.env`의 백엔드 포트 값으로 제어합니다.
 
 에이전트 서버를 실행합니다.
 
@@ -141,16 +136,8 @@ HTTP host는 `127.0.0.1`, gRPC host는 `localhost`로 고정하고, port는 서�
 mise run dev-agent
 ```
 
-`dev-agent`는 REST API와 `agent` gRPC 서버를 함께 실행합니다.
-HTTP host는 `127.0.0.1`, gRPC host는 `localhost`로 고정하고, port는 서버 `.env`의
-에이전트 포트 값으로 제어합니다.
-
-`dev-be`, `dev-agent`, `test`는 실행 전에 proto Python binding을 자동 생성합니다.
-필요할 때 직접 다시 생성할 수도 있습니다.
-
-```bash
-mise run grpc-generate
-```
+`dev-agent`는 에이전트 REST API 서버를 실행합니다.
+HTTP host는 `127.0.0.1`로 고정하고, port는 서버 `.env`의 에이전트 포트 값으로 제어합니다.
 
 FastAPI 문서와 OpenAPI schema는 각 서버 실행 후 아래 경로에서 확인할 수 있습니다.
 
@@ -168,8 +155,6 @@ be:    GET /api/v1/health
 agent: GET /health
 agent: GET /api/v1/health
 ```
-
-내부 gRPC 헬스 체크 계약은 각 서버의 proto 디렉터리에서 관리합니다.
 
 테스트는 아래 명령으로 실행합니다.
 

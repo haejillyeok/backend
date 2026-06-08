@@ -35,7 +35,7 @@ OpenTelemetry Collector가 metric은 Prometheus scrape endpoint로 변환하고 
 Prometheus, Tempo, Grafana가 집계와 시각화를 담당하는 흐름입니다.
 
 ```text
-FastAPI -> OTLP :4317/:4318 -> OpenTelemetry Collector -> Prometheus / Tempo -> Grafana
+FastAPI -> OTLP HTTP :4318 -> OpenTelemetry Collector -> Prometheus / Tempo -> Grafana
 ```
 
 로컬 접속 주소는 아래와 같습니다.
@@ -43,12 +43,9 @@ FastAPI -> OTLP :4317/:4318 -> OpenTelemetry Collector -> Prometheus / Tempo -> 
 ```text
 be HTTP:              http://127.0.0.1:8000
 agent HTTP:           http://127.0.0.1:8001
-be gRPC:              localhost:50051
-agent gRPC:           localhost:50052
 Grafana:              http://localhost:3000
 Prometheus:           http://localhost:9090
 Tempo:                http://localhost:3200
-OpenTelemetry gRPC:   localhost:4317
 OpenTelemetry HTTP:   localhost:4318
 Collector metrics:    http://localhost:9464/metrics
 ```
@@ -60,14 +57,12 @@ Collector metrics:    http://localhost:9464/metrics
 | --- | --- |
 | be HTTP | `127.0.0.1:8000` |
 | agent HTTP | `127.0.0.1:8001` |
-| be gRPC | `localhost:50051` |
-| agent gRPC | `localhost:50052` |
 
 Grafana 기본 계정은 `admin` / `admin`입니다. 필요한 경우 인프라 실행 환경에서
 관리자 계정 값을 바꿉니다.
 
 FastAPI 앱은 기본적으로 APM exporter를 연결합니다. 특정 상황에서 관측 전송을 끄고 싶을 때만
-서버 `.env`의 APM exporter 값을 비활성화합니다. 기본 전송 endpoint는 `http://localhost:4317`
+서버 `.env`의 APM exporter 값을 비활성화합니다. 기본 전송 endpoint는 `http://localhost:4318`
 입니다. Collector의 host port를 바꿨다면 앱 실행 환경의 exporter endpoint도 같은 포트로 맞춥니다.
 
 Grafana metric dashboard는 `docker/grafana/dashboards/fastapi-apm.json`에서 provision 됩니다.
@@ -130,9 +125,8 @@ mise run db-downgrade-one
 mise run dev-be
 ```
 
-`dev-be`는 REST API와 `be` gRPC 서버를 함께 실행합니다.
-HTTP host는 `127.0.0.1`, gRPC host는 `localhost`로 고정하고, port는 서버 `.env`의
-백엔드 포트 값으로 제어합니다.
+`dev-be`는 백엔드 REST API 서버를 실행합니다.
+HTTP host는 `127.0.0.1`로 고정하고, port는 서버 `.env`의 백엔드 포트 값으로 제어합니다.
 
 에이전트 서버:
 
@@ -140,16 +134,8 @@ HTTP host는 `127.0.0.1`, gRPC host는 `localhost`로 고정하고, port는 서�
 mise run dev-agent
 ```
 
-`dev-agent`는 REST API와 `agent` gRPC 서버를 함께 실행합니다.
-HTTP host는 `127.0.0.1`, gRPC host는 `localhost`로 고정하고, port는 서버 `.env`의
-에이전트 포트 값으로 제어합니다.
-
-`dev-be`, `dev-agent`, `test`는 실행 전에 proto Python binding을 자동 생성합니다.
-필요할 때 직접 다시 생성할 수도 있습니다.
-
-```bash
-mise run grpc-generate
-```
+`dev-agent`는 에이전트 REST API 서버를 실행합니다.
+HTTP host는 `127.0.0.1`로 고정하고, port는 서버 `.env`의 에이전트 포트 값으로 제어합니다.
 
 ## Test
 

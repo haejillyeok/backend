@@ -1,8 +1,6 @@
 from dataclasses import dataclass
 from enum import StrEnum
 
-from grpc import StatusCode
-
 
 class ErrorCode(StrEnum):
     """프로토콜 경계에서 클라이언트에 노출하는 공통 에러 코드입니다."""
@@ -26,13 +24,12 @@ class ErrorType(StrEnum):
 
 @dataclass(frozen=True)
 class ErrorDefinition:
-    """HTTP, gRPC, WebSocket에서 공통으로 사용할 에러 코드 정의입니다."""
+    """HTTP와 WebSocket에서 공통으로 사용할 에러 코드 정의입니다."""
 
     code: ErrorCode
     type: ErrorType
     message: str
     http_status_code: int
-    grpc_status_code: StatusCode
     websocket_close_code: int
 
     @property
@@ -62,7 +59,6 @@ ERROR_DEFINITIONS: dict[ErrorCode, ErrorDefinition] = {
         type=ErrorType.AUTHENTICATION,
         message="닉네임 또는 비밀번호가 올바르지 않습니다.",
         http_status_code=401,
-        grpc_status_code=StatusCode.UNAUTHENTICATED,
         websocket_close_code=1008,
     ),
     ErrorCode.SESSION_EXPIRED: ErrorDefinition(
@@ -70,7 +66,6 @@ ERROR_DEFINITIONS: dict[ErrorCode, ErrorDefinition] = {
         type=ErrorType.AUTHENTICATION,
         message="세션이 만료되었습니다.",
         http_status_code=401,
-        grpc_status_code=StatusCode.UNAUTHENTICATED,
         websocket_close_code=1008,
     ),
     ErrorCode.VALIDATION_ERROR: ErrorDefinition(
@@ -78,7 +73,6 @@ ERROR_DEFINITIONS: dict[ErrorCode, ErrorDefinition] = {
         type=ErrorType.VALIDATION,
         message="요청 값이 올바르지 않습니다.",
         http_status_code=422,
-        grpc_status_code=StatusCode.INVALID_ARGUMENT,
         websocket_close_code=1008,
     ),
     ErrorCode.HTTP_ERROR: ErrorDefinition(
@@ -86,7 +80,6 @@ ERROR_DEFINITIONS: dict[ErrorCode, ErrorDefinition] = {
         type=ErrorType.INTERNAL,
         message="요청 처리 중 오류가 발생했습니다.",
         http_status_code=500,
-        grpc_status_code=StatusCode.UNKNOWN,
         websocket_close_code=1011,
     ),
 }

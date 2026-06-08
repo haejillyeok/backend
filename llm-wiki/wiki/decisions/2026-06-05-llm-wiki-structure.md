@@ -28,5 +28,5 @@ backend 레포의 LLM Wiki는 루트 `llm-wiki/` 아래에 둔다.
 ## Consequences
 
 - LLM이 위키 페이지를 만들거나 수정하면 `llm-wiki/index.md`와 `llm-wiki/log.md`를 함께 갱신해야 한다.
-- 코드, 설정, proto, 테스트와 충돌하는 위키 내용은 최신 사실 기준에 맞춰 갱신한다.
+- 코드, 설정, 테스트와 충돌하는 위키 내용은 최신 사실 기준에 맞춰 갱신한다.
 - 위키가 커지면 검색 스크립트나 Markdown 검색 도구를 추가할 수 있다.

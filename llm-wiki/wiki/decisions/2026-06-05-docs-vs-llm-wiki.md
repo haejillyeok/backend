@@ -28,6 +28,6 @@ AI가 작업할 때 필요한 코드 컨벤션, 프레임워크 가이드라인,
 
 ## Consequences
 
-- 코드, 설정, proto, 테스트가 최종 사실 기준이다.
+- 코드, 설정, 테스트가 최종 사실 기준이다.
 - `llm-wiki/`는 AI 작업을 위한 compiled knowledge다.
 - `docs/`는 사람이 보는 문서이므로, AI 작업 기준은 `llm-wiki/`에 유지한다.

@@ -6,15 +6,14 @@
 
 - `README.md`: 로컬 개발과 실행 안내
 - `docs/`: 사람이 보는 프로젝트 문서
-- `docs/api.md`: REST/gRPC API 계약
+- `docs/api.md`: REST API 계약
 - `docs/architecture.md`: 서버 구조와 모듈 경계
 - `docs/development.md`: 개발 환경, DB, 실행, 테스트 절차
-- `docs/backend-guidelines.md`: 사람이 읽는 FastAPI, gRPC, WebSocket 설명
+- `docs/backend-guidelines.md`: 사람이 읽는 FastAPI, WebSocket 설명
 - `docs/code-conventions.md`: 사람이 읽는 Python 코드 스타일과 레이어 규칙 설명
 - `app/be/`: 백엔드 FastAPI 서버
 - `app/agent/`: 에이전트 FastAPI 서버
-- `app/shared/`: 두 서버가 공유하는 설정, 로깅, gRPC helper
-- `proto/`: 공통 proto 원본
+- `app/shared/`: 두 서버가 공유하는 설정, 로깅, client helper
 - `test/`: 테스트 코드
 - `llm-wiki/`: AI가 작업할 때 사용하는 전체 프로젝트 지식 레이어
 - `llm-wiki/raw/`: 원본 자료. LLM은 원칙적으로 수정하지 않는다.
@@ -81,7 +80,7 @@
 ### Lint
 
 1. 깨진 링크, 고아 문서, 중복 개념, 오래된 주장, 모순을 찾는다.
-2. 코드, 설정, proto, 테스트와 충돌하는 위키 내용은 최신 기준으로 업데이트하거나 열린 질문으로 표시한다.
+2. 코드, 설정, 테스트와 충돌하는 위키 내용은 최신 기준으로 업데이트하거나 열린 질문으로 표시한다.
 3. 새로 생긴 문서가 인덱스에 빠져 있으면 `llm-wiki/index.md`에 추가한다.
 4. 점검 결과를 `llm-wiki/log.md`에 `## [YYYY-MM-DD] lint | 요약` 형식으로 남긴다.
 
@@ -91,12 +90,12 @@
 - 위키 페이지는 가능한 한 YAML frontmatter를 둔다.
 - 관련 페이지는 Markdown 상대 링크로 연결한다.
 - 확실하지 않은 내용은 단정하지 말고 `Open Questions`에 남긴다.
-- 코드, 설정, proto, 테스트가 최종 사실 기준이고, `llm-wiki/`는 AI가 작업에 쓰는 지식 레이어다.
+- 코드, 설정, 테스트가 최종 사실 기준이고, `llm-wiki/`는 AI가 작업에 쓰는 지식 레이어다.
 - `docs/`는 사람 전용 문서다. `docs/`의 내용이 AI 작업에도 필요하면 `llm-wiki/`에도 둔다.
 
 ## Engineering References
 
-- FastAPI, gRPC, WebSocket 구현 전 [llm-wiki/wiki/backend-guidelines.md](/Users/723poil/Documents/git/haejillyeok/backend/llm-wiki/wiki/backend-guidelines.md)를 확인한다.
+- FastAPI, WebSocket 구현 전 [llm-wiki/wiki/backend-guidelines.md](/Users/723poil/Documents/git/haejillyeok/backend/llm-wiki/wiki/backend-guidelines.md)를 확인한다.
 - 코드 스타일, 레이어 책임, 테스트 기준은 [llm-wiki/wiki/code-conventions.md](/Users/723poil/Documents/git/haejillyeok/backend/llm-wiki/wiki/code-conventions.md)를 따른다.
 - public API 계약이 바뀌면 AI 작업 기준은 `llm-wiki/`에, 사람이 읽는 설명은 필요 시 [docs/api.md](/Users/723poil/Documents/git/haejillyeok/backend/docs/api.md)에 반영한다.
 - 아키텍처 경계가 바뀌면 AI 작업 기준은 `llm-wiki/`에, 사람이 읽는 설명은 필요 시 [docs/architecture.md](/Users/723poil/Documents/git/haejillyeok/backend/docs/architecture.md)에 반영한다.
@@ -104,10 +103,10 @@
 ## Comment Rules
 
 - 로직 설명과 함수 docstring은 한국어로 작성한다.
-- public 함수, service/repository 메서드, gRPC handler, WebSocket connection manager 메서드는 의도, 주요 입력, 반환값, 부작용을 설명한다.
+- public 함수, service/repository 메서드, WebSocket connection manager 메서드는 의도, 주요 입력, 반환값, 부작용을 설명한다.
 - 복잡한 분기, 비즈니스 규칙, timeout/cancellation, transaction, retry/compensation 로직에는 왜 그렇게 처리하는지 주석을 남긴다.
 - 코드가 이미 명확히 말하는 내용을 반복하는 주석은 피한다.
-- 외부 계약과 연결되는 함수는 관련 API, proto, WebSocket message type을 주석이나 docstring에 명시한다.
+- 외부 계약과 연결되는 함수는 관련 API, WebSocket message type을 주석이나 docstring에 명시한다.
 
 ## Update Checklist
 
@@ -116,4 +115,4 @@
 - LLM Wiki를 건드렸다면 `llm-wiki/log.md`에 이력을 남겼는가?
 - AI가 작업에 쓸 정보가 `docs/`에만 있고 `llm-wiki/`에 빠져 있지는 않은가?
 - 코드 변경이 있었다면 적절한 테스트나 검증을 실행했는가?
-- 코드, 설정, proto, 테스트와 위키 내용이 서로 충돌하지 않는가?
+- 코드, 설정, 테스트와 위키 내용이 서로 충돌하지 않는가?

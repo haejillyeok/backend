@@ -25,7 +25,7 @@ def log_audit_event(event: AuditEvent) -> None:
 
 
 def format_audit_event(event: AuditEvent) -> str:
-    """HTTP/gRPC 요청 감사 로그에 공통으로 사용할 문자열을 만듭니다."""
+    """HTTP 요청 감사 로그에 공통으로 사용할 문자열을 만듭니다."""
     fields = {
         "protocol": event.protocol,
         "phase": event.phase,

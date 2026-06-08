@@ -1,7 +1,7 @@
 ---
 title: OpenAPI and Swagger
 type: guide
-updated: 2026-06-06
+updated: 2026-06-09
 audience: ai
 ---
 
@@ -15,7 +15,7 @@ audience: ai
 - public HTTP API 계약의 1차 기준은 FastAPI endpoint, Pydantic request/response schema, 테스트다.
 - 사람이 읽는 API 설명은 `docs/api.md`에 둔다.
 - AI가 작업할 때 쓰는 운영 기준과 결정은 `llm-wiki/`에 둔다.
-- DB, gRPC, WebSocket 계약과 마찬가지로 코드와 테스트가 최종 사실 기준이다.
+- DB, HTTP, WebSocket 계약과 마찬가지로 코드와 테스트가 최종 사실 기준이다.
 
 ## Endpoint Metadata Rules
 
@@ -33,7 +33,7 @@ audience: ai
 - 성공 응답 문서는 `SuccessResponse[T]`, 실패 응답 문서는 `ErrorResponse`를 사용해 ReDoc sample이 성공 응답에는 `error`를 표시하지 않고 실패 응답에만 error object를 보여주게 한다.
 - FastAPI가 OpenAPI example의 `None` 값을 제거하는 경우 `install_openapi_schema(app)` 후처리로 error example의 `data: null`, `details: null`을 복원한다.
 - request/response field 설명이 필요한 경우 Pydantic `Field(description=..., examples=[...])`를 사용한다.
-- 내부 ORM model이나 proto message를 response model로 직접 노출하지 않는다.
+- 내부 ORM model을 response model로 직접 노출하지 않는다.
 
 ## Current Exposure
 

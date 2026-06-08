@@ -1,7 +1,7 @@
 ---
 title: Observability Stack
 type: guide
-updated: 2026-06-06
+updated: 2026-06-09
 audience: ai
 ---
 
@@ -12,16 +12,16 @@ audience: ai
 ## Data Flow
 
 ```text
-FastAPI app -> OTLP -> OpenTelemetry Collector -> Prometheus / Tempo -> Grafana
+FastAPI app -> OTLP HTTP :4318 -> OpenTelemetry Collector -> Prometheus / Tempo -> Grafana
 ```
 
 - `app/shared/core/observability.py`는 FastAPI 앱에 OpenTelemetry trace instrumentation과
   HTTP metric middleware를 등록한다.
 - `be`와 `agent` 앱은 `create_app()`에서 `add_observability()`를 호출한다.
-- 앱은 기본적으로 APM exporter를 연결하고, 기본 endpoint인 `http://localhost:4317`로
-  OTLP gRPC를 보낸다. 특정 상황에서만 서버 `.env`의 값을 비활성화해 전송을 끈다.
+- 앱은 기본적으로 APM exporter를 연결하고, 기본 endpoint인 `http://localhost:4318`로
+  OTLP HTTP를 보낸다. 특정 상황에서만 서버 `.env`의 값을 비활성화해 전송을 끈다.
   Collector host port를 바꾸면 이 endpoint도 같은 포트로 맞춘다.
-- Docker Compose의 `otel-collector`는 OTLP gRPC `4317`, OTLP HTTP `4318`을 열고,
+- Docker Compose의 `otel-collector`는 OTLP HTTP `4318`을 열고,
   Prometheus scrape endpoint `9464`로 metric을 노출하며 trace는 Tempo로 전달한다.
 - Prometheus는 `otel-collector:9464`를 scrape한다.
 - Tempo는 trace span을 저장하고 Grafana Explore의 `Tempo` datasource로 조회된다.

@@ -64,6 +64,13 @@
 - Grafana는 provisioned Prometheus datasource와 `fastapi-apm.json` dashboard로 throughput, 5xx error rate, p95, p99 latency를 시각화한다.
 - route label은 실제 path가 아니라 FastAPI route template을 사용해 metric cardinality를 낮춘다고 기록했다.
 
+## [2026-06-09] maintenance | Remove application gRPC
+
+- `be`와 `agent` 서버에서 gRPC 서버, proto 계약, proto 생성 태스크를 제거하기로 정리했다.
+- 서버 간 통신 기준을 gRPC에서 HTTP API와 기능별 client wrapper로 바꿨다.
+- OpenTelemetry exporter 기본 전송을 OTLP HTTP `http://localhost:4318`로 바꿨다.
+- 공통 예외와 error definition은 HTTP status와 WebSocket close code만 관리한다고 기록했다.
+
 ## [2026-06-05] maintenance | Add auth session login decision
 
 - 가입 겸 로그인 API는 `POST /api/v1/auth/login` 하나로 처리한다고 정리했다.

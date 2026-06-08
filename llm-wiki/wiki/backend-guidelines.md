@@ -1,7 +1,7 @@
 ---
 title: Backend Guidelines
 type: guide
-updated: 2026-06-05
+updated: 2026-06-09
 audience: ai
 ---
 
@@ -13,9 +13,9 @@ audience: ai
 
 - `be`와 `agent`는 같은 저장소에 있지만 독립 서버로 생각한다.
 - 외부 HTTP API는 FastAPI router로 노출한다.
-- 서버 간 내부 통신은 gRPC 계약과 client wrapper를 통해 호출한다.
+- 서버 간 내부 통신이 필요하면 HTTP API와 client wrapper를 통해 호출한다.
 - 사용자-facing 실시간 통신은 FastAPI WebSocket을 기본 선택지로 둔다.
-- 코드, 설정, proto, 테스트가 최종 사실 기준이다.
+- 코드, 설정, 테스트가 최종 사실 기준이다.
 - AI가 작업에 사용할 수 있는 기준과 결정은 `llm-wiki/`에 유지한다.
 
 ## FastAPI
@@ -23,7 +23,7 @@ audience: ai
 ### App Factory and Lifespan
 
 - 각 서버는 `create_app()`에서 `FastAPI` 앱을 만든다.
-- DB engine, gRPC server, background resource 같은 프로세스 생명주기 리소스는 `lifespan`에서 시작하고 종료한다.
+- DB engine, background resource 같은 프로세스 생명주기 리소스는 `lifespan`에서 시작하고 종료한다.
 - `startup`/`shutdown` 이벤트보다 `lifespan` context manager를 우선한다.
 - 테스트에서는 `create_app()`을 호출해서 앱을 만들고 dependency override를 주입할 수 있게 유지한다.
 
@@ -53,7 +53,7 @@ audience: ai
 
 - response schema는 `app/{server}/schemas/response/`에 둔다.
 - endpoint는 dict를 직접 누적하기보다 response model을 통해 반환 shape를 고정한다.
-- public API response에 내부 ORM model이나 proto message를 그대로 노출하지 않는다.
+- public API response에 내부 ORM model을 그대로 노출하지 않는다.
 
 ### OpenAPI and Swagger
 
@@ -63,48 +63,14 @@ audience: ai
 - OpenAPI Generator나 프론트 client 생성에 대비해 `operation_id`는 안정적인 snake_case 이름으로 고정한다.
 - 자세한 기준은 [openapi-swagger.md](openapi-swagger.md)를 따른다.
 
-## gRPC
+## Server-to-Server Communication
 
-### Contract Ownership
-
-- 서버가 제공하는 gRPC 계약은 호출 대상 서버가 소유한다.
-- `be` 계약은 `app/be/grpc/proto/` 또는 공통 계약이면 `proto/`에 둔다.
-- `agent` 계약은 `app/agent/grpc/proto/` 또는 공통 계약이면 `proto/`에 둔다.
 - 한 서버가 다른 서버의 service/repository를 직접 import하지 않는다.
-
-### Client Pattern
-
-- gRPC channel 생성은 `app/shared/grpc/clients.py`의 helper를 사용한다.
+- 서버 간 호출은 대상 서버의 HTTP API 계약을 통해 수행한다.
 - 기능별 client wrapper는 `app/shared/clients/{feature}.py`에 둔다.
-- endpoint나 service에서 generated stub을 직접 흩뿌리지 않는다.
-- 모든 outbound RPC에는 timeout/deadline을 명시한다.
-
-### Deadlines and Cancellation
-
-- client는 현실적인 deadline을 설정한다. 무기한 대기는 금지한다.
-- server handler는 긴 작업 중 취소 여부를 확인하고 불필요한 처리를 중단할 수 있게 설계한다.
-- server가 또 다른 gRPC를 호출하는 경우, 기존 요청의 timeout budget을 넘기지 않는다.
-
-### Status Codes
-
-- 잘못된 인자는 `INVALID_ARGUMENT`를 사용한다.
-- 없는 리소스는 `NOT_FOUND`를 사용한다.
-- 현재 상태 때문에 처리할 수 없으면 `FAILED_PRECONDITION` 또는 `ABORTED`를 구분해서 사용한다.
-- deadline 초과는 `DEADLINE_EXCEEDED`, 호출자 취소는 `CANCELLED`로 다룬다.
-- 내부 예외를 무조건 `UNKNOWN`으로 숨기지 말고 가능한 한 의도된 status로 변환한다.
-
-### Health and Lifecycle
-
-- 각 gRPC 서버는 health check 계약을 제공한다.
-- FastAPI lifespan에서 gRPC server를 시작하고 graceful shutdown으로 종료한다.
-- 종료 시 새 요청을 받지 않도록 하고 진행 중인 요청에 짧은 grace period를 둔다.
-
-### Proto Rules
-
-- proto package는 서버와 도메인을 드러내는 이름을 쓴다.
-- message 필드는 제거하거나 재사용하지 않는다. 삭제가 필요하면 field number를 reserved 처리한다.
-- 새 필드는 backward compatible하게 optional/default-safe하게 추가한다.
-- generated Python 파일은 직접 수정하지 않는다.
+- endpoint나 service에서 HTTP client 호출 세부를 흩뿌리지 않는다.
+- 모든 outbound HTTP 호출에는 timeout을 명시한다.
+- retry가 필요하면 멱등성, timeout budget, 실패 로그 기준을 함께 정한다.
 
 ## WebSocket
 
@@ -117,7 +83,7 @@ WebSocket은 사용자-facing 양방향 통신이 필요한 경우에 사용한�
 - 채팅 또는 에이전트 실행 스트림
 - 서버 이벤트를 즉시 전달해야 하는 화면
 
-단순 서버 간 호출은 WebSocket이 아니라 gRPC를 우선한다. 단방향 이벤트가 충분하면 HTTP polling이나 server-sent events도 검토한다.
+단순 서버 간 호출은 WebSocket이 아니라 HTTP API 호출을 우선한다. 단방향 이벤트가 충분하면 HTTP polling이나 server-sent events도 검토한다.
 
 ### Route Placement
 

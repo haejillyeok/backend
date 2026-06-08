@@ -1,7 +1,8 @@
 import importlib.util
+import tomllib
+from pathlib import Path
 
 from fastapi.testclient import TestClient
-from grpc import StatusCode
 
 from app.agent.main import create_app as create_agent_app
 from app.be.main import create_app as create_be_app
@@ -34,7 +35,6 @@ def test_be_custom_exception_returns_common_error_response():
             message="테스트 충돌입니다.",
             details={"field": "nickname"},
             http_status_code=409,
-            grpc_status_code=StatusCode.ALREADY_EXISTS,
         )
 
     client = TestClient(app)
@@ -76,23 +76,21 @@ def test_shared_envelope_can_be_used_at_protocol_boundaries():
     }
 
 
-def test_shared_exception_carries_http_and_grpc_status_metadata():
+def test_shared_exception_carries_http_status_metadata():
     exception = AppException(
         code="TEST_CONFLICT",
         message="테스트 충돌입니다.",
         http_status_code=409,
-        grpc_status_code=StatusCode.ALREADY_EXISTS,
     )
 
     assert exception.http_status_code == 409
-    assert exception.grpc_status_code is StatusCode.ALREADY_EXISTS
 
 
 def test_shared_error_code_registry_exists():
     assert importlib.util.find_spec("app.shared.core.error_codes") is not None
 
 
-def test_shared_error_definition_maps_protocol_statuses():
+def test_shared_error_definition_maps_http_and_websocket_statuses():
     module = importlib.import_module("app.shared.core.error_codes")
 
     definition = module.get_error_definition(module.ErrorCode.INVALID_CREDENTIALS)
@@ -101,7 +99,6 @@ def test_shared_error_definition_maps_protocol_statuses():
     assert definition.type is module.ErrorType.AUTHENTICATION
     assert definition.message == "닉네임 또는 비밀번호가 올바르지 않습니다."
     assert definition.http_status_code == 401
-    assert definition.grpc_status_code is StatusCode.UNAUTHENTICATED
     assert definition.websocket_close_code == 1008
 
 
@@ -114,7 +111,6 @@ def test_shared_app_exception_uses_error_definition_defaults():
     assert exception.error_type is ErrorType.AUTHENTICATION
     assert exception.message == "닉네임 또는 비밀번호가 올바르지 않습니다."
     assert exception.http_status_code == 401
-    assert exception.grpc_status_code is StatusCode.UNAUTHENTICATED
     assert exception.websocket_close_code == 1008
     assert exception.to_error_payload() == {
         "success": False,
@@ -267,3 +263,25 @@ def test_server_layer_packages_are_owned_by_each_server():
         "app.agent.schemas",
     ):
         assert importlib.util.find_spec(module_name) is None
+
+
+def test_repository_no_longer_exposes_application_grpc_modules():
+    for module_name in (
+        "app.be.grpc",
+        "app.agent.grpc",
+        "app.shared.grpc",
+        "app.shared.core.config.grpc",
+    ):
+        assert importlib.util.find_spec(module_name) is None
+
+
+def test_project_dependencies_do_not_include_grpc_runtime_packages():
+    pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+
+    dependencies = pyproject["project"]["dependencies"]
+    dev_dependencies = pyproject["project"]["optional-dependencies"]["dev"]
+    all_dependencies = [*dependencies, *dev_dependencies]
+
+    assert not any(dependency.startswith(("grpcio", "protobuf")) for dependency in all_dependencies)
+    assert "opentelemetry-exporter-otlp-proto-http>=1.39.0" in dependencies
+    assert not any("opentelemetry-exporter-otlp-proto-grpc" in item for item in dependencies)

@@ -10,8 +10,8 @@ from starlette.responses import Response
 
 try:
     from opentelemetry import metrics, trace
-    from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+    from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
     from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
     from opentelemetry.sdk.metrics import MeterProvider
     from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
@@ -59,7 +59,7 @@ class ObservabilitySettings(BaseSettings):
 
     enabled: bool = Field(default=True, validation_alias="OTEL_ENABLED")
     otlp_endpoint: str = Field(
-        default="http://localhost:4317",
+        default="http://localhost:4318",
         validation_alias="OTEL_EXPORTER_OTLP_ENDPOINT",
     )
     metric_export_interval_ms: int = Field(
