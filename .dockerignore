@@ -1,0 +1,69 @@
+# Local secrets and environment files
+.env
+.env.*
+!.env.example
+!.env.sample
+
+# Git and local tooling state
+.git/
+.agents/
+.codex/
+.mise.local.toml
+
+# Python bytecode, virtualenvs, and tool caches
+__pycache__/
+**/__pycache__/
+*.py[cod]
+**/*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+ENV/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyre/
+.pytype/
+.hypothesis/
+
+# Test, coverage, and build output
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# Migration tooling is handled outside the runtime image.
+alembic.ini
+migrations/
+
+# Runtime artifacts and generated data
+*.log
+logs/
+*.pid
+*.sock
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+tmp/
+temp/
+.tmp/
+uploads/
+
+# Local editor and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Human/AI documentation and tests are not needed in the runtime image.
+docs/
+llm-wiki/
+test/

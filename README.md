@@ -6,10 +6,10 @@
 
 ## 문서
 
-프로젝트 문서는 [docs/index.md](/Users/723poil/Documents/git/haejillyeok/backend/docs/index.md)에서 확인할 수 있습니다.
+프로젝트 문서는 [docs/index.md](docs/index.md)에서 확인할 수 있습니다.
 
-- FastAPI, WebSocket 가이드: [docs/backend-guidelines.md](/Users/723poil/Documents/git/haejillyeok/backend/docs/backend-guidelines.md)
-- 코드 컨벤션: [docs/code-conventions.md](/Users/723poil/Documents/git/haejillyeok/backend/docs/code-conventions.md)
+- FastAPI, WebSocket 가이드: [docs/backend-guidelines.md](docs/backend-guidelines.md)
+- 코드 컨벤션: [docs/code-conventions.md](docs/code-conventions.md)
 
 ### mise 설정
 
@@ -89,7 +89,7 @@ postgresql+asyncpg://haejillyeok:haejillyeok@localhost:5432/haejillyeok
 ```
 
 실행 환경은 `local`, `dev`, `prod` 중 하나를 사용합니다. DB connection pool 값은
-[app/shared/core/config/database.py](/Users/723poil/Documents/git/haejillyeok/backend/app/shared/core/config/database.py)에서 코드로 관리합니다.
+[app/shared/core/config/database.py](app/shared/core/config/database.py)에서 코드로 관리합니다.
 DB URL은 위 접속 정보를 코드에서 조립합니다. DB 연결은 `be` 서버에서만 관리하며,
 SQLAlchemy async engine의 connection pool을 통해 세션을 가져옵니다.
 
@@ -168,6 +168,100 @@ mise run test
 ```bash
 mise run format-check
 mise run format
+```
+
+## Docker 실행
+
+이미지는 하나로 빌드하고 Docker Hub에 push합니다. 실행할 서버와 포트는 컨테이너 실행 환경변수로
+선택합니다. `DOCKERHUB_USERNAME`은 Docker Hub 계정명으로 바꿉니다.
+Runtime image에는 Alembic 설정과 migration revision을 넣지 않습니다. DB migration은 앱 컨테이너
+실행 전 별도 배포 단계에서 처리합니다.
+
+```bash
+docker login
+
+DOCKERHUB_USERNAME=your-dockerhub-username
+IMAGE="$DOCKERHUB_USERNAME/haejillyeok-backend"
+
+docker build \
+  -t "$IMAGE:0.1.0" \
+  -t "$IMAGE:latest" \
+  .
+
+docker push "$IMAGE:0.1.0"
+docker push "$IMAGE:latest"
+```
+
+Mac에서 빌드하고 Linux 서버나 여러 CPU 아키텍처에서 실행할 예정이면 `buildx`로 바로 push합니다.
+
+```bash
+DOCKERHUB_USERNAME=your-dockerhub-username
+IMAGE="$DOCKERHUB_USERNAME/haejillyeok-backend"
+
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  -t "$IMAGE:0.1.0" \
+  -t "$IMAGE:latest" \
+  --push \
+  .
+```
+
+`docker run`에서는 같은 `PORT` 값을 컨테이너 환경변수와 port publishing 양쪽에 넘깁니다.
+DB 비밀번호 같은 운영 secret은 image에 넣지 않고 컨테이너 실행 환경에서 주입합니다. OpenTelemetry
+Collector를 따로 쓰지 않으면 `OTEL_ENABLED=false`로 실행합니다.
+
+백엔드 서버를 실행합니다.
+
+```bash
+DOCKERHUB_USERNAME=your-dockerhub-username
+IMAGE="$DOCKERHUB_USERNAME/haejillyeok-backend"
+PORT=8000
+BE_ENV=prod
+BE_DB_HOST=postgres.example.com
+BE_DB_PORT=5432
+BE_DB_USER=haejillyeok
+BE_DB_PASSWORD=change-me
+BE_DB_NAME=haejillyeok
+OTEL_ENABLED=false
+OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector.example.com:4318
+OTEL_METRIC_EXPORT_INTERVAL=5000
+
+docker run --rm \
+  -e APP_MODULE=be \
+  -e PORT="$PORT" \
+  -e BE_ENV="$BE_ENV" \
+  -e BE_DB_HOST="$BE_DB_HOST" \
+  -e BE_DB_PORT="$BE_DB_PORT" \
+  -e BE_DB_USER="$BE_DB_USER" \
+  -e BE_DB_PASSWORD="$BE_DB_PASSWORD" \
+  -e BE_DB_NAME="$BE_DB_NAME" \
+  -e OTEL_ENABLED="$OTEL_ENABLED" \
+  -e OTEL_EXPORTER_OTLP_ENDPOINT="$OTEL_EXPORTER_OTLP_ENDPOINT" \
+  -e OTEL_METRIC_EXPORT_INTERVAL="$OTEL_METRIC_EXPORT_INTERVAL" \
+  -p "$PORT:$PORT" \
+  "$IMAGE:latest"
+```
+
+에이전트 서버를 실행합니다.
+
+```bash
+DOCKERHUB_USERNAME=your-dockerhub-username
+IMAGE="$DOCKERHUB_USERNAME/haejillyeok-backend"
+PORT=8001
+BE_ENV=prod
+OTEL_ENABLED=false
+OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector.example.com:4318
+OTEL_METRIC_EXPORT_INTERVAL=5000
+
+docker run --rm \
+  -e APP_MODULE=agent \
+  -e PORT="$PORT" \
+  -e BE_ENV="$BE_ENV" \
+  -e OTEL_ENABLED="$OTEL_ENABLED" \
+  -e OTEL_EXPORTER_OTLP_ENDPOINT="$OTEL_EXPORTER_OTLP_ENDPOINT" \
+  -e OTEL_METRIC_EXPORT_INTERVAL="$OTEL_METRIC_EXPORT_INTERVAL" \
+  -p "$PORT:$PORT" \
+  "$IMAGE:latest"
 ```
 
 ```bash

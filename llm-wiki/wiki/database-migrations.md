@@ -48,6 +48,7 @@ mise run db-current
 ## Runtime Rules
 
 - 앱 lifespan에서 migration을 실행하지 않는다.
+- Runtime Docker image에서 migration을 실행하지 않으며, image에 `alembic.ini`와 `migrations/`를 포함하지 않는다.
 - 운영 배포에서는 앱 프로세스를 띄우기 전에 단일 migration step으로 `mise run db-upgrade-head`를 실행한다.
 - 여러 앱 인스턴스가 동시에 migration을 실행하지 않게 한다.
 - rollback이 필요할 수 있는 변경은 `downgrade()`를 의미 있게 작성한다. 되돌릴 수 없는 변경이면 주석으로 이유를 남긴다.

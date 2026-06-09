@@ -2,6 +2,54 @@
 
 이 파일은 `llm-wiki/`의 시간순 작업 이력입니다. 새 항목은 위에 추가합니다.
 
+## [2026-06-09] maintenance | Document Docker runtime environment variables
+
+- 공개 runtime image에는 `.env`를 포함하지 않으므로 `docker run`에서 필요한 환경변수를 주입한다고 README에 명시했다.
+- be 실행 예시에 `BE_ENV`, `BE_DB_*`, `OTEL_*`, `APP_MODULE=be`, `PORT` 주입을 추가했다.
+- agent 실행 예시에 `APP_MODULE=agent`, `BE_ENV`, `OTEL_*`, `PORT` 주입을 추가했다.
+- Shell에서 그대로 복사 가능한 예시가 되도록 angle bracket placeholder 대신 일반 예시값을 사용했다.
+
+## [2026-06-09] maintenance | Simplify Docker app module selector
+
+- `APP_MODULE` Docker 환경변수는 전체 ASGI import string이 아니라 `be` 또는 `agent` 값만 받도록 바꿨다.
+- `Dockerfile`은 Uvicorn 실행 대상을 `app.${APP_MODULE}.main:app` 형태로 조립한다.
+- README의 agent 실행 예시를 `APP_MODULE=agent`로 갱신했다.
+
+## [2026-06-09] maintenance | Exclude migrations from runtime Docker image
+
+- Runtime Docker image에서 migration을 실행하지 않기로 하고 `Dockerfile`에서 `alembic.ini`와 `migrations/` 복사를 제거했다.
+- `.dockerignore`에 `alembic.ini`와 `migrations/`를 추가해 build context에서도 제외했다.
+- Alembic은 runtime dependency가 아니라 dev optional dependency로 옮겨 로컬 `mise run db-*` 절차에서만 사용하도록 했다.
+
+## [2026-06-09] maintenance | Remove Python cache files from Docker image
+
+- `.dockerignore`에 nested `__pycache__/`와 `*.pyc` 제외 규칙을 추가했다.
+- `Dockerfile`에서 copy 이후 `/app` 아래 Python bytecode/cache 파일을 삭제해 runtime image에 남지 않도록 했다.
+- 공개 Docker image에는 local secret, local path, Python cache 산출물이 들어가지 않아야 한다는 기준을 유지했다.
+
+## [2026-06-09] maintenance | Use Docker Hub image tags in README
+
+- Docker build 예시를 로컬 이미지명 대신 Docker Hub 계정명 기반 tag로 바꿨다.
+- `0.1.0`과 `latest` tag를 함께 붙이고 Docker Hub에 push하는 명령을 README에 추가했다.
+- Mac에서 빌드해 Linux 서버나 여러 CPU 아키텍처에서 실행할 때는 `docker buildx build --platform linux/amd64,linux/arm64 --push`를 사용한다고 기록했다.
+
+## [2026-06-09] maintenance | Document Docker PORT to PORT publishing
+
+- `docker run` 예시는 shell `PORT` 값을 `-e PORT="$PORT"`와 `-p "$PORT:$PORT"`에 함께 넘기도록 README에 추가했다.
+- be 서버는 기본 `APP_MODULE`을 사용하고 `PORT=8000`을 넘기며, agent 서버는 `APP_MODULE=app.agent.main:app`, `PORT=8001`을 넘기는 기준을 남겼다.
+
+## [2026-06-09] maintenance | Add environment-selected Docker runtime
+
+- 루트 `Dockerfile`을 추가해 `python:3.11-slim` 기반 runtime image를 만들도록 했다.
+- 기본 실행 대상은 `APP_MODULE=app.be.main:app`, `PORT=8000`인 be 서버로 두고, 환경변수로 `APP_MODULE=app.agent.main:app`, `PORT=8001`을 주입하면 agent 서버를 같은 image에서 실행할 수 있게 했다.
+- 컨테이너 port publishing을 위해 Uvicorn 기본 host는 `0.0.0.0`으로 두고, worker 수는 `WORKERS` 환경변수로 제어한다고 기록했다.
+
+## [2026-06-09] maintenance | Add Docker build context ignore rules
+
+- 공개 Docker image build context에 `.env`, `.env.*`, 로컬 도구 상태, 가상환경, 테스트/coverage/build 산출물, runtime artifact를 포함하지 않도록 `.dockerignore`를 추가했다.
+- 사람용 문서, AI용 `llm-wiki/`, 테스트 코드는 runtime image에 필요하지 않은 대상으로 제외한다고 기록했다.
+- 운영 secret은 image에 bake하지 않고 컨테이너 실행 환경에서 주입한다는 기준을 남겼다.
+
 ## [2026-06-09] maintenance | Run infra-up from mise enter hook
 
 - `.mise.toml`의 enter hook이 `mise run infra-up`을 실행하도록 바꿨다.
