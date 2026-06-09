@@ -208,7 +208,9 @@ docker buildx build \
 
 `docker run`에서는 같은 `PORT` 값을 컨테이너 환경변수와 port publishing 양쪽에 넘깁니다.
 DB 비밀번호 같은 운영 secret은 image에 넣지 않고 컨테이너 실행 환경에서 주입합니다. OpenTelemetry
-Collector를 따로 쓰지 않으면 `OTEL_ENABLED=false`로 실행합니다.
+기본값은 `OTEL_ENABLED=true`이며, Collector를 쓰지 않는 배포에서만 `false`로 끕니다.
+Collector와 같은 Docker network에서 실행할 때는 OTLP endpoint host로 Docker DNS 이름인
+`otel-collector`를 사용합니다.
 
 백엔드 서버를 실행합니다.
 
@@ -216,17 +218,19 @@ Collector를 따로 쓰지 않으면 `OTEL_ENABLED=false`로 실행합니다.
 DOCKERHUB_USERNAME=your-dockerhub-username
 IMAGE="$DOCKERHUB_USERNAME/haejillyeok-backend"
 PORT=8000
+DOCKER_NETWORK=backend_default
 BE_ENV=prod
 BE_DB_HOST=postgres.example.com
 BE_DB_PORT=5432
 BE_DB_USER=haejillyeok
 BE_DB_PASSWORD=change-me
 BE_DB_NAME=haejillyeok
-OTEL_ENABLED=false
-OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector.example.com:4318
+OTEL_ENABLED=true
+OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
 OTEL_METRIC_EXPORT_INTERVAL=5000
 
 docker run --rm \
+  --network "$DOCKER_NETWORK" \
   -e APP_MODULE=be \
   -e PORT="$PORT" \
   -e BE_ENV="$BE_ENV" \
@@ -248,12 +252,14 @@ docker run --rm \
 DOCKERHUB_USERNAME=your-dockerhub-username
 IMAGE="$DOCKERHUB_USERNAME/haejillyeok-backend"
 PORT=8001
+DOCKER_NETWORK=backend_default
 BE_ENV=prod
-OTEL_ENABLED=false
-OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector.example.com:4318
+OTEL_ENABLED=true
+OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
 OTEL_METRIC_EXPORT_INTERVAL=5000
 
 docker run --rm \
+  --network "$DOCKER_NETWORK" \
   -e APP_MODULE=agent \
   -e PORT="$PORT" \
   -e BE_ENV="$BE_ENV" \
@@ -263,6 +269,51 @@ docker run --rm \
   -p "$PORT:$PORT" \
   "$IMAGE:latest"
 ```
+
+## GitHub Actions Docker 배포
+
+`.github/workflows/docker-deploy.yml`은 자동 branch trigger 없이 수동 실행만 사용합니다. GitHub
+Actions 화면에서 `Docker Deploy` workflow를 선택하고 `confirm_deploy=deploy`를 고르면 Docker
+Hub에 image를 push한 뒤 SSH로 원격 서버에 접속해 컨테이너를 교체합니다. `confirm_deploy=no`는
+확인 job만 실행하고 배포하지 않습니다.
+
+Docker image tag는 수동 실행에서 선택한 ref가 도달할 수 있는 최신 Git tag를 그대로 사용합니다.
+예를 들어 브랜치의 최신 버전 tag가 `v1.2.3`이면 Docker Hub에는 `v1.2.3`와 `latest`를 함께
+push하고, 원격 서버도 `v1.2.3` image를 pull합니다. 선택한 ref에서 Git tag를 찾을 수 없거나
+Docker image tag로 쓸 수 없는 tag이면 배포 job은 실패합니다.
+
+GitHub Secrets:
+
+```text
+DOCKERHUB_USERNAME
+DOCKERHUB_TOKEN
+DEPLOY_HOST
+DEPLOY_SSH_KEY
+BE_DB_HOST
+BE_DB_USER
+BE_DB_PASSWORD
+BE_DB_NAME
+```
+
+GitHub Variables:
+
+```text
+DEPLOY_SSH_PORT=22
+DOCKER_NETWORK=backend_default
+BE_DB_PORT=5432
+OTEL_ENABLED=true
+OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+OTEL_METRIC_EXPORT_INTERVAL=5000
+```
+
+Workflow가 생성하는 `.env`의 `BE_ENV`는 항상 `prod`로 고정됩니다.
+`DOCKER_NETWORK`는 원격 서버에서 OpenTelemetry Collector가 붙어 있는 user-defined Docker
+network 이름입니다.
+
+배포 대상 서버는 `deploy` 계정으로 SSH 접속할 수 있어야 하고, Docker 명령을 실행할 권한이 있어야
+합니다. Workflow는 원격 서버의 `/opt/haejillyeok/backend/.env`를 만들고 컨테이너에
+`/app/.env:ro`로 마운트합니다. `deploy` 계정은 `/opt/haejillyeok/backend`에 쓸 수 있어야 합니다.
+Runtime image에는 `.env`, Alembic 설정, migration revision을 넣지 않습니다.
 
 ```bash
 ./

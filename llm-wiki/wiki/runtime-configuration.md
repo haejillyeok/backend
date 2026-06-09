@@ -61,4 +61,29 @@ Docker run 시 `.env`는 image에 포함되지 않으므로 필요한 값을 컨
 `be` 서버는 `BE_ENV`, `BE_DB_HOST`, `BE_DB_PORT`, `BE_DB_USER`, `BE_DB_PASSWORD`, `BE_DB_NAME`이
 필수다. `agent` 서버는 DB 환경변수를 사용하지 않지만 shared app/observability 설정을 위해
 `BE_ENV`, `OTEL_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_METRIC_EXPORT_INTERVAL`을 실행
-환경에서 명시한다. Collector를 쓰지 않는 배포에서는 `OTEL_ENABLED=false`로 둔다.
+환경에서 명시한다. OpenTelemetry 기본값은 `OTEL_ENABLED=true`이며, Collector를 쓰지 않는
+배포에서만 `false`로 끈다. Collector와 같은 Docker network에서 실행하는 배포는
+`OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318`을 사용한다.
+
+## GitHub Actions Deployment
+
+`.github/workflows/docker-deploy.yml`은 `workflow_dispatch`만 사용한다. 수동 실행 input
+`confirm_deploy`가 `deploy`일 때만 Docker Hub build/push와 SSH 배포를 실행하고, `no`이면 확인
+job만 실행한다.
+
+GitHub runner는 Docker Hub에 로그인한 뒤, 수동 실행에서 선택한 ref가 도달할 수 있는 최신 Git tag를
+`git describe --tags --abbrev=0`로 가져와 Docker image tag로 그대로 사용한다. Docker Hub에는
+`DOCKERHUB_USERNAME/haejillyeok-backend:{version-tag}`와 `latest` tag를 함께 push한다. Git tag가
+없거나 Docker image tag 형식에 맞지 않으면 배포 job은 실패한다. 원격 서버에는 `deploy` 계정으로
+SSH 접속하고, `/opt/haejillyeok/backend/.env` 파일을 생성한 뒤 컨테이너에 `/app/.env:ro`로
+volume mount한다. `deploy` 계정은 `/opt/haejillyeok/backend`에 쓸 수 있어야 한다. 원격 컨테이너는
+기본적으로 `APP_MODULE=be`, `PORT=8000`으로 실행하고 `DOCKER_NETWORK`에 지정한 user-defined
+Docker network에 붙인다. 원격 서버에는 Docker Hub credential을 전달하지 않고 public image를
+pull한다.
+
+필수 GitHub Secrets는 `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `DEPLOY_HOST`, `DEPLOY_SSH_KEY`,
+`BE_DB_HOST`, `BE_DB_USER`, `BE_DB_PASSWORD`, `BE_DB_NAME`이다. 선택 GitHub Variables는
+`DEPLOY_SSH_PORT`, `DOCKER_NETWORK`, `BE_DB_PORT`, `OTEL_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`,
+`OTEL_METRIC_EXPORT_INTERVAL`이다. `DOCKER_NETWORK` 기본값은 `backend_default`이고,
+`OTEL_EXPORTER_OTLP_ENDPOINT` 기본값은 `http://otel-collector:4318`이다. Workflow가 생성하는
+`.env`의 `BE_ENV`는 항상 `prod`로 고정한다.

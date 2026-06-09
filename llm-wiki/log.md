@@ -2,6 +2,40 @@
 
 이 파일은 `llm-wiki/`의 시간순 작업 이력입니다. 새 항목은 위에 추가합니다.
 
+## [2026-06-09] maintenance | Move deploy env path under opt
+
+- GitHub Actions Docker deploy workflow의 원격 배포 디렉터리를 `/opt/haejillyeok/backend`로 바꿨다.
+- README와 runtime configuration wiki에 `deploy` 계정의 `/opt/haejillyeok/backend` 쓰기 권한 필요성을 명시했다.
+
+## [2026-06-09] maintenance | Use Docker DNS for OTLP endpoint
+
+- GitHub Actions Docker deploy workflow의 `OTEL_EXPORTER_OTLP_ENDPOINT` 기본값을 `http://otel-collector:4318`로 바꿨다.
+- 배포 컨테이너가 `DOCKER_NETWORK` user-defined Docker network에 붙도록 하고, 기본값을 `backend_default`로 정리했다.
+- README와 runtime/observability wiki에 Docker network 기반 OTLP endpoint 기준을 반영했다.
+
+## [2026-06-09] maintenance | Set OTEL_ENABLED default to true
+
+- GitHub Actions Docker deploy workflow의 `OTEL_ENABLED` 기본값을 `true`로 바꿨다.
+- README와 runtime configuration wiki에서 OpenTelemetry 기본값을 `true`로 정리했다.
+
+## [2026-06-09] maintenance | Fix deploy BE_ENV to prod
+
+- GitHub Actions Docker deploy workflow가 생성하는 `.env`에서 `BE_ENV`를 GitHub Variable이 아니라 `prod`로 고정했다.
+- README와 runtime configuration wiki에서 `BE_ENV`를 GitHub Variables 목록에서 제거했다.
+
+## [2026-06-09] maintenance | Use Git version tag for Docker image tag
+
+- GitHub Actions Docker deploy workflow에서 image tag를 `github.sha` 대신 선택한 ref가 도달할 수 있는 최신 Git tag로 결정하도록 바꿨다.
+- Docker Hub에는 Git version tag와 `latest`를 함께 push하고, SSH 배포는 Git version tag image를 pull하도록 했다.
+- Git tag가 없거나 Docker image tag 형식에 맞지 않으면 배포 job이 실패하도록 했다.
+
+## [2026-06-09] maintenance | Add manual GitHub Actions Docker deploy
+
+- `.github/workflows/docker-deploy.yml`을 추가해 `workflow_dispatch` 수동 실행만으로 Docker build/push/SSH deploy를 실행하도록 했다.
+- `confirm_deploy` input이 `deploy`일 때만 실제 배포 job을 실행하고, 기본값 `no`는 확인 job만 실행한다.
+- Runner에서 Docker Hub에 image를 push하고, 원격 서버에는 `deploy` 계정 SSH로 접속해 `/opt/haejillyeok/backend/.env`를 만들고 `/app/.env:ro` volume으로 마운트한다.
+- 원격 서버는 Docker Hub credential 없이 public image를 pull하고, 컨테이너는 기본 `APP_MODULE=be`, `PORT=8000`으로 실행한다.
+
 ## [2026-06-09] maintenance | Document Docker runtime environment variables
 
 - 공개 runtime image에는 `.env`를 포함하지 않으므로 `docker run`에서 필요한 환경변수를 주입한다고 README에 명시했다.
