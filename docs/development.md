@@ -30,6 +30,8 @@ DB URL은 위 접속 정보를 코드에서 조립합니다.
 mise run infra-up
 ```
 
+프로젝트 디렉터리에 진입하면 mise enter hook도 같은 `infra-up` task를 실행합니다.
+
 구성은 FastAPI 앱이 OpenTelemetry OTLP로 metric/trace를 내보내고,
 OpenTelemetry Collector가 metric은 Prometheus scrape endpoint로 변환하고 trace는 Tempo에 저장한 뒤,
 Prometheus, Tempo, Grafana가 집계와 시각화를 담당하는 흐름입니다.
@@ -73,7 +75,8 @@ Prometheus metric은 route template label을 사용해 `/items/{item_id}`처럼 
 객체별 실행 시간은 trace span으로 확인합니다. FastAPI 요청 span 아래에 service/repository span을
 수동으로 붙이려면 `app/shared/core/observability.py`의 `@traced_method`를 사용합니다.
 예를 들어 인증 흐름은 `AuthService.login_or_register`,
-`AuthRepository.get_user_by_nickname`, `AuthRepository.create_user_session` 같은 child span을
+`AuthRepository.get_user_by_account_id`, `AuthRepository.get_user_by_nickname`,
+`AuthRepository.create_user_session` 같은 child span을
 Tempo에 저장합니다. Grafana trace dashboard는
 `docker/grafana/dashboards/fastapi-traces.json`에서 provision 됩니다. Dashboard 이름은
 `Haejillyeok FastAPI Traces`이며, request trace와 service/repository object span search panel을

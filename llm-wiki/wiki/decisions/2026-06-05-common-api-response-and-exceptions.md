@@ -70,7 +70,7 @@ superseded_by: 2026-06-09-remove-application-grpc
 
 ## Current Error Codes
 
-- `INVALID_CREDENTIALS`: 기존 닉네임의 비밀번호가 일치하지 않는 인증 실패
+- `INVALID_CREDENTIALS`: 기존 계정 ID의 비밀번호가 일치하지 않는 인증 실패
 - `SESSION_EXPIRED`: 세션 만료
 - `VALIDATION_ERROR`: FastAPI/Pydantic request validation 실패
 - `HTTP_ERROR`: FastAPI `HTTPException` fallback

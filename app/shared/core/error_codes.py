@@ -57,7 +57,7 @@ ERROR_DEFINITIONS: dict[ErrorCode, ErrorDefinition] = {
     ErrorCode.INVALID_CREDENTIALS: ErrorDefinition(
         code=ErrorCode.INVALID_CREDENTIALS,
         type=ErrorType.AUTHENTICATION,
-        message="닉네임 또는 비밀번호가 올바르지 않습니다.",
+        message="계정 ID 또는 비밀번호가 올바르지 않습니다.",
         http_status_code=401,
         websocket_close_code=1008,
     ),

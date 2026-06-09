@@ -6,6 +6,7 @@ from app.be.schemas.base import SchemaModel
 
 class LoginUserResponse(SchemaModel):
     public_id: UUID
+    account_id: str
     nickname: str
 
 

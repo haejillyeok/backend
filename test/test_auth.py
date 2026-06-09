@@ -20,12 +20,16 @@ class FakeAuthRepository:
         self.sessions: list[dict[str, object]] = []
         self.committed = False
 
+    async def get_user_by_account_id(self, account_id: str) -> User | None:
+        return self.users.get(account_id)
+
     async def get_user_by_nickname(self, nickname: str) -> User | None:
-        return self.users.get(nickname)
+        return next((user for user in self.users.values() if user.nickname == nickname), None)
 
     async def create_user(
         self,
         *,
+        account_id: str,
         nickname: str,
         password_hash: str,
         last_access_ip: str | None,
@@ -33,11 +37,12 @@ class FakeAuthRepository:
         user = User(
             id=uuid4(),
             public_id=uuid4(),
+            account_id=account_id,
             nickname=nickname,
             password_hash=password_hash,
             last_access_ip=last_access_ip,
         )
-        self.users[nickname] = user
+        self.users[account_id] = user
         return user
 
     async def create_user_session(
@@ -69,6 +74,7 @@ def test_auth_service_registers_unknown_nickname_and_creates_session():
 
     result = asyncio.run(
         service.login_or_register(
+            account_id="player_001",
             nickname="초보자",
             password="secret-password",
             last_access_ip="203.0.113.7",
@@ -77,30 +83,57 @@ def test_auth_service_registers_unknown_nickname_and_creates_session():
     )
 
     assert result.is_new_user is True
+    assert result.user.account_id == "player_001"
     assert result.user.nickname == "초보자"
     assert result.session_token
     assert repository.committed is True
-    assert repository.users["초보자"].last_access_ip == "203.0.113.7"
+    assert repository.users["player_001"].last_access_ip == "203.0.113.7"
     assert len(repository.sessions) == 1
 
 
-def test_auth_service_checks_password_for_existing_nickname():
+def test_auth_service_checks_password_for_existing_account_id():
     repository = FakeAuthRepository()
     user = User(
         id=uuid4(),
         public_id=uuid4(),
+        account_id="player_001",
         nickname="초보자",
         password_hash=hash_password("right-password"),
         last_access_ip=None,
     )
-    repository.users[user.nickname] = user
+    repository.users[user.account_id] = user
     service = AuthService(repository)
 
     with pytest.raises(InvalidCredentialsError):
         asyncio.run(
             service.login_or_register(
+                account_id="player_001",
                 nickname="초보자",
                 password="wrong-password",
+                last_access_ip=None,
+                user_agent=None,
+            )
+        )
+
+
+def test_auth_service_rejects_duplicate_nickname_for_new_account_id():
+    repository = FakeAuthRepository()
+    repository.users["player_001"] = User(
+        id=uuid4(),
+        public_id=uuid4(),
+        account_id="player_001",
+        nickname="초보자",
+        password_hash=hash_password("right-password"),
+        last_access_ip=None,
+    )
+    service = AuthService(repository)
+
+    with pytest.raises(InvalidCredentialsError):
+        asyncio.run(
+            service.login_or_register(
+                account_id="player_002",
+                nickname="초보자",
+                password="right-password",
                 last_access_ip=None,
                 user_agent=None,
             )
@@ -114,11 +147,13 @@ def test_login_endpoint_sets_session_cookie_for_auth_success():
         async def login_or_register(
             self,
             *,
+            account_id: str,
             nickname: str,
             password: str,
             last_access_ip: str | None,
             user_agent: str | None,
         ):
+            assert account_id == "player_001"
             assert nickname == "초보자"
             assert password == "secret-password"
             assert last_access_ip is not None
@@ -129,7 +164,7 @@ def test_login_endpoint_sets_session_cookie_for_auth_success():
                     "user": type(
                         "AuthUser",
                         (),
-                        {"public_id": uuid4(), "nickname": nickname},
+                        {"public_id": uuid4(), "account_id": account_id, "nickname": nickname},
                     )(),
                     "session_token": "plain-session-token",
                     "is_new_user": True,
@@ -145,12 +180,17 @@ def test_login_endpoint_sets_session_cookie_for_auth_success():
 
     response = client.post(
         "/api/v1/auth/login",
-        json={"nickname": "초보자", "password": "secret-password"},
+        json={
+            "account_id": "player_001",
+            "nickname": "초보자",
+            "password": "secret-password",
+        },
     )
 
     assert response.status_code == 200
     body = response.json()
     assert body["success"] is True
+    assert body["data"]["user"]["account_id"] == "player_001"
     assert body["data"]["is_new_user"] is True
     assert "error" not in body
     assert response.cookies.get("session_token") == "plain-session-token"
@@ -172,7 +212,7 @@ def test_login_endpoint_returns_401_for_wrong_password():
 
     response = client.post(
         "/api/v1/auth/login",
-        json={"nickname": "초보자", "password": "wrong-password"},
+        json={"account_id": "player_001", "nickname": "초보자", "password": "wrong-password"},
     )
 
     assert response.status_code == 401
@@ -181,7 +221,7 @@ def test_login_endpoint_returns_401_for_wrong_password():
         "data": None,
         "error": {
             "code": "INVALID_CREDENTIALS",
-            "message": "닉네임 또는 비밀번호가 올바르지 않습니다.",
+            "message": "계정 ID 또는 비밀번호가 올바르지 않습니다.",
             "details": None,
         },
     }
@@ -203,7 +243,7 @@ def test_login_endpoint_returns_common_validation_error_response():
 
     response = client.post(
         "/api/v1/auth/login",
-        json={"nickname": "초보자"},
+        json={"account_id": "player_001", "nickname": "초보자"},
     )
 
     assert response.status_code == 422
@@ -213,3 +253,47 @@ def test_login_endpoint_returns_common_validation_error_response():
     assert body["error"]["code"] == "VALIDATION_ERROR"
     assert body["error"]["message"] == "요청 값이 올바르지 않습니다."
     assert body["error"]["details"][0]["field"] == "body.password"
+
+
+@pytest.mark.parametrize(
+    ("payload", "field"),
+    [
+        ({"account_id": "ab", "nickname": "초보자", "password": "secret12"}, "body.account_id"),
+        (
+            {"account_id": "한글id", "nickname": "초보자", "password": "secret12"},
+            "body.account_id",
+        ),
+        (
+            {"account_id": "player_001", "nickname": "ab", "password": "secret12"},
+            "body.nickname",
+        ),
+        (
+            {"account_id": "player_001", "nickname": "초보자!", "password": "secret12"},
+            "body.nickname",
+        ),
+        (
+            {"account_id": "player_001", "nickname": "초보자", "password": "short"},
+            "body.password",
+        ),
+    ],
+)
+def test_login_endpoint_validates_account_id_nickname_and_password_rules(payload, field):
+    app = create_app()
+
+    class FakeAuthService:
+        async def login_or_register(self, **kwargs):
+            raise AssertionError("validation 실패 요청은 service까지 도달하지 않아야 합니다.")
+
+    async def override_get_auth_service(request: Request) -> FakeAuthService:
+        return FakeAuthService()
+
+    app.dependency_overrides[get_auth_service] = override_get_auth_service
+    client = TestClient(app)
+
+    response = client.post("/api/v1/auth/login", json=payload)
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["success"] is False
+    assert body["error"]["code"] == "VALIDATION_ERROR"
+    assert body["error"]["details"][0]["field"] == field

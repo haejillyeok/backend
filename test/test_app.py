@@ -97,7 +97,7 @@ def test_shared_error_definition_maps_http_and_websocket_statuses():
 
     assert definition.code is module.ErrorCode.INVALID_CREDENTIALS
     assert definition.type is module.ErrorType.AUTHENTICATION
-    assert definition.message == "닉네임 또는 비밀번호가 올바르지 않습니다."
+    assert definition.message == "계정 ID 또는 비밀번호가 올바르지 않습니다."
     assert definition.http_status_code == 401
     assert definition.websocket_close_code == 1008
 
@@ -109,7 +109,7 @@ def test_shared_app_exception_uses_error_definition_defaults():
 
     assert exception.code == "INVALID_CREDENTIALS"
     assert exception.error_type is ErrorType.AUTHENTICATION
-    assert exception.message == "닉네임 또는 비밀번호가 올바르지 않습니다."
+    assert exception.message == "계정 ID 또는 비밀번호가 올바르지 않습니다."
     assert exception.http_status_code == 401
     assert exception.websocket_close_code == 1008
     assert exception.to_error_payload() == {
@@ -117,7 +117,7 @@ def test_shared_app_exception_uses_error_definition_defaults():
         "data": None,
         "error": {
             "code": "INVALID_CREDENTIALS",
-            "message": "닉네임 또는 비밀번호가 올바르지 않습니다.",
+            "message": "계정 ID 또는 비밀번호가 올바르지 않습니다.",
             "details": None,
         },
     }
@@ -130,8 +130,8 @@ def test_shared_openapi_error_response_spec_includes_error_code_example():
     module = importlib.import_module("app.shared.core.openapi")
     response_spec = module.error_response(
         code="INVALID_CREDENTIALS",
-        message="닉네임 또는 비밀번호가 올바르지 않습니다.",
-        description="닉네임의 비밀번호가 일치하지 않음",
+        message="계정 ID 또는 비밀번호가 올바르지 않습니다.",
+        description="계정 ID의 비밀번호가 일치하지 않음",
     )
 
     example = response_spec["content"]["application/json"]["example"]
@@ -150,7 +150,7 @@ def test_shared_openapi_error_responses_spec_supports_multiple_examples():
                 name="invalid_credentials",
                 summary="비밀번호 불일치",
                 code="INVALID_CREDENTIALS",
-                message="닉네임 또는 비밀번호가 올바르지 않습니다.",
+                message="계정 ID 또는 비밀번호가 올바르지 않습니다.",
             ),
             module.error_example(
                 name="session_expired",

@@ -2,6 +2,19 @@
 
 이 파일은 `llm-wiki/`의 시간순 작업 이력입니다. 새 항목은 위에 추가합니다.
 
+## [2026-06-09] maintenance | Run infra-up from mise enter hook
+
+- `.mise.toml`의 enter hook이 `mise run infra-up`을 실행하도록 바꿨다.
+- 프로젝트 디렉터리 진입 시 PostgreSQL뿐 아니라 OpenTelemetry Collector, Prometheus, Tempo, Grafana도 함께 시작된다고 기록했다.
+
+## [2026-06-09] maintenance | Update auth account input rules
+
+- PoC 인증 기준을 닉네임 로그인에서 계정 ID 기반 로그인으로 갱신했다.
+- 계정 ID는 영어 문자, 숫자, `_`만 허용하고 3~20자로 제한한다고 정리했다.
+- 닉네임은 한글, 영어, 숫자, `_`만 허용하고 3~20자로 제한한다고 정리했다.
+- 비밀번호는 8~20자로 제한하고 PBKDF2-HMAC-SHA256 저장 기준은 유지한다고 남겼다.
+- `users.users.account_id`를 unique, not null 로그인 식별자로 관리한다고 기록했다.
+
 ## [2026-06-08] maintenance | Add environment-controlled runtime ports
 
 - HTTP 개발 서버는 host를 `127.0.0.1`로 고정하고 서버 `.env`의 port 값만 제어한다.

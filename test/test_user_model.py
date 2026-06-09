@@ -2,7 +2,7 @@ from uuid import RFC_4122
 
 import pytest
 
-from app.be.models.user import MAX_NICKNAME_LENGTH, User
+from app.be.models.user import MAX_ACCOUNT_ID_LENGTH, MAX_NICKNAME_LENGTH, User
 from app.be.security.password import hash_password, verify_password
 from app.shared.core.identifiers import generate_uuid_v7
 
@@ -25,9 +25,37 @@ def test_password_hash_uses_salt_and_pbkdf2_sha256():
     assert not verify_password("wrong-password", first_hash)
 
 
-def test_user_rejects_nickname_longer_than_15_characters():
-    with pytest.raises(ValueError, match="15자"):
+def test_user_rejects_account_id_longer_than_20_characters():
+    with pytest.raises(ValueError, match="20자"):
         User(
+            account_id="a" * (MAX_ACCOUNT_ID_LENGTH + 1),
+            nickname="초보자",
+            password_hash=hash_password("secret-password"),
+        )
+
+
+def test_user_rejects_account_id_with_non_ascii_word_characters():
+    with pytest.raises(ValueError, match="문자, 숫자, _"):
+        User(
+            account_id="한글id",
+            nickname="초보자",
+            password_hash=hash_password("secret-password"),
+        )
+
+
+def test_user_rejects_nickname_longer_than_20_characters():
+    with pytest.raises(ValueError, match="20자"):
+        User(
+            account_id="player_001",
             nickname="a" * (MAX_NICKNAME_LENGTH + 1),
+            password_hash=hash_password("secret-password"),
+        )
+
+
+def test_user_rejects_nickname_with_special_characters():
+    with pytest.raises(ValueError, match="한글, 영어, 숫자, _"):
+        User(
+            account_id="player_001",
+            nickname="초보자!",
             password_hash=hash_password("secret-password"),
         )

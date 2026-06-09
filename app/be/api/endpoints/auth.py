@@ -37,8 +37,9 @@ async def login(
     response: Response,
     auth_service: Annotated[AuthService, Depends(get_auth_service)],
 ) -> SuccessResponse[LoginResponse]:
-    """닉네임/비밀번호로 가입 겸 로그인을 처리하고 세션 쿠키를 발급합니다."""
+    """계정 ID/비밀번호로 가입 겸 로그인을 처리하고 세션 쿠키를 발급합니다."""
     result = await auth_service.login_or_register(
+        account_id=payload.account_id,
         nickname=payload.nickname,
         password=payload.password,
         last_access_ip=request.client.host if request.client else None,
@@ -57,6 +58,7 @@ async def login(
         LoginResponse(
             user=LoginUserResponse(
                 public_id=result.user.public_id,
+                account_id=result.user.account_id,
                 nickname=result.user.nickname,
             ),
             is_new_user=result.is_new_user,

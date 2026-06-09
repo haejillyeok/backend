@@ -2,7 +2,7 @@
 python = "3.11"
 
 [hooks]
-enter = "docker compose up -d postgres"
+enter = "mise run infra-up"
 
 [tasks.venv]
 description = "프로젝트 가상환경을 생성합니다"

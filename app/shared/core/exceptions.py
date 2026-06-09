@@ -52,7 +52,7 @@ class AppException(Exception):
 
 
 class InvalidCredentialsError(AppException):
-    """닉네임은 존재하지만 비밀번호가 일치하지 않을 때 발생합니다."""
+    """계정 ID는 존재하지만 비밀번호가 일치하지 않을 때 발생합니다."""
 
     def __init__(self) -> None:
         super().__init__(

@@ -37,7 +37,7 @@ mise install
 ### 로컬 인프라
 
 프로젝트 디렉터리에 진입하면 mise가 `.mise.toml`의 enter hook을 실행해서
-pgvector를 포함한 PostgreSQL을 자동으로 실행합니다.
+`mise run infra-up`과 같은 로컬 인프라를 자동으로 실행합니다.
 
 ```bash
 cd /path/to/backend
@@ -61,7 +61,7 @@ mise run db-current
 mise run db-history
 ```
 
-`infra-up`은 PostgreSQL, OpenTelemetry Collector, Prometheus, Grafana를 실행합니다.
+`infra-up`은 PostgreSQL, OpenTelemetry Collector, Prometheus, Tempo, Grafana를 실행합니다.
 주요 로컬 주소는 아래와 같습니다.
 
 ```text

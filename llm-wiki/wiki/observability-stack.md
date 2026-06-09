@@ -70,8 +70,8 @@ Grafana dashboard는 다음 Prometheus 이름을 기준으로 query한다.
 - 전체 인프라 중지: `mise run infra-down`
 - 인프라 로그 확인: `mise run infra-logs`
 
-`mise` enter hook은 기존처럼 PostgreSQL만 자동 시작한다. Grafana와 Prometheus는 명시적으로
-`infra-up`을 실행할 때만 시작한다.
+`mise` enter hook도 `mise run infra-up`을 실행하므로 프로젝트 디렉터리에 진입하면
+PostgreSQL, OpenTelemetry Collector, Prometheus, Tempo, Grafana가 함께 시작된다.
 Docker Compose의 host port는 인프라 실행 환경에서 바꿀 수 있다. 이 값들은 서버 `.env`
 관리 대상이 아니다.
 

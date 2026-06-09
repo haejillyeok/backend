@@ -36,8 +36,8 @@
 | [wiki/decisions/2026-06-05-llm-wiki-structure.md](wiki/decisions/2026-06-05-llm-wiki-structure.md) | LLM Wiki를 루트 `llm-wiki/`에 두고 `index.md`/`log.md`로 운영하기로 한 결정 |
 | [wiki/decisions/2026-06-05-docs-vs-llm-wiki.md](wiki/decisions/2026-06-05-docs-vs-llm-wiki.md) | `docs/`는 사람 전용 문서, `llm-wiki/`는 AI 작업 지식 전체로 분리한다는 결정 |
 | [wiki/decisions/2026-06-05-backend-practices.md](wiki/decisions/2026-06-05-backend-practices.md) | FastAPI/WebSocket 기준과 코드 컨벤션을 `llm-wiki`에 작업 기준으로 둔 결정. gRPC 기준은 2026-06-09 결정으로 대체됨 |
-| [wiki/decisions/2026-06-05-users-table-poc.md](wiki/decisions/2026-06-05-users-table-poc.md) | PoC 유저 테이블의 UUID v7 내부/외부 관리번호, 닉네임, 비밀번호 hash, 접속 IP 관리 결정 |
-| [wiki/decisions/2026-06-05-auth-session-login.md](wiki/decisions/2026-06-05-auth-session-login.md) | 가입 겸 로그인 API와 opaque session token, HttpOnly cookie 기반 인증 결정 |
+| [wiki/decisions/2026-06-05-users-table-poc.md](wiki/decisions/2026-06-05-users-table-poc.md) | PoC 유저 테이블의 UUID v7 내부/외부 관리번호, 계정 ID, 닉네임, 비밀번호 hash, 접속 IP 관리 결정 |
+| [wiki/decisions/2026-06-05-auth-session-login.md](wiki/decisions/2026-06-05-auth-session-login.md) | 계정 ID 기반 가입 겸 로그인 API와 opaque session token, HttpOnly cookie 기반 인증 결정 |
 | [wiki/decisions/2026-06-05-common-api-response-and-exceptions.md](wiki/decisions/2026-06-05-common-api-response-and-exceptions.md) | `app/shared/core` 공통 response envelope와 `AppException` 기반 HTTP 예외 처리 결정. gRPC status 기준은 2026-06-09 결정으로 대체됨 |
 | [wiki/decisions/2026-06-05-request-audit-logging.md](wiki/decisions/2026-06-05-request-audit-logging.md) | HTTP 요청 시작, 완료, 실패를 shared 감사 로그 포맷으로 기록하는 AOP 관측 결정. gRPC 감사 기준은 2026-06-09 결정으로 대체됨 |
 | [wiki/decisions/2026-06-09-remove-application-grpc.md](wiki/decisions/2026-06-09-remove-application-grpc.md) | 애플리케이션 gRPC를 제거하고 FastAPI HTTP와 OTLP HTTP만 사용하기로 한 결정 |
