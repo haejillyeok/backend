@@ -228,6 +228,60 @@ def test_agent_health_endpoints_return_ok():
         assert response.json() == {"status": "ok"}
 
 
+def test_be_allows_configured_cors_origins_for_preflight():
+    allowed_origins = [
+        "http://localhost:3000",
+        "https://haejillyeok.com",
+        "https://agent.haejillyeok.com",
+        "https://www.haejillyeok.com",
+    ]
+    client = TestClient(create_be_app())
+
+    for origin in allowed_origins:
+        response = client.options(
+            "/api/v1/health",
+            headers={
+                "Origin": origin,
+                "Access-Control-Request-Method": "GET",
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.headers["access-control-allow-origin"] == origin
+        assert response.headers["access-control-allow-credentials"] == "true"
+        assert "GET" in response.headers["access-control-allow-methods"]
+
+
+def test_be_rejects_unconfigured_cors_origin_for_preflight():
+    client = TestClient(create_be_app())
+
+    response = client.options(
+        "/api/v1/health",
+        headers={
+            "Origin": "https://front.example",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+
+    assert response.status_code == 400
+    assert "access-control-allow-origin" not in response.headers
+
+
+def test_agent_does_not_install_cors_middleware():
+    client = TestClient(create_agent_app())
+
+    response = client.options(
+        "/api/v1/health",
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+
+    assert "access-control-allow-origin" not in response.headers
+    assert "access-control-allow-credentials" not in response.headers
+
+
 def test_be_and_agent_have_separate_app_titles():
     be_app = create_be_app()
     agent_app = create_agent_app()

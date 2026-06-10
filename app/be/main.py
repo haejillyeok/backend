@@ -10,6 +10,7 @@ from app.shared.core.config import (
     AppSettings,
     database_lifespan,
 )
+from app.shared.core.cors import add_cors_middleware
 from app.shared.core.http_audit import add_audit_log_middleware
 from app.shared.core.logging_config import configure_logging
 from app.shared.core.observability import add_observability
@@ -36,6 +37,7 @@ def create_app() -> FastAPI:
     )
     add_observability(app, settings.app_name, settings.environment)
     add_audit_log_middleware(app, settings.app_name)
+    add_cors_middleware(app)
     register_exception_handlers(app)
     app.include_router(health_router)
     app.include_router(api_router)

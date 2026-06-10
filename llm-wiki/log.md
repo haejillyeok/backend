@@ -2,6 +2,12 @@
 
 이 파일은 `llm-wiki/`의 시간순 작업 이력입니다. 새 항목은 위에 추가합니다.
 
+## [2026-06-10] maintenance | Restrict CORS origin allowlist
+
+- CORS middleware 적용 대상을 브라우저에서 직접 호출되는 `be` 서버로 제한했다.
+- 허용 origin은 `http://localhost:3000`, `https://haejillyeok.com`, `https://agent.haejillyeok.com`, `https://www.haejillyeok.com`이다.
+- `agent` 서버는 `be`에서 서버 간 HTTP로 호출하므로 CORS를 등록하지 않고, 접근 제한은 네트워크/인증 계층에서 다룬다고 기록했다.
+
 ## [2026-06-10] maintenance | Keep migration tunnel port internal
 
 - DB migration GitHub Actions workflow에서 `MIGRATION_LOCAL_DB_PORT` 사용자 설정값을 제거했다.
