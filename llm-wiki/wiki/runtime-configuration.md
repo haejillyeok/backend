@@ -69,17 +69,18 @@ Docker run 시 `.env`는 image에 포함되지 않으므로 필요한 값을 컨
 
 `.github/workflows/docker-deploy.yml`은 `workflow_dispatch`만 사용한다. 수동 실행 input
 `confirm_deploy`가 `deploy`일 때만 Docker Hub build/push와 SSH 배포를 실행하고, `no`이면 확인
-job만 실행한다.
+job만 실행한다. 확인 job은 최근 Git tag 목록을 출력하므로 배포 전 태그 조회용으로도 사용할 수
+있다.
 
-GitHub runner는 Docker Hub에 로그인한 뒤, 수동 실행에서 선택한 ref가 도달할 수 있는 최신 Git tag를
-`git describe --tags --abbrev=0`로 가져와 Docker image tag로 그대로 사용한다. Docker Hub에는
-`DOCKERHUB_USERNAME/haejillyeok-backend:{version-tag}`와 `latest` tag를 함께 push한다. Git tag가
-없거나 Docker image tag 형식에 맞지 않으면 배포 job은 실패한다. 원격 서버에는 `deploy` 계정으로
-SSH 접속하고, `/opt/haejillyeok/backend/.env` 파일을 생성한 뒤 컨테이너에 `/app/.env:ro`로
-volume mount한다. `deploy` 계정은 `/opt/haejillyeok/backend`에 쓸 수 있어야 한다. 원격 컨테이너는
-기본적으로 `APP_MODULE=be`, `PORT=8000`으로 실행하고 `DOCKER_NETWORK`에 지정한 user-defined
-Docker network에 붙인다. 원격 서버에는 Docker Hub credential을 전달하지 않고 public image를
-pull한다.
+GitHub runner는 수동 실행 input `target_tag`를 Docker image tag로 사용한다. 배포 job은
+`target_tag`가 비어 있거나, 실제 Git tag가 아니거나, commit을 가리키지 않거나, Docker image tag
+형식에 맞지 않으면 실패한다. 유효한 tag이면 해당 tag ref를 checkout한 뒤 Docker Hub에는
+`DOCKERHUB_USERNAME/haejillyeok-backend:{version-tag}`와 `latest` tag를 함께 push한다. 원격
+서버에는 `deploy` 계정으로 SSH 접속하고, `/opt/haejillyeok/backend/.env` 파일을 생성한 뒤
+컨테이너에 `/app/.env:ro`로 volume mount한다. `deploy` 계정은 `/opt/haejillyeok/backend`에 쓸 수
+있어야 한다. 원격 컨테이너는 기본적으로 `APP_MODULE=be`, `PORT=8000`으로 실행하고
+`DOCKER_NETWORK`에 지정한 user-defined Docker network에 붙인다. 원격 서버에는 Docker Hub
+credential을 전달하지 않고 public image를 pull한다.
 
 필수 GitHub Secrets는 `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `DEPLOY_HOST`, `DEPLOY_SSH_KEY`,
 `BE_DB_HOST`, `BE_DB_USER`, `BE_DB_PASSWORD`, `BE_DB_NAME`이다. 선택 GitHub Variables는

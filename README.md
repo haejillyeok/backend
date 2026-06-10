@@ -273,14 +273,14 @@ docker run --rm \
 ## GitHub Actions Docker 배포
 
 `.github/workflows/docker-deploy.yml`은 자동 branch trigger 없이 수동 실행만 사용합니다. GitHub
-Actions 화면에서 `Docker Deploy` workflow를 선택하고 `confirm_deploy=deploy`를 고르면 Docker
-Hub에 image를 push한 뒤 SSH로 원격 서버에 접속해 컨테이너를 교체합니다. `confirm_deploy=no`는
-확인 job만 실행하고 배포하지 않습니다.
+Actions 화면에서 `Docker Deploy` workflow를 선택하고 `target_tag`에 배포할 Git tag를 입력한 뒤
+`confirm_deploy=deploy`를 고르면 Docker Hub에 image를 push한 뒤 SSH로 원격 서버에 접속해
+컨테이너를 교체합니다. `confirm_deploy=no`는 확인 job만 실행하고 배포하지 않으며, 로그에 최근 Git
+tag 목록을 출력합니다.
 
-Docker image tag는 수동 실행에서 선택한 ref가 도달할 수 있는 최신 Git tag를 그대로 사용합니다.
-예를 들어 브랜치의 최신 버전 tag가 `v1.2.3`이면 Docker Hub에는 `v1.2.3`와 `latest`를 함께
-push하고, 원격 서버도 `v1.2.3` image를 pull합니다. 선택한 ref에서 Git tag를 찾을 수 없거나
-Docker image tag로 쓸 수 없는 tag이면 배포 job은 실패합니다.
+Docker image tag는 수동 실행 input `target_tag`를 그대로 사용합니다. 예를 들어 `target_tag`가
+`v1.2.3`이면 Docker Hub에는 `v1.2.3`와 `latest`를 함께 push하고, 원격 서버도 `v1.2.3` image를
+pull합니다. 입력한 Git tag가 없거나 Docker image tag로 쓸 수 없는 tag이면 배포 job은 실패합니다.
 
 GitHub Secrets:
 

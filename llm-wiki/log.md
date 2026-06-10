@@ -2,6 +2,13 @@
 
 이 파일은 `llm-wiki/`의 시간순 작업 이력입니다. 새 항목은 위에 추가합니다.
 
+## [2026-06-10] maintenance | Select deploy Git tag manually
+
+- GitHub Actions Docker deploy workflow에 `target_tag` 수동 입력을 추가했다.
+- `confirm_deploy=no` 실행은 최근 Git tag 목록을 출력해 배포 전 태그 조회용으로 사용할 수 있게 했다.
+- 배포 job은 입력한 tag가 실제 commit tag이고 Docker image tag 형식에 맞는지 검증한 뒤 해당 tag ref를 checkout해 build/push/deploy한다.
+- README와 runtime configuration wiki에서 최신 tag 자동 선택 기준을 수동 tag 선택 기준으로 바꿨다.
+
 ## [2026-06-09] maintenance | Move deploy env path under opt
 
 - GitHub Actions Docker deploy workflow의 원격 배포 디렉터리를 `/opt/haejillyeok/backend`로 바꿨다.

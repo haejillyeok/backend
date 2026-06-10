@@ -11,6 +11,10 @@ on:
         options:
           - "no"
           - "deploy"
+      target_tag:
+        description: "Git tag to build and deploy. Leave empty with confirm_deploy=no to list recent tags."
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -29,8 +33,22 @@ jobs:
     name: Confirm Deployment
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout tag list
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Show selection
-        run: echo "confirm_deploy=${{ inputs.confirm_deploy }}"
+        env:
+          CONFIRM_DEPLOY: ${{ inputs.confirm_deploy }}
+          TARGET_TAG: ${{ inputs.target_tag }}
+        run: |
+          set -euo pipefail
+          echo "confirm_deploy=$CONFIRM_DEPLOY"
+          echo "target_tag=${TARGET_TAG:-<empty>}"
+          echo "Recent Git tags:"
+          recent_tags="$(git for-each-ref --count=20 --sort=-creatordate --format='%(refname:short)' refs/tags)"
+          printf '%s\n' "${recent_tags:-<none>}"
 
   build-and-deploy:
     name: Build, Push, and Deploy
@@ -44,18 +62,29 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Resolve image version tag
+      - name: Resolve and checkout image version tag
         id: image-tag
+        env:
+          TARGET_TAG: ${{ inputs.target_tag }}
         run: |
           set -euo pipefail
-          if ! image_tag="$(git describe --tags --abbrev=0 2>/dev/null)"; then
-            echo "::error::No Git version tag found on the selected ref."
+          image_tag="${TARGET_TAG:-}"
+          if [[ -z "$image_tag" ]]; then
+            echo "::error::target_tag is required when confirm_deploy=deploy."
             exit 1
           fi
           if ! [[ "$image_tag" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
             echo "::error::Git tag '$image_tag' cannot be used as a Docker image tag."
             exit 1
           fi
+          if ! git rev-parse --verify --quiet "refs/tags/${image_tag}^{commit}" >/dev/null; then
+            echo "::error::Git tag '$image_tag' was not found or does not point to a commit."
+            echo "Recent Git tags:"
+            recent_tags="$(git for-each-ref --count=20 --sort=-creatordate --format='%(refname:short)' refs/tags)"
+            printf '%s\n' "${recent_tags:-<none>}"
+            exit 1
+          fi
+          git checkout --detach "refs/tags/$image_tag"
           echo "image_tag=$image_tag" >> "$GITHUB_OUTPUT"
           echo "IMAGE_TAG=$image_tag" >> "$GITHUB_ENV"
           echo "Resolved image tag: $image_tag"
