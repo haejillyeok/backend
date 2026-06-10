@@ -1,4 +1,4 @@
-from app.shared.core.config.app import AppSettings
+from app.shared.core.config.app import AppSettings, configure_app_timezone
 from app.shared.core.config.database import (
     DATABASE_POOL_CONFIG,
     DatabasePoolConfig,
@@ -17,6 +17,7 @@ __all__ = [
     "DatabaseSettings",
     "EnvironmentName",
     "HttpSettings",
+    "configure_app_timezone",
     "create_database_engine",
     "create_database_sessionmaker",
     "database_lifespan",

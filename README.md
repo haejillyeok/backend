@@ -77,6 +77,9 @@ OpenTelemetry HTTP:   localhost:4318
 서버 포트가 이미 사용 중이면 `.env`의 서버 포트 값을 바꾸거나, 실행 시 같은 값을
 셸 환경변수로 넘길 수 있습니다.
 
+서버 프로세스의 기본 타임존은 KST(`Asia/Seoul`)입니다. 앱 설정 기본값도
+`APP_TIMEZONE=Asia/Seoul`이며, 다른 값이 필요할 때만 `.env`나 실행 환경변수로 덮어씁니다.
+
 Grafana 기본 계정은 `admin` / `admin`이며, FastAPI metric dashboard, trace dashboard,
 Prometheus/Tempo datasource는 자동으로 provision 됩니다. 앱은 기본적으로 metric/trace를
 내보내며, 필요한 상황에서만 서버 `.env`의 APM exporter 값을 꺼둡니다.
@@ -220,6 +223,7 @@ IMAGE="$DOCKERHUB_USERNAME/haejillyeok-backend"
 PORT=8000
 DOCKER_NETWORK=backend_default
 BE_ENV=prod
+APP_TIMEZONE=Asia/Seoul
 BE_DB_HOST=postgres.example.com
 BE_DB_PORT=5432
 BE_DB_USER=haejillyeok
@@ -232,6 +236,7 @@ OTEL_METRIC_EXPORT_INTERVAL=5000
 docker run --rm \
   --network "$DOCKER_NETWORK" \
   -e APP_MODULE=be \
+  -e APP_TIMEZONE="$APP_TIMEZONE" \
   -e PORT="$PORT" \
   -e BE_ENV="$BE_ENV" \
   -e BE_DB_HOST="$BE_DB_HOST" \
@@ -254,6 +259,7 @@ IMAGE="$DOCKERHUB_USERNAME/haejillyeok-backend"
 PORT=8001
 DOCKER_NETWORK=backend_default
 BE_ENV=prod
+APP_TIMEZONE=Asia/Seoul
 OTEL_ENABLED=true
 OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
 OTEL_METRIC_EXPORT_INTERVAL=5000
@@ -261,6 +267,7 @@ OTEL_METRIC_EXPORT_INTERVAL=5000
 docker run --rm \
   --network "$DOCKER_NETWORK" \
   -e APP_MODULE=agent \
+  -e APP_TIMEZONE="$APP_TIMEZONE" \
   -e PORT="$PORT" \
   -e BE_ENV="$BE_ENV" \
   -e OTEL_ENABLED="$OTEL_ENABLED" \
@@ -306,7 +313,8 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
 OTEL_METRIC_EXPORT_INTERVAL=5000
 ```
 
-Workflow가 생성하는 `.env`의 `BE_ENV`는 항상 `prod`로 고정됩니다.
+Workflow가 생성하는 `.env`의 `BE_ENV`는 항상 `prod`, `APP_TIMEZONE`은 `Asia/Seoul`로
+고정됩니다.
 `DOCKER_NETWORK`는 원격 서버에서 OpenTelemetry Collector가 붙어 있는 user-defined Docker
 network 이름입니다.
 

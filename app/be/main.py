@@ -8,6 +8,7 @@ from app.be.api.endpoints.health import router as health_router
 from app.be.api.router import router as api_router
 from app.shared.core.config import (
     AppSettings,
+    configure_app_timezone,
     database_lifespan,
 )
 from app.shared.core.cors import add_cors_middleware
@@ -27,6 +28,7 @@ async def app_lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app() -> FastAPI:
+    configure_app_timezone(settings.timezone)
     configure_logging(settings.app_name, settings.environment)
 
     app = FastAPI(

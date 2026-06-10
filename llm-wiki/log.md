@@ -2,6 +2,13 @@
 
 이 파일은 `llm-wiki/`의 시간순 작업 이력입니다. 새 항목은 위에 추가합니다.
 
+## [2026-06-10] maintenance | Set server timezone to KST
+
+- 공통 앱 설정에 `APP_TIMEZONE`을 추가하고 기본값을 `Asia/Seoul`로 정했다.
+- `be`와 `agent` 서버 시작 시 `APP_TIMEZONE`을 프로세스 `TZ`와 C runtime timezone에 적용하도록 했다.
+- Docker image 기본 환경과 GitHub Actions 배포 `.env` 생성값에 `APP_TIMEZONE=Asia/Seoul`을 명시했다.
+- README, development docs, runtime configuration wiki에 서버 기본 타임존은 KST이며 DB timestamp 기준은 UTC를 유지한다고 기록했다.
+
 ## [2026-06-10] maintenance | Use Docker env-file for deploy env
 
 - GitHub Actions Docker deploy workflow가 원격 `.env`를 `/app/.env:ro`로 마운트하지 않고 `docker run --env-file`로 주입하도록 바꿨다.

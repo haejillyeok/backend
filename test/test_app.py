@@ -1,4 +1,5 @@
 import importlib.util
+import os
 import tomllib
 from pathlib import Path
 
@@ -6,8 +7,25 @@ from fastapi.testclient import TestClient
 
 from app.agent.main import create_app as create_agent_app
 from app.be.main import create_app as create_be_app
+from app.shared.core.config import AppSettings, configure_app_timezone
 from app.shared.core.exceptions import AppException
 from app.shared.core.responses import fail, ok
+
+
+def test_app_settings_defaults_to_kst_timezone(monkeypatch):
+    monkeypatch.delenv("APP_TIMEZONE", raising=False)
+
+    settings = AppSettings(app_name="test")
+
+    assert settings.timezone == "Asia/Seoul"
+
+
+def test_configure_app_timezone_sets_process_timezone(monkeypatch):
+    monkeypatch.delenv("TZ", raising=False)
+
+    configure_app_timezone("Asia/Seoul")
+
+    assert os.environ["TZ"] == "Asia/Seoul"
 
 
 def test_be_health_endpoints_return_ok():

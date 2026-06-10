@@ -134,6 +134,7 @@ jobs:
           set -euo pipefail
           {
             printf 'BE_ENV=prod\n'
+            printf 'APP_TIMEZONE=Asia/Seoul\n'
             printf 'BE_DB_HOST=%s\n' "$BE_DB_HOST"
             printf 'BE_DB_PORT=%s\n' "$BE_DB_PORT"
             printf 'BE_DB_USER=%s\n' "$BE_DB_USER"

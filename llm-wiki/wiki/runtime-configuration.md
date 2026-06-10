@@ -13,6 +13,12 @@ audience: ai
 
 ## App Servers
 
+`app/shared/core/config/app.py`는 공통 앱 설정을 읽는다. 서버 프로세스의 기본 타임존은
+KST(`Asia/Seoul`)이며, `APP_TIMEZONE` 환경변수로 명시한다. 값이 없으면 코드 기본값
+`Asia/Seoul`을 사용한다. 앱 시작 시 이 값을 `TZ` 환경변수와 C runtime timezone 상태에 적용하므로
+logging formatter의 로컬 시각도 KST를 따른다. DB 저장/비교용 timestamp는 별도 변경이 없는 한
+timezone-aware UTC 기준을 유지한다.
+
 `app/shared/core/config/http.py`는 앱 이름에서 서비스 prefix를 만든 뒤 서버 HTTP 포트 값을 읽는다.
 HTTP host는 `127.0.0.1`로 고정한다.
 
@@ -67,10 +73,11 @@ Runtime image에는 `alembic.ini`와 `migrations/`를 포함하지 않는다. DB
 실행 전 별도 배포 단계에서 실행한다.
 
 Docker run 시 `.env`는 image에 포함되지 않으므로 필요한 값을 컨테이너 실행 환경에서 주입한다.
-`be` 서버는 `BE_ENV`, `BE_DB_HOST`, `BE_DB_PORT`, `BE_DB_USER`, `BE_DB_PASSWORD`, `BE_DB_NAME`이
-필수다. `agent` 서버는 DB 환경변수를 사용하지 않지만 shared app/observability 설정을 위해
-`BE_ENV`, `OTEL_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_METRIC_EXPORT_INTERVAL`을 실행
-환경에서 명시한다. OpenTelemetry 기본값은 `OTEL_ENABLED=true`이며, Collector를 쓰지 않는
+`be` 서버는 `BE_ENV`, `APP_TIMEZONE`, `BE_DB_HOST`, `BE_DB_PORT`, `BE_DB_USER`, `BE_DB_PASSWORD`,
+`BE_DB_NAME`이 필수다. `agent` 서버는 DB 환경변수를 사용하지 않지만 shared app/observability
+설정을 위해 `BE_ENV`, `APP_TIMEZONE`, `OTEL_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`,
+`OTEL_METRIC_EXPORT_INTERVAL`을 실행 환경에서 명시한다. `APP_TIMEZONE`은 기본적으로
+`Asia/Seoul`을 사용한다. OpenTelemetry 기본값은 `OTEL_ENABLED=true`이며, Collector를 쓰지 않는
 배포에서만 `false`로 끈다. Collector와 같은 Docker network에서 실행하는 배포는
 `OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318`을 사용한다.
 
@@ -89,15 +96,16 @@ GitHub runner는 수동 실행 input `target_tag`를 Docker image tag로 사용�
 `docker run --env-file`로 컨테이너 환경변수에 주입한다. 원격 `.env`는 `deploy`만 읽을 수 있도록
 `600` 권한을 유지한다. `deploy` 계정은 `/opt/haejillyeok/backend`에 쓸 수 있어야 한다. 원격
 컨테이너는 기본적으로 `APP_MODULE=be`, `PORT=8000`으로 실행하고
-`DOCKER_NETWORK`에 지정한 user-defined Docker network에 붙인다. 원격 서버에는 Docker Hub
-credential을 전달하지 않고 public image를 pull한다.
+`DOCKER_NETWORK`에 지정한 user-defined Docker network에 붙인다. Workflow가 생성하는 `.env`에는
+`BE_ENV=prod`, `APP_TIMEZONE=Asia/Seoul`을 고정으로 쓴다. 원격 서버에는 Docker Hub credential을
+전달하지 않고 public image를 pull한다.
 
 필수 GitHub Secrets는 `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `DEPLOY_HOST`, `DEPLOY_SSH_KEY`,
 `BE_DB_HOST`, `BE_DB_USER`, `BE_DB_PASSWORD`, `BE_DB_NAME`이다. 선택 GitHub Variables는
 `DEPLOY_SSH_PORT`, `DOCKER_NETWORK`, `BE_DB_PORT`, `OTEL_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`,
 `OTEL_METRIC_EXPORT_INTERVAL`이다. `DOCKER_NETWORK` 기본값은 `backend_default`이고,
 `OTEL_EXPORTER_OTLP_ENDPOINT` 기본값은 `http://otel-collector:4318`이다. Workflow가 생성하는
-`.env`의 `BE_ENV`는 항상 `prod`로 고정한다.
+`.env`의 `BE_ENV`는 항상 `prod`, `APP_TIMEZONE`은 항상 `Asia/Seoul`로 고정한다.
 
 ## GitHub Actions DB Migration
 

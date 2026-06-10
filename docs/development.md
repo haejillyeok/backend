@@ -54,6 +54,8 @@ Collector metrics:    http://localhost:9464/metrics
 
 서버 포트 충돌이 있거나 외부 도구가 다른 서버 포트를 바라봐야 하면 `.env` 또는 실행
 환경변수로 port 값을 바꿉니다. Docker Compose 인프라 포트는 서버 `.env` 관리 대상이 아닙니다.
+서버 프로세스의 기본 타임존은 KST(`Asia/Seoul`)이며, `APP_TIMEZONE=Asia/Seoul`을 앱 설정 기본값으로
+사용합니다.
 
 | Target | Default |
 | --- | --- |

@@ -5,7 +5,7 @@ from fastapi import FastAPI
 
 from app.agent.api.endpoints.health import router as health_router
 from app.agent.api.router import router as api_router
-from app.shared.core.config import AppSettings
+from app.shared.core.config import AppSettings, configure_app_timezone
 from app.shared.core.http_audit import add_audit_log_middleware
 from app.shared.core.logging_config import configure_logging
 from app.shared.core.observability import add_observability
@@ -20,6 +20,7 @@ async def app_lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app() -> FastAPI:
+    configure_app_timezone(settings.timezone)
     configure_logging(settings.app_name, settings.environment)
 
     app = FastAPI(
