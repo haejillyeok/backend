@@ -2,6 +2,19 @@
 
 이 파일은 `llm-wiki/`의 시간순 작업 이력입니다. 새 항목은 위에 추가합니다.
 
+## [2026-06-10] maintenance | Mount deploy log directory
+
+- GitHub Actions Docker deploy workflow가 원격 `/opt/haejillyeok/backend/logs`를 컨테이너 `/app/logs`로 bind mount하도록 반영했다.
+- 배포 전에 원격 로그 디렉터리를 만들고 Docker image를 root로 한 번 실행해 컨테이너 `app` 사용자가 로그 디렉터리에 쓸 수 있게 소유권을 맞추도록 했다.
+- Workflow가 생성하는 `.env`에 `LOG_DIR=/app/logs`와 파일 로그 보존/용량 설정을 포함한다고 runtime configuration wiki에 기록했다.
+
+## [2026-06-10] maintenance | Add Loki Promtail file log management
+
+- 앱 공통 로깅에 `logs/<app_name>.log` 파일 handler를 추가하고 매일 회전, 14일 보존 기준을 정리했다.
+- `LOG_MAX_TOTAL_BYTES`를 넘으면 앱 시작 시와 파일 로그 emit 중 주기적으로 `*.log*` 파일을 오래된 순서로 삭제하는 파일 로그 정리 기준을 남겼다.
+- Docker Compose 로컬 관측 스택에 Loki와 Promtail을 추가하고 Grafana Loki datasource를 provision 하도록 기록했다.
+- Promtail이 앱 로그 포맷에서 `app_name`, `level`, `logger` label을 추출해 Loki로 전송한다고 `observability-stack.md`에 반영했다.
+
 ## [2026-06-10] maintenance | Set server timezone to KST
 
 - 공통 앱 설정에 `APP_TIMEZONE`을 추가하고 기본값을 `Asia/Seoul`로 정했다.

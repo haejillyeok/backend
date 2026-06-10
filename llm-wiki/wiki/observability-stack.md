@@ -1,18 +1,19 @@
 ---
 title: Observability Stack
 type: guide
-updated: 2026-06-09
+updated: 2026-06-10
 audience: ai
 ---
 
 # Observability Stack
 
-이 레포의 로컬 APM 관측은 OpenTelemetry, Prometheus, Tempo, Grafana를 조합한다.
+이 레포의 로컬 관측은 OpenTelemetry, Prometheus, Tempo, Loki, Promtail, Grafana를 조합한다.
 
 ## Data Flow
 
 ```text
 FastAPI app -> OTLP HTTP :4318 -> OpenTelemetry Collector -> Prometheus / Tempo -> Grafana
+FastAPI app -> logs/*.log* -> Promtail -> Loki -> Grafana
 ```
 
 - `app/shared/core/observability.py`는 FastAPI 앱에 OpenTelemetry trace instrumentation과
@@ -26,8 +27,17 @@ FastAPI app -> OTLP HTTP :4318 -> OpenTelemetry Collector -> Prometheus / Tempo 
   Prometheus scrape endpoint `9464`로 metric을 노출하며 trace는 Tempo로 전달한다.
 - Prometheus는 `otel-collector:9464`를 scrape한다.
 - Tempo는 trace span을 저장하고 Grafana Explore의 `Tempo` datasource로 조회된다.
+- 앱은 stdout과 `logs/<app_name>.log`에 같은 포맷으로 로그를 기록한다.
+- 파일 로그는 매일 회전하고 기본 14일 동안 보관한다.
+- 앱 시작 시와 파일 로그 emit 중 주기적으로 `LOG_DIR`의 `*.log*` 파일을 검사해
+  `LOG_RETENTION_DAYS`보다 오래된 파일을 지우고, 전체 용량이 `LOG_MAX_TOTAL_BYTES`를 넘으면
+  오래된 파일부터 삭제한다.
+- Promtail은 `logs/*.log*` 파일을 tailing하고 `app_name`, `level`, `logger` label을 추출해
+  Loki로 전송한다.
+- Loki도 local stack에서 14일(`336h`) 보존 기간을 둔다.
 - Grafana는 provisioned Prometheus datasource와
-  `docker/grafana/dashboards/fastapi-apm.json` dashboard를 사용한다.
+  `docker/grafana/dashboards/fastapi-apm.json` dashboard를 사용한다. Tempo와 Loki datasource도
+  provision 된다.
 
 ## Metrics
 
@@ -94,3 +104,23 @@ Grafana trace dashboard는 `Haejillyeok FastAPI Traces` 제목으로 provision �
 - Selected Object Span Search: 선택한 service/repository span 검색
 
 Trace 상세 waterfall은 dashboard table에서 trace를 열거나 Grafana Explore의 Tempo datasource에서 확인한다.
+
+## Logs
+
+파일 로그 설정은 `app/shared/core/logging_config.py`가 담당한다.
+
+- `LOG_FILE_ENABLED`: 파일 로그 활성화 여부, 기본값 `true`
+- `LOG_DIR`: 파일 로그 디렉터리, 기본값 `logs`
+- `LOG_RETENTION_DAYS`: 날짜 기준 보존 기간, 기본값 `14`
+- `LOG_MAX_TOTAL_BYTES`: `LOG_DIR` 안의 `*.log*` 전체 허용 용량, 기본값 `1073741824`
+- `LOG_CLEANUP_INTERVAL_SECONDS`: 파일 로그 emit 중 정리 검사 간격, 기본값 `60`
+
+로그 포맷은 Promtail regex와 연결되어 있으므로 바꿀 때는 `docker/promtail/promtail.yml`도 함께
+갱신한다.
+
+```text
+%(asctime)s %(levelname)s [%(app_name)s] [%(name)s] %(message)s
+```
+
+Grafana Explore의 Loki datasource에서 `{job="haejillyeok-backend"}`,
+`{app_name="haejillyeok-be"}`, `{level="ERROR"}` 같은 LogQL label selector로 조회한다.

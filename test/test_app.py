@@ -1,6 +1,7 @@
 import importlib.util
 import os
 import tomllib
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -9,6 +10,7 @@ from app.agent.main import create_app as create_agent_app
 from app.be.main import create_app as create_be_app
 from app.shared.core.config import AppSettings, configure_app_timezone
 from app.shared.core.exceptions import AppException
+from app.shared.core.logging_config import LogFileSettings, cleanup_log_files
 from app.shared.core.responses import fail, ok
 
 
@@ -26,6 +28,71 @@ def test_configure_app_timezone_sets_process_timezone(monkeypatch):
     configure_app_timezone("Asia/Seoul")
 
     assert os.environ["TZ"] == "Asia/Seoul"
+
+
+def test_log_file_settings_read_environment(monkeypatch, tmp_path):
+    monkeypatch.setenv("LOG_FILE_ENABLED", "false")
+    monkeypatch.setenv("LOG_DIR", str(tmp_path / "app-logs"))
+    monkeypatch.setenv("LOG_RETENTION_DAYS", "7")
+    monkeypatch.setenv("LOG_MAX_TOTAL_BYTES", "2048")
+    monkeypatch.setenv("LOG_CLEANUP_INTERVAL_SECONDS", "30")
+
+    settings = LogFileSettings.from_environment()
+
+    assert settings.enabled is False
+    assert settings.directory == tmp_path / "app-logs"
+    assert settings.retention_days == 7
+    assert settings.max_total_bytes == 2048
+    assert settings.cleanup_interval_seconds == 30
+
+
+def test_cleanup_log_files_deletes_old_and_excess_files(tmp_path):
+    old_log = tmp_path / "haejillyeok-be.log.2026-05-01"
+    larger_log = tmp_path / "haejillyeok-be.log.2026-06-01"
+    newer_log = tmp_path / "haejillyeok-be.log"
+    ignored_file = tmp_path / "notes.txt"
+
+    old_log.write_text("old", encoding="utf-8")
+    larger_log.write_text("x" * 8, encoding="utf-8")
+    newer_log.write_text("y" * 4, encoding="utf-8")
+    ignored_file.write_text("keep", encoding="utf-8")
+
+    old_timestamp = (datetime.now(UTC) - timedelta(days=15)).timestamp()
+    larger_timestamp = (datetime.now(UTC) - timedelta(days=2)).timestamp()
+    newer_timestamp = (datetime.now(UTC) - timedelta(days=1)).timestamp()
+    os.utime(old_log, (old_timestamp, old_timestamp))
+    os.utime(larger_log, (larger_timestamp, larger_timestamp))
+    os.utime(newer_log, (newer_timestamp, newer_timestamp))
+
+    cleanup_log_files(tmp_path, retention_days=14, max_total_bytes=6)
+
+    assert not old_log.exists()
+    assert not larger_log.exists()
+    assert newer_log.exists()
+    assert ignored_file.exists()
+
+
+def test_cleanup_log_files_keeps_protected_active_log(tmp_path):
+    active_log = tmp_path / "haejillyeok-be.log"
+    older_log = tmp_path / "haejillyeok-be.log.2026-06-01"
+
+    active_log.write_text("x" * 8, encoding="utf-8")
+    older_log.write_text("y" * 8, encoding="utf-8")
+
+    active_timestamp = (datetime.now(UTC) - timedelta(days=3)).timestamp()
+    older_timestamp = (datetime.now(UTC) - timedelta(days=2)).timestamp()
+    os.utime(active_log, (active_timestamp, active_timestamp))
+    os.utime(older_log, (older_timestamp, older_timestamp))
+
+    cleanup_log_files(
+        tmp_path,
+        retention_days=14,
+        max_total_bytes=6,
+        protected_paths={active_log},
+    )
+
+    assert active_log.exists()
+    assert not older_log.exists()
 
 
 def test_be_health_endpoints_return_ok():

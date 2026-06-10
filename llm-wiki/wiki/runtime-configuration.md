@@ -94,16 +94,20 @@ GitHub runner는 수동 실행 input `target_tag`를 Docker image tag로 사용�
 `DOCKERHUB_USERNAME/haejillyeok-backend:{version-tag}`와 `latest` tag를 함께 push한다. 원격
 서버에는 `deploy` 계정으로 SSH 접속하고, `/opt/haejillyeok/backend/.env` 파일을 생성한 뒤
 `docker run --env-file`로 컨테이너 환경변수에 주입한다. 원격 `.env`는 `deploy`만 읽을 수 있도록
-`600` 권한을 유지한다. `deploy` 계정은 `/opt/haejillyeok/backend`에 쓸 수 있어야 한다. 원격
-컨테이너는 기본적으로 `APP_MODULE=be`, `PORT=8000`으로 실행하고
-`DOCKER_NETWORK`에 지정한 user-defined Docker network에 붙인다. Workflow가 생성하는 `.env`에는
-`BE_ENV=prod`, `APP_TIMEZONE=Asia/Seoul`을 고정으로 쓴다. 원격 서버에는 Docker Hub credential을
-전달하지 않고 public image를 pull한다.
+`600` 권한을 유지한다. `deploy` 계정은 `/opt/haejillyeok/backend`에 쓸 수 있어야 한다. 파일
+로그는 `/opt/haejillyeok/backend/logs`를 컨테이너 `/app/logs`로 bind mount해서 보존한다.
+Workflow는 배포 전에 로그 디렉터리를 만들고 배포 image를 root로 한 번 실행해 host 로그
+디렉터리 소유권을 컨테이너의 `app` 사용자에 맞춘 뒤 실제 컨테이너를 실행한다. 원격 컨테이너는
+기본적으로 `APP_MODULE=be`, `PORT=8000`으로 실행하고 `DOCKER_NETWORK`에 지정한 user-defined
+Docker network에 붙인다. Workflow가 생성하는 `.env`에는 `BE_ENV=prod`,
+`APP_TIMEZONE=Asia/Seoul`, `LOG_DIR=/app/logs`를 고정으로 쓴다. 원격 서버에는 Docker Hub
+credential을 전달하지 않고 public image를 pull한다.
 
 필수 GitHub Secrets는 `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `DEPLOY_HOST`, `DEPLOY_SSH_KEY`,
 `BE_DB_HOST`, `BE_DB_USER`, `BE_DB_PASSWORD`, `BE_DB_NAME`이다. 선택 GitHub Variables는
 `DEPLOY_SSH_PORT`, `DOCKER_NETWORK`, `BE_DB_PORT`, `OTEL_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`,
-`OTEL_METRIC_EXPORT_INTERVAL`이다. `DOCKER_NETWORK` 기본값은 `backend_default`이고,
+`OTEL_METRIC_EXPORT_INTERVAL`, `LOG_FILE_ENABLED`, `LOG_RETENTION_DAYS`, `LOG_MAX_TOTAL_BYTES`,
+`LOG_CLEANUP_INTERVAL_SECONDS`이다. `DOCKER_NETWORK` 기본값은 `backend_default`이고,
 `OTEL_EXPORTER_OTLP_ENDPOINT` 기본값은 `http://otel-collector:4318`이다. Workflow가 생성하는
 `.env`의 `BE_ENV`는 항상 `prod`, `APP_TIMEZONE`은 항상 `Asia/Seoul`로 고정한다.
 

@@ -75,8 +75,8 @@ depends = ["install"]
 run = ".venv/bin/python -m alembic history"
 
 [tasks.infra-up]
-description = "PostgreSQL, OpenTelemetry Collector, Prometheus, Tempo, Grafana를 시작합니다"
-run = "docker compose up -d postgres otel-collector prometheus tempo grafana"
+description = "PostgreSQL, OpenTelemetry Collector, Prometheus, Tempo, Loki, Promtail, Grafana를 시작합니다"
+run = "docker compose up -d postgres otel-collector prometheus tempo loki promtail grafana"
 
 [tasks.infra-down]
 description = "로컬 인프라를 중지합니다"
@@ -84,4 +84,4 @@ run = "docker compose down"
 
 [tasks.infra-logs]
 description = "로컬 인프라 로그를 실시간으로 확인합니다"
-run = "docker compose logs -f postgres otel-collector prometheus tempo grafana"
+run = "docker compose logs -f postgres otel-collector prometheus tempo loki promtail grafana"

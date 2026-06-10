@@ -24,6 +24,7 @@ env:
   CONTAINER_NAME: haejillyeok-backend
   REMOTE_APP_DIR: /opt/haejillyeok/backend
   REMOTE_ENV_FILE: /opt/haejillyeok/backend/.env
+  REMOTE_LOG_DIR: /opt/haejillyeok/backend/logs
   DOCKER_NETWORK: ${{ vars.DOCKER_NETWORK || 'backend_default' }}
   APP_MODULE: be
   APP_PORT: "8000"
@@ -130,6 +131,10 @@ jobs:
           OTEL_ENABLED: ${{ vars.OTEL_ENABLED || 'true' }}
           OTEL_EXPORTER_OTLP_ENDPOINT: ${{ vars.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://otel-collector:4318' }}
           OTEL_METRIC_EXPORT_INTERVAL: ${{ vars.OTEL_METRIC_EXPORT_INTERVAL || '5000' }}
+          LOG_FILE_ENABLED: ${{ vars.LOG_FILE_ENABLED || 'true' }}
+          LOG_RETENTION_DAYS: ${{ vars.LOG_RETENTION_DAYS || '14' }}
+          LOG_MAX_TOTAL_BYTES: ${{ vars.LOG_MAX_TOTAL_BYTES || '1073741824' }}
+          LOG_CLEANUP_INTERVAL_SECONDS: ${{ vars.LOG_CLEANUP_INTERVAL_SECONDS || '60' }}
         run: |
           set -euo pipefail
           {
@@ -143,6 +148,11 @@ jobs:
             printf 'OTEL_ENABLED=%s\n' "$OTEL_ENABLED"
             printf 'OTEL_EXPORTER_OTLP_ENDPOINT=%s\n' "$OTEL_EXPORTER_OTLP_ENDPOINT"
             printf 'OTEL_METRIC_EXPORT_INTERVAL=%s\n' "$OTEL_METRIC_EXPORT_INTERVAL"
+            printf 'LOG_FILE_ENABLED=%s\n' "$LOG_FILE_ENABLED"
+            printf 'LOG_DIR=/app/logs\n'
+            printf 'LOG_RETENTION_DAYS=%s\n' "$LOG_RETENTION_DAYS"
+            printf 'LOG_MAX_TOTAL_BYTES=%s\n' "$LOG_MAX_TOTAL_BYTES"
+            printf 'LOG_CLEANUP_INTERVAL_SECONDS=%s\n' "$LOG_CLEANUP_INTERVAL_SECONDS"
           } > .env
           chmod 600 .env
 
@@ -153,7 +163,7 @@ jobs:
         run: |
           set -euo pipefail
           ssh -i "$HOME/.ssh/deploy_key" -p "$DEPLOY_SSH_PORT" "deploy@$DEPLOY_HOST" \
-            "mkdir -p '$REMOTE_APP_DIR'"
+            "mkdir -p '$REMOTE_APP_DIR' '$REMOTE_LOG_DIR'"
           scp -i "$HOME/.ssh/deploy_key" -P "$DEPLOY_SSH_PORT" .env \
             "deploy@$DEPLOY_HOST:$REMOTE_ENV_FILE"
           ssh -i "$HOME/.ssh/deploy_key" -p "$DEPLOY_SSH_PORT" "deploy@$DEPLOY_HOST" \
@@ -169,6 +179,12 @@ jobs:
           set -euo pipefail
           docker pull "$IMAGE_NAME:$IMAGE_TAG"
           docker network inspect "$DOCKER_NETWORK" >/dev/null
+          mkdir -p "$REMOTE_LOG_DIR"
+          docker run --rm \
+            --user 0:0 \
+            -v "$REMOTE_LOG_DIR:/app/logs" \
+            "$IMAGE_NAME:$IMAGE_TAG" \
+            sh -c "chown -R app:app /app/logs"
           docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
           docker run -d \
             --name "$CONTAINER_NAME" \
@@ -177,6 +193,7 @@ jobs:
             --env-file "$REMOTE_ENV_FILE" \
             -e APP_MODULE="$APP_MODULE" \
             -e PORT="$APP_PORT" \
+            -v "$REMOTE_LOG_DIR:/app/logs" \
             -p "$APP_PORT:$APP_PORT" \
             "$IMAGE_NAME:$IMAGE_TAG"
           docker ps --filter "name=$CONTAINER_NAME"

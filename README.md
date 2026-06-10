@@ -61,7 +61,8 @@ mise run db-current
 mise run db-history
 ```
 
-`infra-up`은 PostgreSQL, OpenTelemetry Collector, Prometheus, Tempo, Grafana를 실행합니다.
+`infra-up`은 PostgreSQL, OpenTelemetry Collector, Prometheus, Tempo, Loki, Promtail, Grafana를
+실행합니다.
 주요 로컬 주소는 아래와 같습니다.
 
 ```text
@@ -71,6 +72,7 @@ agent HTTP:           http://127.0.0.1:8001
 Grafana:              http://localhost:3000
 Prometheus:           http://localhost:9090
 Tempo:                http://localhost:3200
+Loki:                 http://localhost:3100
 OpenTelemetry HTTP:   localhost:4318
 ```
 
@@ -81,8 +83,22 @@ OpenTelemetry HTTP:   localhost:4318
 `APP_TIMEZONE=Asia/Seoul`이며, 다른 값이 필요할 때만 `.env`나 실행 환경변수로 덮어씁니다.
 
 Grafana 기본 계정은 `admin` / `admin`이며, FastAPI metric dashboard, trace dashboard,
-Prometheus/Tempo datasource는 자동으로 provision 됩니다. 앱은 기본적으로 metric/trace를
+Prometheus/Tempo/Loki datasource는 자동으로 provision 됩니다. 앱은 기본적으로 metric/trace를
 내보내며, 필요한 상황에서만 서버 `.env`의 APM exporter 값을 꺼둡니다.
+
+앱 로그는 stdout과 `logs/<app_name>.log`에 함께 기록됩니다. 파일 로그는 매일 회전하며 기본
+14일 동안 보관하고, `logs/`의 `*.log*` 전체 용량이 기본 1GB를 넘으면 오래된 파일부터 삭제합니다.
+Promtail은 `logs/*.log*`를 읽어 Loki로 전송하므로 Grafana Explore의 Loki datasource에서
+`{job="haejillyeok-backend"}` 또는 `{app_name="haejillyeok-be"}`처럼 조회할 수 있습니다.
+필요하면 아래 환경변수로 파일 로그 기준을 바꿉니다.
+
+```text
+LOG_FILE_ENABLED=true
+LOG_DIR=logs
+LOG_RETENTION_DAYS=14
+LOG_MAX_TOTAL_BYTES=1073741824
+LOG_CLEANUP_INTERVAL_SECONDS=60
+```
 
 백엔드 서버 실행 전 프로젝트 루트의 `.env`에 DB 접속 정보를 설정해야 합니다.
 로컬 설정 예시를 사용하면 PostgreSQL URL은 다음처럼 조립됩니다.
@@ -232,6 +248,11 @@ BE_DB_NAME=haejillyeok
 OTEL_ENABLED=true
 OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
 OTEL_METRIC_EXPORT_INTERVAL=5000
+LOG_FILE_ENABLED=true
+LOG_DIR=/app/logs
+LOG_RETENTION_DAYS=14
+LOG_MAX_TOTAL_BYTES=1073741824
+LOG_CLEANUP_INTERVAL_SECONDS=60
 
 docker run --rm \
   --network "$DOCKER_NETWORK" \
@@ -247,6 +268,12 @@ docker run --rm \
   -e OTEL_ENABLED="$OTEL_ENABLED" \
   -e OTEL_EXPORTER_OTLP_ENDPOINT="$OTEL_EXPORTER_OTLP_ENDPOINT" \
   -e OTEL_METRIC_EXPORT_INTERVAL="$OTEL_METRIC_EXPORT_INTERVAL" \
+  -e LOG_FILE_ENABLED="$LOG_FILE_ENABLED" \
+  -e LOG_DIR="$LOG_DIR" \
+  -e LOG_RETENTION_DAYS="$LOG_RETENTION_DAYS" \
+  -e LOG_MAX_TOTAL_BYTES="$LOG_MAX_TOTAL_BYTES" \
+  -e LOG_CLEANUP_INTERVAL_SECONDS="$LOG_CLEANUP_INTERVAL_SECONDS" \
+  -v /opt/haejillyeok/backend/logs:/app/logs \
   -p "$PORT:$PORT" \
   "$IMAGE:latest"
 ```
@@ -263,6 +290,11 @@ APP_TIMEZONE=Asia/Seoul
 OTEL_ENABLED=true
 OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
 OTEL_METRIC_EXPORT_INTERVAL=5000
+LOG_FILE_ENABLED=true
+LOG_DIR=/app/logs
+LOG_RETENTION_DAYS=14
+LOG_MAX_TOTAL_BYTES=1073741824
+LOG_CLEANUP_INTERVAL_SECONDS=60
 
 docker run --rm \
   --network "$DOCKER_NETWORK" \
@@ -273,6 +305,12 @@ docker run --rm \
   -e OTEL_ENABLED="$OTEL_ENABLED" \
   -e OTEL_EXPORTER_OTLP_ENDPOINT="$OTEL_EXPORTER_OTLP_ENDPOINT" \
   -e OTEL_METRIC_EXPORT_INTERVAL="$OTEL_METRIC_EXPORT_INTERVAL" \
+  -e LOG_FILE_ENABLED="$LOG_FILE_ENABLED" \
+  -e LOG_DIR="$LOG_DIR" \
+  -e LOG_RETENTION_DAYS="$LOG_RETENTION_DAYS" \
+  -e LOG_MAX_TOTAL_BYTES="$LOG_MAX_TOTAL_BYTES" \
+  -e LOG_CLEANUP_INTERVAL_SECONDS="$LOG_CLEANUP_INTERVAL_SECONDS" \
+  -v /opt/haejillyeok/backend/logs:/app/logs \
   -p "$PORT:$PORT" \
   "$IMAGE:latest"
 ```
@@ -311,12 +349,19 @@ BE_DB_PORT=5432
 OTEL_ENABLED=true
 OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
 OTEL_METRIC_EXPORT_INTERVAL=5000
+LOG_FILE_ENABLED=true
+LOG_RETENTION_DAYS=14
+LOG_MAX_TOTAL_BYTES=1073741824
+LOG_CLEANUP_INTERVAL_SECONDS=60
 ```
 
 Workflow가 생성하는 `.env`의 `BE_ENV`는 항상 `prod`, `APP_TIMEZONE`은 `Asia/Seoul`로
 고정됩니다.
 `DOCKER_NETWORK`는 원격 서버에서 OpenTelemetry Collector가 붙어 있는 user-defined Docker
 network 이름입니다.
+파일 로그는 원격 서버의 `/opt/haejillyeok/backend/logs`를 컨테이너 `/app/logs`로 bind mount해서
+저장합니다. Workflow는 배포 전에 이 디렉터리를 만들고 컨테이너의 `app` 사용자로 쓸 수 있게
+소유권을 맞춘 뒤 `docker run -v /opt/haejillyeok/backend/logs:/app/logs`로 실행합니다.
 
 배포 대상 서버는 `deploy` 계정으로 SSH 접속할 수 있어야 하고, Docker 명령을 실행할 권한이 있어야
 합니다. Workflow는 원격 서버의 `/opt/haejillyeok/backend/.env`를 만들고 `docker run --env-file`로

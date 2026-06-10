@@ -34,10 +34,12 @@ mise run infra-up
 
 구성은 FastAPI 앱이 OpenTelemetry OTLP로 metric/trace를 내보내고,
 OpenTelemetry Collector가 metric은 Prometheus scrape endpoint로 변환하고 trace는 Tempo에 저장한 뒤,
-Prometheus, Tempo, Grafana가 집계와 시각화를 담당하는 흐름입니다.
+앱 파일 로그는 Promtail이 Loki로 전송합니다. Prometheus, Tempo, Loki, Grafana가 집계와 조회를
+담당합니다.
 
 ```text
 FastAPI -> OTLP HTTP :4318 -> OpenTelemetry Collector -> Prometheus / Tempo -> Grafana
+FastAPI -> logs/*.log* -> Promtail -> Loki -> Grafana
 ```
 
 로컬 접속 주소는 아래와 같습니다.
@@ -48,6 +50,7 @@ agent HTTP:           http://127.0.0.1:8001
 Grafana:              http://localhost:3000
 Prometheus:           http://localhost:9090
 Tempo:                http://localhost:3200
+Loki:                 http://localhost:3100
 OpenTelemetry HTTP:   localhost:4318
 Collector metrics:    http://localhost:9464/metrics
 ```
@@ -62,8 +65,24 @@ Collector metrics:    http://localhost:9464/metrics
 | be HTTP | `127.0.0.1:8000` |
 | agent HTTP | `127.0.0.1:8001` |
 
-Grafana 기본 계정은 `admin` / `admin`입니다. 필요한 경우 인프라 실행 환경에서
-관리자 계정 값을 바꿉니다.
+Grafana 기본 계정은 `admin` / `admin`입니다. 필요한 경우 인프라 실행 환경에서 관리자 계정 값을
+바꿉니다. Prometheus, Tempo, Loki datasource는 자동으로 provision 됩니다.
+
+앱 로그는 stdout과 `logs/<app_name>.log`에 함께 기록합니다. 파일 로그는 매일 회전하고 기본 14일
+동안 보관합니다. `logs/`의 `*.log*` 전체 용량이 `LOG_MAX_TOTAL_BYTES`를 넘으면 오래된 파일부터
+삭제합니다. 기본값은 1GB입니다.
+
+```text
+LOG_FILE_ENABLED=true
+LOG_DIR=logs
+LOG_RETENTION_DAYS=14
+LOG_MAX_TOTAL_BYTES=1073741824
+LOG_CLEANUP_INTERVAL_SECONDS=60
+```
+
+Promtail은 `logs/*.log*` 파일을 읽고 log line에서 `app_name`, `level`, `logger` label을 추출해
+Loki로 전송합니다. Grafana Explore의 Loki datasource에서 `{job="haejillyeok-backend"}`,
+`{app_name="haejillyeok-be"}` 같은 LogQL query로 확인합니다.
 
 FastAPI 앱은 기본적으로 APM exporter를 연결합니다. 특정 상황에서 관측 전송을 끄고 싶을 때만
 서버 `.env`의 APM exporter 값을 비활성화합니다. 기본 전송 endpoint는 `http://localhost:4318`

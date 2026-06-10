@@ -11,7 +11,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 RUN groupadd --system app \
-    && useradd --system --gid app --create-home app
+    && useradd --system --gid app --create-home app \
+    && mkdir -p /app/logs \
+    && chown app:app /app/logs
 
 COPY pyproject.toml README.md ./
 COPY app ./app
