@@ -1,7 +1,7 @@
 ---
 title: Runtime Configuration
 type: guide
-updated: 2026-06-09
+updated: 2026-06-10
 audience: ai
 ---
 
@@ -88,3 +88,20 @@ credential을 전달하지 않고 public image를 pull한다.
 `OTEL_METRIC_EXPORT_INTERVAL`이다. `DOCKER_NETWORK` 기본값은 `backend_default`이고,
 `OTEL_EXPORTER_OTLP_ENDPOINT` 기본값은 `http://otel-collector:4318`이다. Workflow가 생성하는
 `.env`의 `BE_ENV`는 항상 `prod`로 고정한다.
+
+## GitHub Actions DB Migration
+
+`.github/workflows/db-migration.yml`은 `workflow_dispatch` 전용 운영 DB 작업 workflow다. Docker
+runtime image에는 migration tooling을 넣지 않으므로 GitHub runner가 레포를 checkout하고 `mise`로
+개발 의존성을 설치한 뒤 Alembic을 실행한다.
+
+Private subnet DB는 GitHub runner가 직접 접근하지 않는다. Workflow는 `DEPLOY_HOST`에 `deploy`
+계정으로 SSH 접속해 로컬 포워딩을 열고, Alembic 실행 환경에는 `BE_DB_HOST=127.0.0.1`,
+`BE_DB_PORT=15432`를 주입한다. 실제 private DB endpoint는 `BE_DB_HOST` secret에 둔다. 이 값은
+deploy 인스턴스에서 접근 가능한 주소여야 한다.
+
+실행 input `db_task`는 로컬 `mise` DB task 이름과 맞춘다. 기본값은 `db-upgrade-head`이고,
+`db-current`, `db-history`, `db-upgrade`, `db-downgrade`, `db-downgrade-one`을 선택할 수 있다.
+`db-upgrade`와 `db-downgrade`는 `target_revision` input을 함께 요구한다. 운영 DB 변경은
+`confirm_action=run`일 때만 실행되며, workflow concurrency group `prod-db-migration`으로 동시에
+두 migration job이 실행되지 않게 한다.

@@ -2,6 +2,19 @@
 
 이 파일은 `llm-wiki/`의 시간순 작업 이력입니다. 새 항목은 위에 추가합니다.
 
+## [2026-06-10] maintenance | Keep migration tunnel port internal
+
+- DB migration GitHub Actions workflow에서 `MIGRATION_LOCAL_DB_PORT` 사용자 설정값을 제거했다.
+- SSH 터널 runner 측 포트는 workflow 내부 값 `15432`로 고정하고, 사용자가 관리할 DB 변수는 private DB endpoint와 port만 남겼다.
+- `database-migrations.md`, `runtime-configuration.md`에서 선택 GitHub Variables 목록을 갱신했다.
+
+## [2026-06-10] maintenance | Add SSH-tunneled DB migration workflow
+
+- `.github/workflows/db-migration.yml`을 추가해 GitHub Actions 수동 실행으로 운영 DB migration 작업을 선택 실행할 수 있게 했다.
+- Workflow는 `deploy` SSH 인스턴스에 로컬 포워딩을 열고 private subnet DB에 접근한 뒤 `mise` DB task를 실행한다.
+- 기본 작업은 `db-upgrade-head`이며, `db-current`, `db-history`, `db-upgrade`, `db-downgrade`, `db-downgrade-one`을 선택할 수 있다.
+- 운영 DB migration 기준과 필요한 GitHub Secrets/Variables를 `database-migrations.md`, `runtime-configuration.md`에 반영했다.
+
 ## [2026-06-10] maintenance | Select deploy Git tag manually
 
 - GitHub Actions Docker deploy workflow에 `target_tag` 수동 입력을 추가했다.
