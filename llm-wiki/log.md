@@ -2,6 +2,12 @@
 
 이 파일은 `llm-wiki/`의 시간순 작업 이력입니다. 새 항목은 위에 추가합니다.
 
+## [2026-06-10] maintenance | Store deploy logs under var log
+
+- 배포 서버의 외부 로그 저장 경로를 `/var/log/haejillyeok/*.log*`로 정리했다.
+- 앱 컨테이너 내부 `LOG_DIR`은 `/app/logs`로 유지하고, workflow가 `/var/log/haejillyeok:/app/logs` bind mount를 사용하도록 했다.
+- Promtail이 host `/var/log/haejillyeok`를 컨테이너 `/var/log/haejillyeok`로 읽으면 같은 로그 파일을 수집할 수 있다.
+
 ## [2026-06-10] maintenance | Report file logging setup failure
 
 - 파일 로그 handler 생성 중 `PermissionError` 같은 `OSError`가 나면 앱은 stdout logging만 유지하고 ERROR 로그를 남기도록 했다.

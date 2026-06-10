@@ -24,7 +24,7 @@ env:
   CONTAINER_NAME: haejillyeok-backend
   REMOTE_APP_DIR: /opt/haejillyeok/backend
   REMOTE_ENV_FILE: /opt/haejillyeok/backend/.env
-  REMOTE_LOG_DIR: /opt/haejillyeok/backend/logs
+  REMOTE_LOG_DIR: /var/log/haejillyeok
   DOCKER_NETWORK: ${{ vars.DOCKER_NETWORK || 'backend_default' }}
   APP_MODULE: be
   APP_PORT: "8000"
@@ -163,7 +163,7 @@ jobs:
         run: |
           set -euo pipefail
           ssh -i "$HOME/.ssh/deploy_key" -p "$DEPLOY_SSH_PORT" "deploy@$DEPLOY_HOST" \
-            "mkdir -p '$REMOTE_APP_DIR' '$REMOTE_LOG_DIR'"
+            "mkdir -p '$REMOTE_APP_DIR'"
           scp -i "$HOME/.ssh/deploy_key" -P "$DEPLOY_SSH_PORT" .env \
             "deploy@$DEPLOY_HOST:$REMOTE_ENV_FILE"
           ssh -i "$HOME/.ssh/deploy_key" -p "$DEPLOY_SSH_PORT" "deploy@$DEPLOY_HOST" \
@@ -179,12 +179,11 @@ jobs:
           set -euo pipefail
           docker pull "$IMAGE_NAME:$IMAGE_TAG"
           docker network inspect "$DOCKER_NETWORK" >/dev/null
-          mkdir -p "$REMOTE_LOG_DIR"
           docker run --rm \
             --user 0:0 \
             -v "$REMOTE_LOG_DIR:/app/logs" \
             "$IMAGE_NAME:$IMAGE_TAG" \
-            sh -c "chown -R app:app /app/logs"
+            sh -c "mkdir -p /app/logs && chown -R app:app /app/logs"
           docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
           docker run -d \
             --name "$CONTAINER_NAME" \

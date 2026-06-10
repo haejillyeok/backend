@@ -274,7 +274,7 @@ docker run --rm \
   -e LOG_RETENTION_DAYS="$LOG_RETENTION_DAYS" \
   -e LOG_MAX_TOTAL_BYTES="$LOG_MAX_TOTAL_BYTES" \
   -e LOG_CLEANUP_INTERVAL_SECONDS="$LOG_CLEANUP_INTERVAL_SECONDS" \
-  -v /opt/haejillyeok/backend/logs:/app/logs \
+  -v /var/log/haejillyeok:/app/logs \
   -p "$PORT:$PORT" \
   "$IMAGE:latest"
 ```
@@ -311,7 +311,7 @@ docker run --rm \
   -e LOG_RETENTION_DAYS="$LOG_RETENTION_DAYS" \
   -e LOG_MAX_TOTAL_BYTES="$LOG_MAX_TOTAL_BYTES" \
   -e LOG_CLEANUP_INTERVAL_SECONDS="$LOG_CLEANUP_INTERVAL_SECONDS" \
-  -v /opt/haejillyeok/backend/logs:/app/logs \
+  -v /var/log/haejillyeok:/app/logs \
   -p "$PORT:$PORT" \
   "$IMAGE:latest"
 ```
@@ -360,9 +360,9 @@ Workflow가 생성하는 `.env`의 `BE_ENV`는 항상 `prod`, `APP_TIMEZONE`은 
 고정됩니다.
 `DOCKER_NETWORK`는 원격 서버에서 OpenTelemetry Collector가 붙어 있는 user-defined Docker
 network 이름입니다.
-파일 로그는 원격 서버의 `/opt/haejillyeok/backend/logs`를 컨테이너 `/app/logs`로 bind mount해서
-저장합니다. Workflow는 배포 전에 이 디렉터리를 만들고 컨테이너의 `app` 사용자로 쓸 수 있게
-소유권을 맞춘 뒤 `docker run -v /opt/haejillyeok/backend/logs:/app/logs`로 실행합니다.
+파일 로그는 원격 서버의 `/var/log/haejillyeok`에 저장합니다. 컨테이너 내부에서는 `/app/logs`로
+보이도록 bind mount하며, Workflow는 컨테이너의 `app` 사용자로 쓸 수 있게 소유권을 맞춘 뒤
+`docker run -v /var/log/haejillyeok:/app/logs`로 실행합니다.
 
 배포 대상 서버는 `deploy` 계정으로 SSH 접속할 수 있어야 하고, Docker 명령을 실행할 권한이 있어야
 합니다. Workflow는 원격 서버의 `/opt/haejillyeok/backend/.env`를 만들고 `docker run --env-file`로

@@ -97,9 +97,10 @@ GitHub runner는 수동 실행 input `target_tag`를 Docker image tag로 사용�
 서버에는 `deploy` 계정으로 SSH 접속하고, `/opt/haejillyeok/backend/.env` 파일을 생성한 뒤
 `docker run --env-file`로 컨테이너 환경변수에 주입한다. 원격 `.env`는 `deploy`만 읽을 수 있도록
 `600` 권한을 유지한다. `deploy` 계정은 `/opt/haejillyeok/backend`에 쓸 수 있어야 한다. 파일
-로그는 `/opt/haejillyeok/backend/logs`를 컨테이너 `/app/logs`로 bind mount해서 보존한다.
-Workflow는 배포 전에 로그 디렉터리를 만들고 배포 image를 root로 한 번 실행해 host 로그
-디렉터리 소유권을 컨테이너의 `app` 사용자에 맞춘 뒤 실제 컨테이너를 실행한다. 원격 컨테이너는
+로그는 원격 서버의 `/var/log/haejillyeok/*.log*`에 보존한다. Workflow는
+`/var/log/haejillyeok`를 컨테이너 `/app/logs`로 bind mount하고, 배포 image를 root로 한 번
+실행해 host 로그 디렉터리 소유권을 컨테이너의 `app` 사용자에 맞춘 뒤 실제 컨테이너를 실행한다.
+원격 컨테이너는
 기본적으로 `APP_MODULE=be`, `PORT=8000`으로 실행하고 `DOCKER_NETWORK`에 지정한 user-defined
 Docker network에 붙인다. Workflow가 생성하는 `.env`에는 `BE_ENV=prod`,
 `APP_TIMEZONE=Asia/Seoul`, `LOG_DIR=/app/logs`를 고정으로 쓴다. 원격 서버에는 Docker Hub
