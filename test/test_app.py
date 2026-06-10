@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from app.agent.main import create_app as create_agent_app
 from app.be.main import create_app as create_be_app
+from app.shared.core import logging_config
 from app.shared.core.config import AppSettings, configure_app_timezone
 from app.shared.core.exceptions import AppException
 from app.shared.core.logging_config import (
@@ -17,6 +18,7 @@ from app.shared.core.logging_config import (
     configure_logging,
     remove_project_file_handlers,
 )
+from app.shared.core.observability import resolve_otlp_http_endpoint
 from app.shared.core.responses import fail, ok
 
 
@@ -113,11 +115,49 @@ def test_configure_logging_writes_uvicorn_logs_to_file(monkeypatch, tmp_path):
 
     log_text = (tmp_path / "test-app.log").read_text(encoding="utf-8")
 
+    assert "[test-app] [app.shared.core.logging_config] File logging configured" in log_text
     assert "[test-app] [uvicorn.access] GET /health 200" in log_text
     remove_project_file_handlers(
         logging.getLogger(),
         logging.getLogger("uvicorn"),
         logging.getLogger("uvicorn.access"),
+    )
+
+
+def test_configure_logging_reports_file_setup_failure(monkeypatch, tmp_path, caplog):
+    def raise_permission_error(*args, **kwargs):
+        raise PermissionError("read-only log directory")
+
+    monkeypatch.setenv("LOG_FILE_ENABLED", "true")
+    monkeypatch.setenv("LOG_DIR", str(tmp_path))
+    monkeypatch.setattr(
+        logging_config,
+        "ManagedTimedRotatingFileHandler",
+        raise_permission_error,
+    )
+    caplog.set_level(logging.ERROR, logger="app.shared.core.logging_config")
+
+    configure_logging("test-app", environment="prod")
+
+    assert "File logging setup failed path=" in caplog.text
+    assert "Continuing with stdout logging only." in caplog.text
+
+
+def test_resolve_otlp_http_endpoint_appends_signal_path_to_base_endpoint():
+    assert (
+        resolve_otlp_http_endpoint("http://localhost:4318", signal_path="/v1/metrics")
+        == "http://localhost:4318/v1/metrics"
+    )
+    assert (
+        resolve_otlp_http_endpoint("http://otel-collector:4318", signal_path="/v1/traces")
+        == "http://otel-collector:4318/v1/traces"
+    )
+
+
+def test_resolve_otlp_http_endpoint_replaces_signal_specific_path():
+    assert (
+        resolve_otlp_http_endpoint("http://localhost:4318/v1/metrics", signal_path="/v1/traces")
+        == "http://localhost:4318/v1/traces"
     )
 
 

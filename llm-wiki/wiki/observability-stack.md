@@ -23,6 +23,8 @@ FastAPI app -> logs/*.log* -> Promtail -> Loki -> Grafana
   OTLP HTTP를 보낸다. Docker 배포에서는 backend 컨테이너를 collector와 같은 user-defined
   network에 붙이고 `OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318`을 사용한다.
   특정 상황에서만 서버 `.env`의 값을 비활성화해 전송을 끈다.
+- `OTEL_EXPORTER_OTLP_ENDPOINT`는 base endpoint로 관리하고, 앱 코드는 metric exporter에는
+  `/v1/metrics`, trace exporter에는 `/v1/traces`를 붙여 Collector ingest endpoint로 보낸다.
 - Docker Compose의 `otel-collector`는 OTLP HTTP `4318`을 열고,
   Prometheus scrape endpoint `9464`로 metric을 노출하며 trace는 Tempo로 전달한다.
 - Prometheus는 `otel-collector:9464`를 scrape한다.
@@ -110,7 +112,9 @@ Trace 상세 waterfall은 dashboard table에서 trace를 열거나 Grafana Explo
 
 파일 로그 설정은 `app/shared/core/logging_config.py`가 담당한다. Root logger뿐 아니라
 `uvicorn`, `uvicorn.access` logger에도 같은 file handler를 붙여 Uvicorn access/error 로그가
-파일에 남도록 한다.
+파일에 남도록 한다. 로그 디렉터리 권한이나 경로 문제로 file handler를 만들 수 없으면 앱은
+stdout logging만 유지하고 `File logging setup failed path=... Continuing with stdout logging only.`
+ERROR 로그를 남긴다.
 
 - `LOG_FILE_ENABLED`: 파일 로그 활성화 여부, 기본값 `true`
 - `LOG_DIR`: 파일 로그 디렉터리, 기본값 `logs`

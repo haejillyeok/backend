@@ -44,6 +44,8 @@ lifespan에서 gRPC 서버를 함께 시작하지 않는다.
 서버의 APM exporter 연결은 `.env`의 활성화 값으로 제어한다. 기본값은 활성화다.
 특정 상황에서 관측 전송을 끄고 싶을 때만 값을 비활성화한다. Collector가 기본 포트가 아닌
 곳에 있으면 exporter endpoint 값을 실제 Collector endpoint로 맞춘다.
+`OTEL_EXPORTER_OTLP_ENDPOINT`는 `http://localhost:4318` 같은 OTLP HTTP base endpoint로 둔다.
+앱은 metric exporter에는 `/v1/metrics`, trace exporter에는 `/v1/traces`를 붙여 전송한다.
 
 ## Container Build Context
 

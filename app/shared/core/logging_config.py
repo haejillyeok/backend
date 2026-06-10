@@ -12,6 +12,7 @@ DEFAULT_LOG_RETENTION_DAYS = 14
 DEFAULT_LOG_MAX_TOTAL_BYTES = 1024 * 1024 * 1024
 DEFAULT_LOG_CLEANUP_INTERVAL_SECONDS = 60
 FILE_LOGGER_NAMES = ("uvicorn", "uvicorn.access")
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -118,8 +119,17 @@ def configure_logging(app_name: str, environment: str | None = None) -> None:
         handler.setFormatter(formatter)
 
     log_file_settings = LogFileSettings.from_environment()
-    if log_file_settings.enabled:
+    if not log_file_settings.enabled:
+        logger.info("File logging disabled log_dir=%s", log_file_settings.directory)
+        return
+
+    try:
         add_file_log_handler(root_logger, app_name, log_level, formatter, log_file_settings)
+    except OSError:
+        logger.exception(
+            "File logging setup failed path=%s. Continuing with stdout logging only.",
+            log_file_settings.directory / f"{app_name}.log",
+        )
 
 
 def add_file_log_handler(
@@ -151,9 +161,16 @@ def add_file_log_handler(
     file_handler._haejillyeok_file_handler = True
     file_handler._haejillyeok_log_path = log_path
     root_logger.addHandler(file_handler)
-    for logger in file_loggers:
-        logger.addHandler(file_handler)
-        logger.propagate = False
+    for file_logger in file_loggers:
+        file_logger.addHandler(file_handler)
+        file_logger.propagate = False
+
+    logger.info(
+        "File logging configured path=%s retention_days=%s max_total_bytes=%s",
+        log_path,
+        settings.retention_days,
+        settings.max_total_bytes,
+    )
 
 
 def remove_project_file_handlers(*loggers: logging.Logger) -> None:
@@ -229,7 +246,7 @@ def _delete_log_file(path: Path) -> bool:
     except FileNotFoundError:
         return False
     except OSError:
-        logging.getLogger(__name__).warning("Failed to delete log file: %s", path)
+        logger.warning("Failed to delete log file: %s", path)
         return False
     return True
 

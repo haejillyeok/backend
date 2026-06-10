@@ -2,6 +2,18 @@
 
 이 파일은 `llm-wiki/`의 시간순 작업 이력입니다. 새 항목은 위에 추가합니다.
 
+## [2026-06-10] maintenance | Report file logging setup failure
+
+- 파일 로그 handler 생성 중 `PermissionError` 같은 `OSError`가 나면 앱은 stdout logging만 유지하고 ERROR 로그를 남기도록 했다.
+- 파일 로그가 환경변수로 꺼진 경우에도 `File logging disabled log_dir=...` info 로그를 남긴다.
+- 배포 컨테이너에서 로그 파일이 생성되지 않을 때 `docker logs`로 실패 경로를 확인할 수 있도록 테스트로 고정했다.
+
+## [2026-06-10] maintenance | Fix OTLP HTTP endpoint and file log visibility
+
+- `OTEL_EXPORTER_OTLP_ENDPOINT` base URL에서 metric은 `/v1/metrics`, trace는 `/v1/traces`로 보정해 OpenTelemetry Collector 404를 피하도록 했다.
+- 파일 로그 handler를 붙인 직후 `File logging configured path=...` 로그를 남겨 실제 로그 파일 경로를 확인할 수 있게 했다.
+- OTLP endpoint 보정과 Uvicorn/file logging 동작을 테스트로 고정했다.
+
 ## [2026-06-10] maintenance | Include Uvicorn logs in file logging
 
 - 파일 로그 handler를 root logger뿐 아니라 `uvicorn`, `uvicorn.access` logger에도 연결하도록 정리했다.
