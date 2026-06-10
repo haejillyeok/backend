@@ -6,7 +6,10 @@
 
 - 기존 FastAPI APM dashboard가 현재 Prometheus metric 이름과 label 기준을 쓰는지 확인했다.
 - Loki datasource를 사용하는 `Haejillyeok FastAPI Logs` dashboard를 추가했다.
-- 로그 dashboard는 `job`, `app_name`, `level`, `logger`, `search` 변수로 파일 로그를 필터링하고, level별 volume, error count, top logger, recent logs, audit request logs panel을 제공한다.
+- 로그 dashboard는 `job`, `app_name`, `level`, `logger`, `search` 변수로 파일 로그를 필터링하고, level별 volume, error count, top logger, recent logs, error log lines, audit request logs panel을 제공한다.
+- 기본 검색어를 빈 값으로 두고 literal contains filter를 사용해 전체 로그 라인 highlight를 피한다.
+- Log Volume by Level graph는 ERROR/CRITICAL 빨강 계열, WARNING/WARN 노랑, INFO 녹색, 그 외 회색으로 고정했다.
+- Grafana 기본 logs panel에서 level별 전체 row 배경색을 provisioned dashboard JSON으로 안정 제어하기 어렵기 때문에 ERROR/CRITICAL 전용 log panel로 분리한다.
 - APM/trace dashboard에서 log dashboard로 이동하는 링크를 추가하고 README, development docs, observability wiki에 반영했다.
 
 ## [2026-06-10] maintenance | Store deploy logs under var log

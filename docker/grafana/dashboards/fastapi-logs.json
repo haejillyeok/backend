@@ -55,7 +55,8 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "palette-classic"
+            "fixedColor": "semi-dark-gray",
+            "mode": "fixed"
           },
           "custom": {
             "drawStyle": "line",
@@ -68,7 +69,68 @@
           },
           "unit": "logs"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*CRITICAL.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "dark-red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*ERROR.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*WARN(ING)?.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "yellow",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*INFO.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
@@ -98,7 +160,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "sum by (level) (count_over_time({job=~\"$job\", app_name=~\"$app_name\", level=~\"$level\", logger=~\"$logger\"} |~ \"$search\" [$__interval]))",
+          "expr": "sum by (level) (count_over_time({job=~\"$job\", app_name=~\"$app_name\", level=~\"$level\", logger=~\"$logger\"} |= \"$search\" [$__interval]))",
           "queryType": "range",
           "refId": "A"
         }
@@ -124,12 +186,8 @@
                 "value": null
               },
               {
-                "color": "orange",
-                "value": 1
-              },
-              {
                 "color": "red",
-                "value": 5
+                "value": 1
               }
             ]
           },
@@ -166,7 +224,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "sum(count_over_time({job=~\"$job\", app_name=~\"$app_name\", level=~\"ERROR|CRITICAL\", logger=~\"$logger\"} |~ \"$search\" [$__interval]))",
+          "expr": "sum(count_over_time({job=~\"$job\", app_name=~\"$app_name\", level=~\"ERROR|CRITICAL\", logger=~\"$logger\"} |= \"$search\" [$__interval]))",
           "queryType": "range",
           "refId": "A"
         }
@@ -222,7 +280,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "topk(20, sum by (app_name, level, logger) (count_over_time({job=~\"$job\", app_name=~\"$app_name\", level=~\"$level\", logger=~\"$logger\"} |~ \"$search\" [$__range])))",
+          "expr": "topk(20, sum by (app_name, level, logger) (count_over_time({job=~\"$job\", app_name=~\"$app_name\", level=~\"$level\", logger=~\"$logger\"} |= \"$search\" [$__range])))",
           "instant": true,
           "queryType": "instant",
           "refId": "A"
@@ -267,7 +325,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{job=~\"$job\", app_name=~\"$app_name\", level=~\"$level\", logger=~\"$logger\"} |~ \"$search\"",
+          "expr": "{job=~\"$job\", app_name=~\"$app_name\", level=~\"$level\", logger=~\"$logger\"} |= \"$search\"",
           "queryType": "range",
           "refId": "A"
         }
@@ -303,12 +361,12 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{job=~\"$job\", app_name=~\"$app_name\", level=~\"WARNING|ERROR|CRITICAL\", logger=~\"$logger\"} |~ \"$search\"",
+          "expr": "{job=~\"$job\", app_name=~\"$app_name\", level=~\"ERROR|CRITICAL\", logger=~\"$logger\"} |= \"$search\"",
           "queryType": "range",
           "refId": "A"
         }
       ],
-      "title": "Warnings and Errors",
+      "title": "Error Log Lines",
       "type": "logs"
     },
     {
@@ -339,7 +397,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{job=~\"$job\", app_name=~\"$app_name\", logger=\"audit.request\"} |~ \"$search\"",
+          "expr": "{job=~\"$job\", app_name=~\"$app_name\", logger=\"audit.request\"} |= \"$search\"",
           "queryType": "range",
           "refId": "A"
         }
@@ -458,14 +516,14 @@
       {
         "current": {
           "selected": false,
-          "text": ".*",
-          "value": ".*"
+          "text": "",
+          "value": ""
         },
         "hide": 0,
         "label": "Search",
         "name": "search",
         "options": [],
-        "query": ".*",
+        "query": "",
         "skipUrlSync": false,
         "type": "textbox"
       }

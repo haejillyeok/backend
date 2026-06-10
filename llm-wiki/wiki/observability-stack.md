@@ -110,11 +110,13 @@ Trace 상세 waterfall은 dashboard table에서 trace를 열거나 Grafana Explo
 
 Grafana log dashboard는 `Haejillyeok FastAPI Logs` 제목으로 provision 된다.
 
-- Log Volume by Level: level별 로그 건수
+- Log Volume by Level: level별 로그 건수. ERROR/CRITICAL은 빨간색 계열, WARNING/WARN은 노란색,
+  INFO는 녹색, 그 외 level은 회색으로 표시한다.
 - Error Logs: ERROR/CRITICAL 로그 건수
 - Top Loggers: app, level, logger별 상위 로그 발생원
-- Recent Logs: app, level, logger, 검색어 기준 로그 tail
-- Warnings and Errors: WARNING/ERROR/CRITICAL 로그 tail
+- Recent Logs: app, level, logger, 검색어 기준 로그 tail. 기본 검색어는 빈 값으로 두고 literal
+  contains filter를 사용해 전체 라인 highlight를 피한다.
+- Error Log Lines: ERROR/CRITICAL 로그 tail
 - Audit Request Logs: `audit.request` logger 로그 tail
 
 ## Logs
@@ -141,4 +143,6 @@ ERROR 로그를 남긴다.
 Grafana Explore의 Loki datasource에서 `{job="haejillyeok-backend"}`,
 `{app_name="haejillyeok-be"}`, `{level="ERROR"}` 같은 LogQL label selector로 조회한다.
 Dashboard에서는 `job=haejillyeok-backend`를 기본값으로 두고 `app_name`, `level`, `logger`, `search`
-변수로 같은 로그를 필터링한다.
+변수로 같은 로그를 필터링한다. Grafana 기본 logs panel은 level별 전체 row 배경색을 provisioned
+dashboard JSON에서 안정적으로 제어하지 못하므로, ERROR/CRITICAL 로그는 별도 log panel에서 분리해
+확인한다.
