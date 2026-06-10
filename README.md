@@ -311,8 +311,8 @@ Workflow가 생성하는 `.env`의 `BE_ENV`는 항상 `prod`로 고정됩니다.
 network 이름입니다.
 
 배포 대상 서버는 `deploy` 계정으로 SSH 접속할 수 있어야 하고, Docker 명령을 실행할 권한이 있어야
-합니다. Workflow는 원격 서버의 `/opt/haejillyeok/backend/.env`를 만들고 컨테이너에
-`/app/.env:ro`로 마운트합니다. `deploy` 계정은 `/opt/haejillyeok/backend`에 쓸 수 있어야 합니다.
+합니다. Workflow는 원격 서버의 `/opt/haejillyeok/backend/.env`를 만들고 `docker run --env-file`로
+컨테이너 환경변수에 주입합니다. `deploy` 계정은 `/opt/haejillyeok/backend`에 쓸 수 있어야 합니다.
 Runtime image에는 `.env`, Alembic 설정, migration revision을 넣지 않습니다.
 
 ```bash

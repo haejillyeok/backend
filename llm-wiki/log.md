@@ -2,6 +2,12 @@
 
 이 파일은 `llm-wiki/`의 시간순 작업 이력입니다. 새 항목은 위에 추가합니다.
 
+## [2026-06-10] maintenance | Use Docker env-file for deploy env
+
+- GitHub Actions Docker deploy workflow가 원격 `.env`를 `/app/.env:ro`로 마운트하지 않고 `docker run --env-file`로 주입하도록 바꿨다.
+- 원격 `.env`는 `chmod 600`을 유지해 `deploy` 계정만 읽고, 컨테이너 내부 `app` 유저가 bind mount 권한 때문에 `.env`를 읽지 못하는 문제를 피한다.
+- README와 runtime configuration wiki에 Docker 배포 env 주입 방식을 반영했다.
+
 ## [2026-06-10] maintenance | Restrict CORS origin allowlist
 
 - CORS middleware 적용 대상을 브라우저에서 직접 호출되는 `be` 서버로 제한했다.

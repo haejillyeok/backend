@@ -86,8 +86,9 @@ GitHub runner는 수동 실행 input `target_tag`를 Docker image tag로 사용�
 형식에 맞지 않으면 실패한다. 유효한 tag이면 해당 tag ref를 checkout한 뒤 Docker Hub에는
 `DOCKERHUB_USERNAME/haejillyeok-backend:{version-tag}`와 `latest` tag를 함께 push한다. 원격
 서버에는 `deploy` 계정으로 SSH 접속하고, `/opt/haejillyeok/backend/.env` 파일을 생성한 뒤
-컨테이너에 `/app/.env:ro`로 volume mount한다. `deploy` 계정은 `/opt/haejillyeok/backend`에 쓸 수
-있어야 한다. 원격 컨테이너는 기본적으로 `APP_MODULE=be`, `PORT=8000`으로 실행하고
+`docker run --env-file`로 컨테이너 환경변수에 주입한다. 원격 `.env`는 `deploy`만 읽을 수 있도록
+`600` 권한을 유지한다. `deploy` 계정은 `/opt/haejillyeok/backend`에 쓸 수 있어야 한다. 원격
+컨테이너는 기본적으로 `APP_MODULE=be`, `PORT=8000`으로 실행하고
 `DOCKER_NETWORK`에 지정한 user-defined Docker network에 붙인다. 원격 서버에는 Docker Hub
 credential을 전달하지 않고 public image를 pull한다.
 

@@ -173,9 +173,9 @@ jobs:
             --name "$CONTAINER_NAME" \
             --restart unless-stopped \
             --network "$DOCKER_NETWORK" \
+            --env-file "$REMOTE_ENV_FILE" \
             -e APP_MODULE="$APP_MODULE" \
             -e PORT="$APP_PORT" \
-            -v "$REMOTE_ENV_FILE:/app/.env:ro" \
             -p "$APP_PORT:$APP_PORT" \
             "$IMAGE_NAME:$IMAGE_TAG"
           docker ps --filter "name=$CONTAINER_NAME"
