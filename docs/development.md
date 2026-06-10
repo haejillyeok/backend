@@ -66,7 +66,8 @@ Collector metrics:    http://localhost:9464/metrics
 | agent HTTP | `127.0.0.1:8001` |
 
 Grafana 기본 계정은 `admin` / `admin`입니다. 필요한 경우 인프라 실행 환경에서 관리자 계정 값을
-바꿉니다. Prometheus, Tempo, Loki datasource는 자동으로 provision 됩니다.
+바꿉니다. Prometheus, Tempo, Loki datasource와 FastAPI metric, trace, log dashboard는 자동으로
+provision 됩니다.
 
 앱 로그와 Uvicorn access/error 로그는 stdout과 `logs/<app_name>.log`에 함께 기록합니다.
 파일 로그는 매일 회전하고 기본 14일 동안 보관합니다. `logs/`의 `*.log*` 전체 용량이
@@ -82,7 +83,9 @@ LOG_CLEANUP_INTERVAL_SECONDS=60
 
 Promtail은 `logs/*.log*` 파일을 읽고 log line에서 `app_name`, `level`, `logger` label을 추출해
 Loki로 전송합니다. Grafana Explore의 Loki datasource에서 `{job="haejillyeok-backend"}`,
-`{app_name="haejillyeok-be"}` 같은 LogQL query로 확인합니다.
+`{app_name="haejillyeok-be"}` 같은 LogQL query로 확인합니다. Grafana log dashboard는
+`docker/grafana/dashboards/fastapi-logs.json`에서 provision 되며 log volume, error logs, top
+logger, recent logs, audit request logs panel을 포함합니다.
 
 FastAPI 앱은 기본적으로 APM exporter를 연결합니다. 특정 상황에서 관측 전송을 끄고 싶을 때만
 서버 `.env`의 APM exporter 값을 비활성화합니다. 기본 전송 endpoint는 `http://localhost:4318`

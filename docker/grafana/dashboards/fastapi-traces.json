@@ -31,6 +31,18 @@
       "tooltip": "Open the Prometheus metric dashboard.",
       "type": "dashboards",
       "uid": "haejillyeok-fastapi-apm"
+    },
+    {
+      "asDropdown": false,
+      "icon": "dashboard",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "FastAPI Logs",
+      "tooltip": "Open the Loki log dashboard.",
+      "type": "dashboards",
+      "uid": "haejillyeok-fastapi-logs"
     }
   ],
   "liveNow": false,

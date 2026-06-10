@@ -2,6 +2,13 @@
 
 이 파일은 `llm-wiki/`의 시간순 작업 이력입니다. 새 항목은 위에 추가합니다.
 
+## [2026-06-10] maintenance | Add Loki log dashboard
+
+- 기존 FastAPI APM dashboard가 현재 Prometheus metric 이름과 label 기준을 쓰는지 확인했다.
+- Loki datasource를 사용하는 `Haejillyeok FastAPI Logs` dashboard를 추가했다.
+- 로그 dashboard는 `job`, `app_name`, `level`, `logger`, `search` 변수로 파일 로그를 필터링하고, level별 volume, error count, top logger, recent logs, audit request logs panel을 제공한다.
+- APM/trace dashboard에서 log dashboard로 이동하는 링크를 추가하고 README, development docs, observability wiki에 반영했다.
+
 ## [2026-06-10] maintenance | Store deploy logs under var log
 
 - 배포 서버의 외부 로그 저장 경로를 `/var/log/haejillyeok/*.log*`로 정리했다.

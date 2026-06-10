@@ -82,7 +82,7 @@ OpenTelemetry HTTP:   localhost:4318
 서버 프로세스의 기본 타임존은 KST(`Asia/Seoul`)입니다. 앱 설정 기본값도
 `APP_TIMEZONE=Asia/Seoul`이며, 다른 값이 필요할 때만 `.env`나 실행 환경변수로 덮어씁니다.
 
-Grafana 기본 계정은 `admin` / `admin`이며, FastAPI metric dashboard, trace dashboard,
+Grafana 기본 계정은 `admin` / `admin`이며, FastAPI metric dashboard, trace dashboard, log dashboard,
 Prometheus/Tempo/Loki datasource는 자동으로 provision 됩니다. 앱은 기본적으로 metric/trace를
 내보내며, 필요한 상황에서만 서버 `.env`의 APM exporter 값을 꺼둡니다.
 
@@ -91,6 +91,8 @@ Prometheus/Tempo/Loki datasource는 자동으로 provision 됩니다. 앱은 기
 넘으면 오래된 파일부터 삭제합니다.
 Promtail은 `logs/*.log*`를 읽어 Loki로 전송하므로 Grafana Explore의 Loki datasource에서
 `{job="haejillyeok-backend"}` 또는 `{app_name="haejillyeok-be"}`처럼 조회할 수 있습니다.
+`Haejillyeok FastAPI Logs` dashboard에서는 app, level, logger, 검색어 기준으로 같은 로그를
+조회합니다.
 필요하면 아래 환경변수로 파일 로그 기준을 바꿉니다.
 
 ```text

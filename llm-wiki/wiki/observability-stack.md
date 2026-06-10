@@ -38,9 +38,9 @@ FastAPI app -> logs/*.log* -> Promtail -> Loki -> Grafana
 - Promtail은 `logs/*.log*` 파일을 tailing하고 `app_name`, `level`, `logger` label을 추출해
   Loki로 전송한다.
 - Loki도 local stack에서 14일(`336h`) 보존 기간을 둔다.
-- Grafana는 provisioned Prometheus datasource와
-  `docker/grafana/dashboards/fastapi-apm.json` dashboard를 사용한다. Tempo와 Loki datasource도
-  provision 된다.
+- Grafana는 provisioned Prometheus/Tempo/Loki datasource와
+  `docker/grafana/dashboards/fastapi-apm.json`, `fastapi-traces.json`, `fastapi-logs.json`
+  dashboard를 사용한다.
 
 ## Metrics
 
@@ -108,6 +108,15 @@ Grafana trace dashboard는 `Haejillyeok FastAPI Traces` 제목으로 provision �
 
 Trace 상세 waterfall은 dashboard table에서 trace를 열거나 Grafana Explore의 Tempo datasource에서 확인한다.
 
+Grafana log dashboard는 `Haejillyeok FastAPI Logs` 제목으로 provision 된다.
+
+- Log Volume by Level: level별 로그 건수
+- Error Logs: ERROR/CRITICAL 로그 건수
+- Top Loggers: app, level, logger별 상위 로그 발생원
+- Recent Logs: app, level, logger, 검색어 기준 로그 tail
+- Warnings and Errors: WARNING/ERROR/CRITICAL 로그 tail
+- Audit Request Logs: `audit.request` logger 로그 tail
+
 ## Logs
 
 파일 로그 설정은 `app/shared/core/logging_config.py`가 담당한다. Root logger뿐 아니라
@@ -131,3 +140,5 @@ ERROR 로그를 남긴다.
 
 Grafana Explore의 Loki datasource에서 `{job="haejillyeok-backend"}`,
 `{app_name="haejillyeok-be"}`, `{level="ERROR"}` 같은 LogQL label selector로 조회한다.
+Dashboard에서는 `job=haejillyeok-backend`를 기본값으로 두고 `app_name`, `level`, `logger`, `search`
+변수로 같은 로그를 필터링한다.
