@@ -1,4 +1,5 @@
 import importlib.util
+import logging
 import os
 import tomllib
 from datetime import UTC, datetime, timedelta
@@ -10,7 +11,12 @@ from app.agent.main import create_app as create_agent_app
 from app.be.main import create_app as create_be_app
 from app.shared.core.config import AppSettings, configure_app_timezone
 from app.shared.core.exceptions import AppException
-from app.shared.core.logging_config import LogFileSettings, cleanup_log_files
+from app.shared.core.logging_config import (
+    LogFileSettings,
+    cleanup_log_files,
+    configure_logging,
+    remove_project_file_handlers,
+)
 from app.shared.core.responses import fail, ok
 
 
@@ -93,6 +99,26 @@ def test_cleanup_log_files_keeps_protected_active_log(tmp_path):
 
     assert active_log.exists()
     assert not older_log.exists()
+
+
+def test_configure_logging_writes_uvicorn_logs_to_file(monkeypatch, tmp_path):
+    monkeypatch.setenv("LOG_FILE_ENABLED", "true")
+    monkeypatch.setenv("LOG_DIR", str(tmp_path))
+
+    configure_logging("test-app", environment="prod")
+    uvicorn_access_logger = logging.getLogger("uvicorn.access")
+    uvicorn_access_logger.info("GET /health 200")
+    for handler in logging.getLogger().handlers + uvicorn_access_logger.handlers:
+        handler.flush()
+
+    log_text = (tmp_path / "test-app.log").read_text(encoding="utf-8")
+
+    assert "[test-app] [uvicorn.access] GET /health 200" in log_text
+    remove_project_file_handlers(
+        logging.getLogger(),
+        logging.getLogger("uvicorn"),
+        logging.getLogger("uvicorn.access"),
+    )
 
 
 def test_be_health_endpoints_return_ok():

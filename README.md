@@ -86,8 +86,9 @@ Grafana 기본 계정은 `admin` / `admin`이며, FastAPI metric dashboard, trac
 Prometheus/Tempo/Loki datasource는 자동으로 provision 됩니다. 앱은 기본적으로 metric/trace를
 내보내며, 필요한 상황에서만 서버 `.env`의 APM exporter 값을 꺼둡니다.
 
-앱 로그는 stdout과 `logs/<app_name>.log`에 함께 기록됩니다. 파일 로그는 매일 회전하며 기본
-14일 동안 보관하고, `logs/`의 `*.log*` 전체 용량이 기본 1GB를 넘으면 오래된 파일부터 삭제합니다.
+앱 로그와 Uvicorn access/error 로그는 stdout과 `logs/<app_name>.log`에 함께 기록됩니다.
+파일 로그는 매일 회전하며 기본 14일 동안 보관하고, `logs/`의 `*.log*` 전체 용량이 기본 1GB를
+넘으면 오래된 파일부터 삭제합니다.
 Promtail은 `logs/*.log*`를 읽어 Loki로 전송하므로 Grafana Explore의 Loki datasource에서
 `{job="haejillyeok-backend"}` 또는 `{app_name="haejillyeok-be"}`처럼 조회할 수 있습니다.
 필요하면 아래 환경변수로 파일 로그 기준을 바꿉니다.

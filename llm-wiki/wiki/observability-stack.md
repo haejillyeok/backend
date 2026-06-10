@@ -27,7 +27,8 @@ FastAPI app -> logs/*.log* -> Promtail -> Loki -> Grafana
   Prometheus scrape endpoint `9464`로 metric을 노출하며 trace는 Tempo로 전달한다.
 - Prometheus는 `otel-collector:9464`를 scrape한다.
 - Tempo는 trace span을 저장하고 Grafana Explore의 `Tempo` datasource로 조회된다.
-- 앱은 stdout과 `logs/<app_name>.log`에 같은 포맷으로 로그를 기록한다.
+- 앱 logger와 Uvicorn access/error logger는 stdout과 `logs/<app_name>.log`에 같은 포맷으로
+  로그를 기록한다.
 - 파일 로그는 매일 회전하고 기본 14일 동안 보관한다.
 - 앱 시작 시와 파일 로그 emit 중 주기적으로 `LOG_DIR`의 `*.log*` 파일을 검사해
   `LOG_RETENTION_DAYS`보다 오래된 파일을 지우고, 전체 용량이 `LOG_MAX_TOTAL_BYTES`를 넘으면
@@ -107,7 +108,9 @@ Trace 상세 waterfall은 dashboard table에서 trace를 열거나 Grafana Explo
 
 ## Logs
 
-파일 로그 설정은 `app/shared/core/logging_config.py`가 담당한다.
+파일 로그 설정은 `app/shared/core/logging_config.py`가 담당한다. Root logger뿐 아니라
+`uvicorn`, `uvicorn.access` logger에도 같은 file handler를 붙여 Uvicorn access/error 로그가
+파일에 남도록 한다.
 
 - `LOG_FILE_ENABLED`: 파일 로그 활성화 여부, 기본값 `true`
 - `LOG_DIR`: 파일 로그 디렉터리, 기본값 `logs`

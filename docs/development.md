@@ -68,9 +68,9 @@ Collector metrics:    http://localhost:9464/metrics
 Grafana 기본 계정은 `admin` / `admin`입니다. 필요한 경우 인프라 실행 환경에서 관리자 계정 값을
 바꿉니다. Prometheus, Tempo, Loki datasource는 자동으로 provision 됩니다.
 
-앱 로그는 stdout과 `logs/<app_name>.log`에 함께 기록합니다. 파일 로그는 매일 회전하고 기본 14일
-동안 보관합니다. `logs/`의 `*.log*` 전체 용량이 `LOG_MAX_TOTAL_BYTES`를 넘으면 오래된 파일부터
-삭제합니다. 기본값은 1GB입니다.
+앱 로그와 Uvicorn access/error 로그는 stdout과 `logs/<app_name>.log`에 함께 기록합니다.
+파일 로그는 매일 회전하고 기본 14일 동안 보관합니다. `logs/`의 `*.log*` 전체 용량이
+`LOG_MAX_TOTAL_BYTES`를 넘으면 오래된 파일부터 삭제합니다. 기본값은 1GB입니다.
 
 ```text
 LOG_FILE_ENABLED=true

@@ -2,6 +2,11 @@
 
 이 파일은 `llm-wiki/`의 시간순 작업 이력입니다. 새 항목은 위에 추가합니다.
 
+## [2026-06-10] maintenance | Include Uvicorn logs in file logging
+
+- 파일 로그 handler를 root logger뿐 아니라 `uvicorn`, `uvicorn.access` logger에도 연결하도록 정리했다.
+- Uvicorn access/error 로그가 `logs/<app_name>.log`에 함께 기록된다는 테스트와 문서 기준을 추가했다.
+
 ## [2026-06-10] maintenance | Mount deploy log directory
 
 - GitHub Actions Docker deploy workflow가 원격 `/opt/haejillyeok/backend/logs`를 컨테이너 `/app/logs`로 bind mount하도록 반영했다.

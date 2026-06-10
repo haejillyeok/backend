@@ -11,6 +11,7 @@ DEFAULT_LOG_DIR = "logs"
 DEFAULT_LOG_RETENTION_DAYS = 14
 DEFAULT_LOG_MAX_TOTAL_BYTES = 1024 * 1024 * 1024
 DEFAULT_LOG_CLEANUP_INTERVAL_SECONDS = 60
+FILE_LOGGER_NAMES = ("uvicorn", "uvicorn.access")
 
 
 @dataclass(frozen=True)
@@ -135,11 +136,9 @@ def add_file_log_handler(
     """
     settings.directory.mkdir(parents=True, exist_ok=True)
     log_path = settings.directory / f"{app_name}.log"
+    file_loggers = [logging.getLogger(name) for name in FILE_LOGGER_NAMES]
 
-    for handler in list(root_logger.handlers):
-        if getattr(handler, "_haejillyeok_file_handler", False):
-            root_logger.removeHandler(handler)
-            handler.close()
+    remove_project_file_handlers(root_logger, *file_loggers)
 
     cleanup_log_files(settings.directory, settings.retention_days, settings.max_total_bytes)
 
@@ -152,6 +151,30 @@ def add_file_log_handler(
     file_handler._haejillyeok_file_handler = True
     file_handler._haejillyeok_log_path = log_path
     root_logger.addHandler(file_handler)
+    for logger in file_loggers:
+        logger.addHandler(file_handler)
+        logger.propagate = False
+
+
+def remove_project_file_handlers(*loggers: logging.Logger) -> None:
+    """프로젝트가 추가한 파일 handler를 logger들에서 제거합니다.
+
+    주요 입력은 logger 목록이며, 반환값은 없습니다. 같은 handler가 여러 logger에 붙어 있어도 한 번만
+    close해 handler 교체 중 파일 descriptor가 남지 않도록 합니다.
+    """
+    closed_handler_ids: set[int] = set()
+    for logger in loggers:
+        for handler in list(logger.handlers):
+            if not getattr(handler, "_haejillyeok_file_handler", False):
+                continue
+
+            logger.removeHandler(handler)
+            handler_id = id(handler)
+            if handler_id in closed_handler_ids:
+                continue
+
+            handler.close()
+            closed_handler_ids.add(handler_id)
 
 
 def cleanup_log_files(
