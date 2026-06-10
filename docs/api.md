@@ -100,6 +100,60 @@ Response:
 | `401` / `INVALID_CREDENTIALS` | 기존 계정 ID의 비밀번호가 일치하지 않음 |
 | `422` / `VALIDATION_ERROR` | 요청 body validation 실패 |
 
+## BE Realtime WebSocket
+
+BE 서버의 사용자-facing 실시간 통신 엔드포인트입니다. 운영 환경에서 HTTPS/TLS 앞단을 통해
+노출할 때 클라이언트는 아래 path를 `wss://<host>/api/v1/ws/realtime`로 연결합니다.
+로컬 개발에서는 `ws://127.0.0.1:8000/api/v1/ws/realtime`를 사용할 수 있습니다.
+BE 서버에서 `GET /api/v1/ws-docs`를 호출하면 WebSocket API 전용 문서 페이지를 조회할 수 있습니다.
+
+WebSocket 메시지는 JSON envelope를 사용합니다.
+
+```json
+{
+  "type": "ping",
+  "payload": {}
+}
+```
+
+### `wss://<host>/api/v1/ws/realtime`
+
+지원 메시지:
+
+| Client `type` | Server `type` | Meaning |
+| --- | --- | --- |
+| `ping` | `realtime.pong` | 연결 확인. 서버는 받은 `payload`를 그대로 돌려줌 |
+
+Response:
+
+```json
+{
+  "type": "realtime.pong",
+  "payload": {}
+}
+```
+
+잘못된 JSON, envelope 형식 오류, 지원하지 않는 message type은 `error` envelope를 보낸 뒤
+`VALIDATION_ERROR`의 WebSocket close code인 `1008`로 연결을 종료합니다.
+
+```json
+{
+  "type": "error",
+  "payload": {
+    "success": false,
+    "data": null,
+    "error": {
+      "code": "VALIDATION_ERROR",
+      "message": "요청 값이 올바르지 않습니다.",
+      "details": {
+        "reason": "unsupported_message_type",
+        "type": "unknown"
+      }
+    }
+  }
+}
+```
+
 ## Agent Health
 
 에이전트 상태 확인용 엔드포인트입니다.

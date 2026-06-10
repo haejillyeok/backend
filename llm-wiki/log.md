@@ -2,6 +2,23 @@
 
 이 파일은 `llm-wiki/`의 시간순 작업 이력입니다. 새 항목은 위에 추가합니다.
 
+## [2026-06-11] maintenance | Link WebSocket docs from BE Swagger
+
+- BE 서버 FastAPI description에 `[WebSocket API 문서](/api/v1/ws-docs)` 링크를 추가했다.
+- FastAPI WebSocket route는 OpenAPI path operation으로 자동 문서화되지 않으므로 Swagger 상단 설명에서 별도 문서 페이지로 연결한다고 기록했다.
+
+## [2026-06-11] maintenance | Expose WebSocket API docs page
+
+- WebSocket API 전용 Markdown 문서를 Docker image에 포함되는 `app/be/api/docs/ws-api.md`로 추가했다.
+- BE 서버에서 `GET /api/v1/ws-docs`가 `app/be/api/docs/ws-api.md`를 HTML 페이지로 렌더링한다고 기록했다.
+- WebSocket 계약이 늘어나면 `app/be/api/docs/ws-api.md`, `docs/api.md`, `llm-wiki/wiki/realtime-websocket.md`를 함께 갱신하도록 연결했다.
+
+## [2026-06-11] maintenance | Add BE realtime WebSocket contract
+
+- BE 서버에 `/api/v1/ws/realtime` WebSocket endpoint를 추가한 내용을 위키에 기록했다.
+- 운영 HTTPS/TLS 앞단에서는 같은 path를 `wss://<host>/api/v1/ws/realtime`로 연결한다고 정리했다.
+- JSON envelope 기반 `ping` / `realtime.pong` 계약과 `VALIDATION_ERROR` close code `1008` 처리 기준을 남겼다.
+
 ## [2026-06-10] maintenance | Add Loki log dashboard
 
 - 기존 FastAPI APM dashboard가 현재 Prometheus metric 이름과 label 기준을 쓰는지 확인했다.

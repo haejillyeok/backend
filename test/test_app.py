@@ -369,6 +369,14 @@ def test_be_openapi_documents_success_and_error_envelopes():
     assert invalid_credentials_example["error"]["details"] is None
 
 
+def test_be_openapi_description_links_websocket_api_docs():
+    schema = create_be_app().openapi()
+
+    description = schema["info"]["description"]
+
+    assert "[WebSocket API 문서](/api/v1/ws-docs)" in description
+
+
 def test_agent_health_endpoints_return_ok():
     client = TestClient(create_agent_app())
 

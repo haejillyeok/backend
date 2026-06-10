@@ -19,6 +19,13 @@ from app.shared.core.openapi import install_openapi_schema
 
 
 settings = AppSettings(app_name="haejillyeok-be")
+API_DESCRIPTION = """
+Haejillyeok BE HTTP API입니다.
+
+WebSocket API는 Swagger/OpenAPI에 자동 포함되지 않으므로 별도 문서 페이지에서 관리합니다.
+
+- [WebSocket API 문서](/api/v1/ws-docs)
+"""
 
 
 @asynccontextmanager
@@ -33,6 +40,7 @@ def create_app() -> FastAPI:
 
     app = FastAPI(
         title=settings.app_name,
+        description=API_DESCRIPTION,
         version=settings.app_version,
         debug=settings.debug,
         lifespan=app_lifespan,

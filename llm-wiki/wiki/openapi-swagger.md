@@ -41,10 +41,17 @@ audience: ai
   - Swagger UI: `/docs`
   - OpenAPI JSON: `/openapi.json`
   - ReDoc: `/redoc`
+  - Swagger description의 WebSocket API 링크: `/api/v1/ws-docs`
 - Agent 서버:
   - Swagger UI: `/docs`
   - OpenAPI JSON: `/openapi.json`
   - ReDoc: `/redoc`
+
+## WebSocket Docs Link
+
+FastAPI WebSocket route는 OpenAPI path operation으로 자동 문서화되지 않는다. BE 서버는
+`app/be/main.py`의 `FastAPI(description=...)`에 `[WebSocket API 문서](/api/v1/ws-docs)` 링크를 넣어
+Swagger 상단 설명에서 WebSocket API 문서 페이지로 이동할 수 있게 한다.
 
 ## OpenAPI Generator Readiness
 
