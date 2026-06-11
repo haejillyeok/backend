@@ -64,7 +64,7 @@ def extract_chosung(word: str) -> str:
     return "".join(result)
 
 
-def build_word_payload(word: str, game_types: list[str]) -> dict:
+def build_word_payload(word: str) -> dict:
     """단어 하나를 Qdrant 적재용 payload로 변환합니다."""
     word_norm = normalize_word(word)
     if not word_norm:
@@ -72,14 +72,10 @@ def build_word_payload(word: str, game_types: list[str]) -> dict:
     syllables = split_syllables(word_norm)
     return {
         "word": word_norm,
-        "word_norm": word_norm,
-        "game_types": list(dict.fromkeys(game_types)),
         "start_word": syllables[0],
         "end_word": syllables[-1],
         "chosung": extract_chosung(word_norm),
         "syllables": syllables,
         "length": len(syllables),
-        "ai_used_count": 0,
-        "is_valid": True,
-        "is_banned": False,
+        "used_count": 0,
     }

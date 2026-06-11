@@ -39,7 +39,7 @@ spec:
                     app: agent
       containers:
         - name: agent
-          image: haejillyeok-backend:0.2.0
+          image: haejillyeok-backend:0.3.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

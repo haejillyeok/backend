@@ -1,20 +1,22 @@
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 
 from app.agent.schemas.base import AgentSchemaModel
-from app.agent.schemas.request.answer import GameType
 
 
 class StackOptions(AgentSchemaModel):
-    is_valid: bool = True
-    is_banned: bool = False
     overwrite_existing: bool = False
-    preserve_ai_used_count: bool = True
+    preserve_used_count: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "preserve_used_count",
+            "preserve_ai_used_count",
+        ),
+    )
 
 
 class DataStackRequest(AgentSchemaModel):
     request_id: str | None = None
     source: str = "manual"
-    game_types: list[GameType] = Field(min_length=1)
     words: list[str] = Field(min_length=1)
     options: StackOptions = Field(default_factory=StackOptions)
 

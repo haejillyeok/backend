@@ -256,7 +256,8 @@ vLLM이 비활성화됐거나, 호출에 실패했거나, 생성 결과가 검�
 
 `game_type`은 `shiritori`, `chosung`, `contains`를 지원합니다. `condition.last_char`,
 `condition.chosung`, `condition.contains_word`를 각각 사용하며, 끝말잇기는 기존 호환을 위해
-root `last_char`도 허용합니다. 현재 vLLM 생성 fallback은 `shiritori`에만 적용합니다.
+root `last_char`도 허용합니다. Qdrant 후보가 없으면 세 game type 모두 각각의 조건을 검증하는
+vLLM 생성 fallback을 한 번 호출합니다.
 
 ## Agent Data Stack
 
@@ -268,16 +269,33 @@ root `last_char`도 허용합니다. 현재 vLLM 생성 fallback은 `shiritori`�
 {
   "request_id": "stack-20260610-0001",
   "source": "manual",
-  "game_types": ["shiritori", "chosung", "contains"],
   "words": ["사과", "고구마밭", "줄넘기"],
   "options": {
-    "is_valid": true,
-    "is_banned": false,
     "overwrite_existing": false,
-    "preserve_ai_used_count": true
+    "preserve_used_count": true
   }
 }
 ```
+
+검증 완료 단어만 적재하며 Qdrant payload는 다음 필드만 사용합니다.
+
+```json
+{
+  "word": "사과",
+  "start_word": "사",
+  "end_word": "과",
+  "chosung": "ㅅㄱ",
+  "syllables": ["사", "과"],
+  "length": 2,
+  "used_count": 0
+}
+```
+
+기존 client의 `game_types`, `is_valid`, `is_banned` 입력은 무시하며
+`preserve_ai_used_count`는 `preserve_used_count`의 호환 입력으로 허용합니다.
+
+검증 완료 JSONL을 직접 적재할 때는 `scripts/seed_word_payloads.py`를 사용합니다. 파일을
+스트리밍 검증하고 기본 500개 단위로 Qdrant에 upsert합니다.
 
 응답 status는 `202 Accepted`입니다.
 

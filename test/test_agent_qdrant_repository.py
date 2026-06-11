@@ -22,22 +22,17 @@ class FakeQdrantClient:
 async def test_restacking_same_word_does_not_create_duplicate_point() -> None:
     client = FakeQdrantClient()
     repository = QdrantWordRepository(client, "game_words")
-    payload = WordService().prepare_payloads(
-        ["사과"],
-        ["shiritori"],
-        is_valid=True,
-        is_banned=False,
-    )
+    payload = WordService().prepare_payloads(["사과"])
 
     first_count = await repository.upsert_words(
         payload,
         overwrite_existing=False,
-        preserve_ai_used_count=True,
+        preserve_used_count=True,
     )
     second_count = await repository.upsert_words(
         payload,
         overwrite_existing=False,
-        preserve_ai_used_count=True,
+        preserve_used_count=True,
     )
 
     assert first_count == 1
@@ -45,26 +40,45 @@ async def test_restacking_same_word_does_not_create_duplicate_point() -> None:
     assert len(client.points) == 1
 
 
-async def test_overwrite_preserves_existing_ai_used_count() -> None:
+async def test_overwrite_preserves_existing_used_count() -> None:
     client = FakeQdrantClient()
     repository = QdrantWordRepository(client, "game_words")
-    payload = WordService().prepare_payloads(
-        ["사과"],
-        ["shiritori"],
-        is_valid=True,
-        is_banned=False,
-    )
+    payload = WordService().prepare_payloads(["사과"])
     await repository.upsert_words(
         payload,
         overwrite_existing=False,
-        preserve_ai_used_count=True,
+        preserve_used_count=True,
     )
-    next(iter(client.points.values())).payload["ai_used_count"] = 120
+    next(iter(client.points.values())).payload["used_count"] = 120
 
     await repository.upsert_words(
         payload,
         overwrite_existing=True,
-        preserve_ai_used_count=True,
+        preserve_used_count=True,
     )
 
-    assert next(iter(client.points.values())).payload["ai_used_count"] == 120
+    assert next(iter(client.points.values())).payload["used_count"] == 120
+
+
+async def test_overwrite_migrates_legacy_ai_used_count() -> None:
+    client = FakeQdrantClient()
+    repository = QdrantWordRepository(client, "game_words")
+    payload = WordService().prepare_payloads(["사과"])
+    await repository.upsert_words(
+        payload,
+        overwrite_existing=False,
+        preserve_used_count=True,
+    )
+    existing_payload = next(iter(client.points.values())).payload
+    existing_payload.pop("used_count")
+    existing_payload["ai_used_count"] = 7
+
+    await repository.upsert_words(
+        payload,
+        overwrite_existing=True,
+        preserve_used_count=True,
+    )
+
+    migrated_payload = next(iter(client.points.values())).payload
+    assert migrated_payload["used_count"] == 7
+    assert "ai_used_count" not in migrated_payload

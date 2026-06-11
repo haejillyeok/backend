@@ -15,11 +15,6 @@ async def main() -> None:
     parser.add_argument("file", type=Path)
     parser.add_argument("--url", default="http://qdrant:6333")
     parser.add_argument("--collection", default="game_words")
-    parser.add_argument(
-        "--game-types",
-        nargs="+",
-        default=["shiritori", "chosung", "contains"],
-    )
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
 
@@ -28,12 +23,7 @@ async def main() -> None:
         for line in args.file.read_text(encoding="utf-8").splitlines()
         if line.strip() and not line.lstrip().startswith("#")
     ]
-    payloads = WordService().prepare_payloads(
-        words,
-        args.game_types,
-        is_valid=True,
-        is_banned=False,
-    )
+    payloads = WordService().prepare_payloads(words)
 
     client = AsyncQdrantClient(url=args.url, check_compatibility=False)
     try:
@@ -42,7 +32,7 @@ async def main() -> None:
         count = await repository.upsert_words(
             payloads,
             overwrite_existing=args.overwrite,
-            preserve_ai_used_count=True,
+            preserve_used_count=True,
         )
         print(f"upserted {count} of {len(payloads)} words")
     finally:

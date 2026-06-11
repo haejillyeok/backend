@@ -49,7 +49,9 @@ class CandidateService:
             self._candidate_limit,
         )
         candidates = [
-            candidate for candidate in candidates if candidate.word_norm not in used_words
+            candidate
+            for candidate in candidates
+            if normalize_word(candidate.word) not in used_words
         ]
         if not candidates:
             return CandidateSelection(
