@@ -47,6 +47,6 @@ pool 크기와 timeout 같은 값은 코드에서 관리합니다.
 호출 대상 서버가 소유한 HTTP API 계약과 `app/shared/clients`의 기능별 client wrapper를 통해
 호출합니다.
 
-사용자-facing 실시간 통신은 BE 서버의 `/ws/realtime` WebSocket 엔드포인트에서 처리합니다.
+BE 서버의 `/ws/realtime` WebSocket 엔드포인트는 연결 테스트용 ping/pong 채널입니다.
 운영 HTTPS/TLS 앞단에서는 같은 path를 `wss://<host>/ws/realtime`로 노출합니다.
-현재 realtime 채널은 JSON envelope 기반 `ping` / `realtime.pong` 연결 확인 메시지를 지원합니다.
+해질녘 게임의 실제 실시간 통신은 `/ws/lobby`, `/ws/match`처럼 목적별 WebSocket endpoint로 분리합니다.

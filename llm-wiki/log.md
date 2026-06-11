@@ -4,6 +4,23 @@
 코드 변경 상세는 Git history, PR, issue에서 확인하고, 이 파일에는 위키 페이지의 지식, 계약, 정책,
 컨벤션이 어떻게 바뀌었는지만 남깁니다.
 
+## [2026-06-11] maintenance | Split lobby and match WebSocket direction
+
+- `realtime-websocket.md`에서 `/ws/realtime`을 실제 게임 상태가 아닌 ping/pong 연결 테스트용 endpoint로 정리했다.
+- `sunset-game-domain.md`와 결정 기록에 실제 게임 통신은 `/ws/lobby`, `/ws/match`로 처음부터 분리한다는 기준을 반영했다.
+- 기획 점검 결과 투표 시점을 라운드 종료가 아니라 게임/모든 라운드 종료 이후로 정리하고, AI 우승/보상, 점수 구간, 라운드 단위는 열린 질문으로 남겼다.
+
+## [2026-06-11] ingest | Add Kkutu reference takeaways
+
+- `sunset-game-domain.md`에 Kkutu 분석에서 참고할 빠른 시작 상태 머신, lobby/match WebSocket 관심사 분리, command-response와 broadcast 분리 기준을 반영했다.
+- 로비/객실/매치 snapshot, 재접속 복구, 경기 화면 상태 분리, 게스트 플레이 여부를 향후 결정 지점으로 정리했다.
+
+## [2026-06-11] ingest | Add Sunset game domain model
+
+- `sunset-game-domain.md`에 해질녘 게임의 로비, 객실, 게임 세션, 라운드, 턴, 점수, 투표 도메인 기준을 정리했다.
+- WebSocket은 BE가 권위 있는 게임 상태를 유지하고 snapshot/event로 클라이언트를 동기화하는 방향으로 정리했다.
+- Agent는 AI 손님의 단어 후보만 제공하고 게임 상태, 점수, 투표 계산은 Backend가 소유한다는 경계를 명시했다.
+
 ## [2026-06-11] maintenance | Add BE to Agent health runtime contract
 
 - `runtime-configuration.md`에 BE가 Agent health API를 호출할 때 전용 client wrapper와 배포 주입 설정을 사용한다는 기준을 추가했다.
@@ -19,8 +36,6 @@
 - 회사 NodePort `31080`에서 Azure localhost로 이어지는 SSH reverse tunnel과 Azure Nginx를 외부 연결 경계로 기록했다.
 - Agent API, 한국어 처리, Qdrant 중복 적재, k3s manifest 테스트를 추가했다.
 
-## [2026-06-10] maintenance | Add Loki log dashboard
-=======
 ## [2026-06-11] maintenance | Separate socket router from API router
 
 - `realtime-websocket.md`에 WebSocket endpoint는 REST API router 밖의 `/ws/realtime`, 문서 페이지는 `/ws-docs`로 둔다는 계약을 반영했다.

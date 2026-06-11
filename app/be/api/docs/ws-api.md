@@ -1,8 +1,11 @@
 # WebSocket API
 
-BE 서버의 사용자-facing 실시간 통신 API입니다.
+BE 서버의 WebSocket API입니다.
 
 ## Realtime
+
+`/ws/realtime`은 연결 테스트용 ping/pong 채널입니다. 실제 해질녘 게임 상태는 이 endpoint에서
+처리하지 않고, 게임용 WebSocket은 `/ws/lobby`, `/ws/match`로 분리합니다.
 
 | Environment | URL |
 | --- | --- |
