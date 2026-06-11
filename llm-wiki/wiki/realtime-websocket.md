@@ -17,7 +17,7 @@ BE 서버는 사용자-facing 실시간 통신용 WebSocket endpoint를
 - Endpoint: `app/be/api/endpoints/realtime_ws.py`
 - HTML docs endpoint: `app/be/api/endpoints/ws_docs.py`
 - Connection manager and message handling: `app/be/services/realtime.py`
-- Socket router include: `app/be/socket_router.py`
+- Socket router include: `app/be/api/socket_router.py`
 - Contract tests: `test/test_realtime_websocket.py`
 - API-served docs source: `app/be/api/docs/ws-api.md`
 

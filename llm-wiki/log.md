@@ -7,7 +7,7 @@
 ## [2026-06-11] maintenance | Separate socket router from API router
 
 - `realtime-websocket.md`에 WebSocket endpoint는 REST API router 밖의 `/ws/realtime`, 문서 페이지는 `/ws-docs`로 둔다는 계약을 반영했다.
-- `backend-guidelines.md`에 WebSocket route는 `/ws/{feature}` 형식으로 통일하고 REST API router와 분리한다는 기준을 정리했다.
+- `backend-guidelines.md`에 WebSocket route는 `/ws/{feature}` 형식으로 통일하고 `app/{server}/api/socket_router.py`에서 조립한다는 기준을 정리했다.
 
 ## [2026-06-11] maintenance | Add registered route guard policy
 

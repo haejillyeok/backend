@@ -7,7 +7,7 @@ from app.be.api.exception_handlers import register_exception_handlers
 from app.be.api.endpoints.health import router as health_router
 from app.be.api.endpoints.ws_docs import router as ws_docs_router
 from app.be.api.router import router as api_router
-from app.be.socket_router import socket_router
+from app.be.api.socket_router import socket_router
 from app.shared.core.config import (
     AppSettings,
     configure_app_timezone,

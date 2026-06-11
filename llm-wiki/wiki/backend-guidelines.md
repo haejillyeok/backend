@@ -98,6 +98,7 @@ WebSocket은 사용자-facing 양방향 통신이 필요한 경우에 사용한�
 
 - WebSocket endpoint는 `app/{server}/api/endpoints/{feature}_ws.py` 또는 `realtime.py`에 둔다.
 - URL은 `/ws/{feature}` 형식으로 통일하고, REST API router와 분리한다.
+- WebSocket route 조립은 `app/{server}/api/socket_router.py`에서 맡고, `api/router.py`는 `/api/v1` REST API만 담당한다.
 - 인증/권한 정책은 HTTP API와 같은 원칙을 적용한다.
 
 ### Connection Management

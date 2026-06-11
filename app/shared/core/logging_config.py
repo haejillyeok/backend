@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -15,6 +16,8 @@ DEFAULT_LOG_MAX_TOTAL_BYTES = 1024 * 1024 * 1024
 DEFAULT_LOG_CLEANUP_INTERVAL_SECONDS = 60
 FILE_LOGGER_NAMES = ("uvicorn", "uvicorn.access")
 logger = logging.getLogger(__name__)
+HTTP_REQUEST_LINE_PATTERN = re.compile(r'"[A-Z]+ (?P<path>/[^ ]*) HTTP/\d(?:\.\d+)?"')
+PLAIN_HTTP_REQUEST_PATTERN = re.compile(r"^[A-Z]+ (?P<path>/[^ ]*)\b")
 
 
 @dataclass(frozen=True)
@@ -156,11 +159,21 @@ def install_blocked_route_access_log_filter(access_logger: logging.Logger) -> No
 def _extract_uvicorn_access_path(record: logging.LogRecord) -> str | None:
     """Uvicorn access log record 인자에서 query string을 제외한 path를 추출합니다."""
     if not isinstance(record.args, tuple) or len(record.args) < 3:
-        return None
+        return _extract_access_path_from_message(record.getMessage())
     raw_path = record.args[2]
-    if not isinstance(raw_path, str) or not raw_path.startswith("/"):
-        return None
-    return raw_path.split("?", 1)[0]
+    if isinstance(raw_path, str) and raw_path.startswith("/"):
+        return raw_path.split("?", 1)[0]
+    return _extract_access_path_from_message(record.getMessage())
+
+
+def _extract_access_path_from_message(message: str) -> str | None:
+    """문자열 access log 메시지에서 request path를 추출합니다."""
+    for pattern in (HTTP_REQUEST_LINE_PATTERN, PLAIN_HTTP_REQUEST_PATTERN):
+        match = pattern.search(message)
+        if match is None:
+            continue
+        return match.group("path").split("?", 1)[0]
+    return None
 
 
 def add_file_log_handler(
