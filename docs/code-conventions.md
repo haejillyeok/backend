@@ -35,11 +35,11 @@
 ## Comments and Docstrings
 
 - 로직 설명과 함수 docstring은 한국어로 작성한다.
-- public 함수, service/repository 메서드, gRPC handler, WebSocket connection manager 메서드는 의도, 주요 입력, 반환값, 부작용을 docstring 또는 가까운 주석으로 설명한다.
+- public 함수, service/repository 메서드, WebSocket connection manager 메서드는 의도, 주요 입력, 반환값, 부작용을 docstring 또는 가까운 주석으로 설명한다.
 - 복잡한 분기, 비즈니스 규칙, timeout/cancellation 처리, transaction 경계, retry/compensation 로직에는 왜 그렇게 처리하는지 한국어 주석을 남긴다.
 - 단순히 코드가 그대로 말하는 내용을 반복하는 주석은 쓰지 않는다.
 - 주석은 구현 세부를 장황하게 풀기보다 유지보수자가 다음 수정 때 놓치면 안 되는 맥락을 남긴다.
-- 외부 계약과 연결되는 함수는 관련 API, proto, WebSocket message type을 주석이나 docstring에 명시한다.
+- 외부 계약과 연결되는 함수는 관련 API, WebSocket message type을 주석이나 docstring에 명시한다.
 
 ## Layering
 
@@ -69,14 +69,13 @@
 
 ### Shared
 
-- `app/shared/`에는 두 서버가 정말 공유하는 설정, logging, gRPC helper, client wrapper만 둔다.
+- `app/shared/`에는 두 서버가 정말 공유하는 설정, logging, client wrapper만 둔다.
 - 특정 서버의 도메인 로직을 `shared`로 옮기지 않는다.
 
 ## Error Conventions
 
 - domain/service 계층은 HTTPException에 직접 의존하지 않는다.
 - endpoint는 domain exception을 HTTP status로 변환한다.
-- gRPC handler는 domain exception을 gRPC status로 변환한다.
 - 로그에는 내부 원인을 남기되, 외부 response에는 필요한 정보만 노출한다.
 
 ## API Conventions
@@ -86,12 +85,11 @@
 - 새 endpoint는 response model과 status code를 명시한다.
 - public API 변경은 `docs/api.md`에 반영한다.
 
-## gRPC Conventions
+## Client Wrapper Conventions
 
-- proto 변경 후 generated Python binding을 다시 생성한다.
-- generated 파일은 직접 수정하지 않는다.
-- server handler는 얇게 유지하고 service 계층으로 위임한다.
-- client 호출은 기능별 wrapper를 통해 수행하고 deadline을 명시한다.
+- 서버 간 호출은 기능별 wrapper를 통해 수행하고 timeout을 명시한다.
+- client wrapper는 외부 응답을 service 계층이 쓰기 쉬운 domain data로 매핑한다.
+- retry가 필요하면 멱등성과 timeout budget을 먼저 확인한다.
 
 ## WebSocket Conventions
 
@@ -106,7 +104,7 @@
 - 테스트 파일은 `test/` 아래에 둔다.
 - 새 public API는 정상 응답과 주요 실패 응답을 테스트한다.
 - dependency override가 필요한 테스트는 `create_app()`으로 앱을 생성한다.
-- gRPC client wrapper는 timeout, status handling, mapping을 테스트한다.
+- client wrapper는 timeout, status handling, mapping을 테스트한다.
 - WebSocket은 연결, 메시지 송수신, disconnect cleanup을 테스트한다.
 
 ## Documentation

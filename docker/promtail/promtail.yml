@@ -1,0 +1,29 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: haejillyeok-file-logs
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: haejillyeok-backend
+          __path__: /var/log/haejillyeok/*.log*
+    pipeline_stages:
+      - regex:
+          expression: '^(?P<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3}) (?P<level>\w+) \[(?P<app_name>[^\]]+)\] \[(?P<logger>[^\]]+)\] (?P<message>.*)$'
+      - timestamp:
+          source: ts
+          format: "2006-01-02 15:04:05,000"
+          location: Asia/Seoul
+      - labels:
+          app_name:
+          level:
+          logger:

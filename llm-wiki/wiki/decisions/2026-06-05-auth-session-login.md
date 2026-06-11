@@ -1,7 +1,7 @@
 ---
 title: Auth Session Login
 type: decision
-updated: 2026-06-05
+updated: 2026-06-09
 audience: ai
 ---
 
@@ -10,18 +10,19 @@ audience: ai
 ## Decision
 
 PoC 인증은 `POST /api/v1/auth/login` 하나로 가입과 로그인을 함께 처리한다.
-닉네임이 없으면 `users.users`에 새 유저를 만들고, 닉네임이 있으면 비밀번호를 검증한다.
+계정 ID가 없으면 `users.users`에 새 유저를 만들고, 계정 ID가 있으면 비밀번호를 검증한다.
 성공 시 opaque session token을 `session_token` HttpOnly cookie로 발급하고, DB에는 토큰 원문이 아니라 해시를 저장한다.
 
 ## API Contract
 
 - Method/path: `POST /api/v1/auth/login`
-- Request body: `nickname`, `password`
-- `nickname`은 유저 로그인 ID 역할을 한다.
-- 신규 닉네임이면 가입 후 로그인 성공으로 처리한다.
-- 기존 닉네임이면 `password_hash`로 비밀번호를 검증한다.
-- 기존 닉네임의 비밀번호가 틀리면 `401`을 반환한다.
-- 성공 response는 공통 response envelope의 `data`에 외부용 유저 식별자인 `public_id`, `nickname`, `is_new_user`, `expires_at`을 포함한다.
+- Request body: `account_id`, `nickname`, `password`
+- `account_id`는 유저 로그인 ID 역할을 한다.
+- 신규 계정 ID이면 가입 후 로그인 성공으로 처리한다.
+- 신규 계정 ID 가입 시 `nickname`이 타 유저와 중복되면 인증 실패로 처리한다.
+- 기존 계정 ID이면 `password_hash`로 비밀번호를 검증한다.
+- 기존 계정 ID의 비밀번호가 틀리면 `401`을 반환한다.
+- 성공 response는 공통 response envelope의 `data`에 외부용 유저 식별자인 `public_id`, `account_id`, `nickname`, `is_new_user`, `expires_at`을 포함한다.
 - 성공 response는 `session_token` cookie를 설정한다.
 
 ## Session Storage

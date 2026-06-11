@@ -1,6 +1,7 @@
 import logging
 from time import perf_counter
 from typing import Any, Callable, ParamSpec, TypeVar
+from urllib.parse import urlsplit, urlunsplit
 
 from fastapi import FastAPI, Request
 from pydantic import Field
@@ -10,8 +11,8 @@ from starlette.responses import Response
 
 try:
     from opentelemetry import metrics, trace
-    from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+    from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
     from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
     from opentelemetry.sdk.metrics import MeterProvider
     from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
@@ -59,7 +60,7 @@ class ObservabilitySettings(BaseSettings):
 
     enabled: bool = Field(default=True, validation_alias="OTEL_ENABLED")
     otlp_endpoint: str = Field(
-        default="http://localhost:4317",
+        default="http://localhost:4318",
         validation_alias="OTEL_EXPORTER_OTLP_ENDPOINT",
     )
     metric_export_interval_ms: int = Field(
@@ -203,19 +204,53 @@ def configure_observability_sdk(
         }
     )
 
-    metric_exporter = OTLPMetricExporter(endpoint=settings.otlp_endpoint)
+    metric_exporter = OTLPMetricExporter(
+        endpoint=resolve_otlp_http_endpoint(settings.otlp_endpoint, signal_path="/v1/metrics")
+    )
     metric_reader = PeriodicExportingMetricReader(
         metric_exporter,
         export_interval_millis=settings.metric_export_interval_ms,
     )
     metrics.set_meter_provider(MeterProvider(resource=resource, metric_readers=[metric_reader]))
 
-    trace_exporter = OTLPSpanExporter(endpoint=settings.otlp_endpoint)
+    trace_exporter = OTLPSpanExporter(
+        endpoint=resolve_otlp_http_endpoint(settings.otlp_endpoint, signal_path="/v1/traces")
+    )
     tracer_provider = TracerProvider(resource=resource)
     tracer_provider.add_span_processor(BatchSpanProcessor(trace_exporter))
     trace.set_tracer_provider(tracer_provider)
 
     _SDK_CONFIGURED = True
+
+
+def resolve_otlp_http_endpoint(base_endpoint: str, *, signal_path: str) -> str:
+    """OTLP HTTP base endpoint를 signal별 ingest endpoint로 변환합니다.
+
+    주요 입력은 `OTEL_EXPORTER_OTLP_ENDPOINT` 값과 `/v1/metrics` 같은 signal path입니다. 반환값은
+    exporter에 넘길 전체 endpoint이며, 부작용은 없습니다.
+    """
+    parsed = urlsplit(base_endpoint)
+    current_path = parsed.path.rstrip("/")
+    known_signal_paths = {"/v1/metrics", "/v1/traces", "/v1/logs"}
+
+    if not current_path:
+        resolved_path = signal_path
+    elif current_path in known_signal_paths:
+        resolved_path = signal_path
+    elif current_path.endswith(signal_path):
+        resolved_path = current_path
+    else:
+        resolved_path = f"{current_path}{signal_path}"
+
+    return urlunsplit(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            resolved_path,
+            parsed.query,
+            parsed.fragment,
+        )
+    )
 
 
 def _get_meter(service_name: str):

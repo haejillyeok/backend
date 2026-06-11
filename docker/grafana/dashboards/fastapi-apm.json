@@ -31,6 +31,18 @@
       "tooltip": "Open the Tempo trace dashboard.",
       "type": "dashboards",
       "uid": "haejillyeok-fastapi-traces"
+    },
+    {
+      "asDropdown": false,
+      "icon": "dashboard",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "FastAPI Logs",
+      "tooltip": "Open the Loki log dashboard.",
+      "type": "dashboards",
+      "uid": "haejillyeok-fastapi-logs"
     }
   ],
   "liveNow": false,

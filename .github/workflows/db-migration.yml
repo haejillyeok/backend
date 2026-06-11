@@ -1,0 +1,176 @@
+name: DB Migration
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_action:
+        description: "Run the selected DB task?"
+        required: true
+        default: "no"
+        type: choice
+        options:
+          - "no"
+          - "run"
+      db_task:
+        description: "mise DB task to run through the deploy SSH tunnel."
+        required: true
+        default: "db-upgrade-head"
+        type: choice
+        options:
+          - "db-upgrade-head"
+          - "db-current"
+          - "db-history"
+          - "db-upgrade"
+          - "db-downgrade"
+          - "db-downgrade-one"
+      target_revision:
+        description: "Required only for db-upgrade or db-downgrade, for example head, base, -1, or a revision id."
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prod-db-migration
+  cancel-in-progress: false
+
+env:
+  DEPLOY_SSH_PORT: ${{ vars.DEPLOY_SSH_PORT || '22' }}
+  PRIVATE_DB_PORT: ${{ vars.BE_DB_PORT || '5432' }}
+
+jobs:
+  confirm:
+    name: Confirm DB Task
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout migration files
+        uses: actions/checkout@v4
+
+      - name: Show selection
+        env:
+          CONFIRM_ACTION: ${{ inputs.confirm_action }}
+          DB_TASK: ${{ inputs.db_task }}
+          TARGET_REVISION: ${{ inputs.target_revision }}
+        run: |
+          set -euo pipefail
+          echo "confirm_action=$CONFIRM_ACTION"
+          echo "db_task=$DB_TASK"
+          echo "target_revision=${TARGET_REVISION:-<empty>}"
+          echo "Migration revisions in this ref:"
+          find migrations/versions -maxdepth 1 -type f -name '*.py' | sort
+
+  run-db-task:
+    name: Run DB Task
+    runs-on: ubuntu-latest
+    needs: confirm
+    if: ${{ inputs.confirm_action == 'run' }}
+    environment: prod
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up mise
+        uses: jdx/mise-action@v2
+        with:
+          install: true
+          cache: true
+
+      - name: Install Python dependencies
+        run: mise run install
+
+      - name: Prepare SSH key
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$HOME/.ssh/deploy_key"
+          chmod 600 "$HOME/.ssh/deploy_key"
+          ssh-keyscan -p "$DEPLOY_SSH_PORT" "$DEPLOY_HOST" >> "$HOME/.ssh/known_hosts"
+
+      - name: Open DB tunnel through deploy instance
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          PRIVATE_DB_HOST: ${{ secrets.BE_DB_HOST }}
+        run: |
+          set -euo pipefail
+          ssh \
+            -i "$HOME/.ssh/deploy_key" \
+            -p "$DEPLOY_SSH_PORT" \
+            -o ExitOnForwardFailure=yes \
+            -o ServerAliveInterval=30 \
+            -o ServerAliveCountMax=3 \
+            -N \
+            -L "127.0.0.1:15432:${PRIVATE_DB_HOST}:${PRIVATE_DB_PORT}" \
+            "deploy@${DEPLOY_HOST}" &
+
+          tunnel_pid="$!"
+          echo "$tunnel_pid" > "$RUNNER_TEMP/db_tunnel.pid"
+
+          for attempt in {1..20}; do
+            if timeout 1 bash -c "</dev/tcp/127.0.0.1/15432" 2>/dev/null; then
+              echo "DB tunnel is ready on 127.0.0.1:15432."
+              exit 0
+            fi
+            if ! kill -0 "$tunnel_pid" 2>/dev/null; then
+              echo "::error::SSH tunnel process exited before the DB port became reachable."
+              exit 1
+            fi
+            sleep 1
+          done
+
+          echo "::error::Timed out waiting for the DB tunnel."
+          exit 1
+
+      - name: Run selected mise DB task
+        env:
+          DB_TASK: ${{ inputs.db_task }}
+          TARGET_REVISION: ${{ inputs.target_revision }}
+          BE_ENV: prod
+          BE_DB_HOST: 127.0.0.1
+          BE_DB_PORT: "15432"
+          BE_DB_USER: ${{ secrets.BE_DB_USER }}
+          BE_DB_PASSWORD: ${{ secrets.BE_DB_PASSWORD }}
+          BE_DB_NAME: ${{ secrets.BE_DB_NAME }}
+        run: |
+          set -euo pipefail
+          case "$DB_TASK" in
+            db-current|db-history|db-upgrade-head|db-downgrade-one)
+              mise run "$DB_TASK"
+              ;;
+            db-upgrade|db-downgrade)
+              if [[ -z "${TARGET_REVISION:-}" ]]; then
+                echo "::error::target_revision is required for $DB_TASK."
+                exit 1
+              fi
+              mise run "$DB_TASK" "$TARGET_REVISION"
+              ;;
+            *)
+              echo "::error::Unsupported DB task: $DB_TASK"
+              exit 1
+              ;;
+          esac
+
+      - name: Show DB current revision after task
+        if: ${{ inputs.db_task != 'db-current' && inputs.db_task != 'db-history' }}
+        env:
+          BE_ENV: prod
+          BE_DB_HOST: 127.0.0.1
+          BE_DB_PORT: "15432"
+          BE_DB_USER: ${{ secrets.BE_DB_USER }}
+          BE_DB_PASSWORD: ${{ secrets.BE_DB_PASSWORD }}
+          BE_DB_NAME: ${{ secrets.BE_DB_NAME }}
+        run: mise run db-current
+
+      - name: Close DB tunnel
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          if [[ -f "$RUNNER_TEMP/db_tunnel.pid" ]]; then
+            tunnel_pid="$(cat "$RUNNER_TEMP/db_tunnel.pid")"
+            if kill -0 "$tunnel_pid" 2>/dev/null; then
+              kill "$tunnel_pid"
+            fi
+          fi

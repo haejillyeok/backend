@@ -1,7 +1,7 @@
 ---
 title: PoC Users Table
 type: decision
-updated: 2026-06-05
+updated: 2026-06-09
 audience: ai
 ---
 
@@ -9,8 +9,8 @@ audience: ai
 
 ## Decision
 
-PoC 게임 이용자는 `users` table로 관리한다. 현재 요구는 단순 게임 이용이므로 닉네임과 비밀번호만 인증 정보로 사용하고,
-접속 IP는 마지막 접속 IP로 기록한다.
+PoC 게임 이용자는 `users` table로 관리한다. 계정 ID와 비밀번호를 인증 정보로 사용하고,
+닉네임은 게임 표시명으로 분리한다. 접속 IP는 마지막 접속 IP로 기록한다.
 
 ## Schema
 
@@ -18,6 +18,7 @@ PoC 게임 이용자는 `users` table로 관리한다. 현재 요구는 단순 �
 - table: `users.users`
 - 내부용 관리번호: `id` UUID v7 primary key
 - 외부용 관리번호: `public_id` UUID v7 unique, not null
+- 계정 ID: `account_id` `text`, unique, not null
 - 닉네임: `nickname` `text`, unique, not null
 - 비밀번호: `password_hash` `text`, not null
 - 접속 IP: `last_access_ip` `text`, nullable
@@ -25,7 +26,9 @@ PoC 게임 이용자는 `users` table로 관리한다. 현재 요구는 단순 �
 
 ## Rules
 
-- 닉네임은 15자 이하만 허용한다.
+- 계정 ID는 영어 문자, 숫자, `_`만 허용하고 3~20자만 허용한다.
+- 닉네임은 한글, 영어, 숫자, `_`만 허용하고 3~20자만 허용한다.
+- 비밀번호는 한글, 영어, 숫자, 특수자 입력이 가능하고 8~20자만 허용한다.
 - PostgreSQL column은 `varchar(15)`가 아니라 `text`를 사용하고, 길이 제한은 코드 단에서 검증한다.
 - 비밀번호는 평문이나 단순 `salt + sha256`으로 저장하지 않는다.
 - 표준 라이브러리의 PBKDF2-HMAC-SHA256을 사용하고, 저장 문자열에 algorithm, iteration, salt, digest를 포함한다.

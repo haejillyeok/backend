@@ -31,6 +31,18 @@
       "tooltip": "Open the Prometheus metric dashboard.",
       "type": "dashboards",
       "uid": "haejillyeok-fastapi-apm"
+    },
+    {
+      "asDropdown": false,
+      "icon": "dashboard",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "FastAPI Logs",
+      "tooltip": "Open the Loki log dashboard.",
+      "type": "dashboards",
+      "uid": "haejillyeok-fastapi-logs"
     }
   ],
   "liveNow": false,
@@ -350,8 +362,8 @@
           },
           {
             "selected": false,
-            "text": "AuthRepository.get_user_by_nickname",
-            "value": "AuthRepository.get_user_by_nickname"
+            "text": "AuthRepository.get_user_by_account_id",
+            "value": "AuthRepository.get_user_by_account_id"
           },
           {
             "selected": false,
@@ -369,7 +381,7 @@
             "value": "AuthRepository.commit"
           }
         ],
-        "query": "AuthService.login_or_register,AuthRepository.get_user_by_nickname,AuthRepository.create_user,AuthRepository.create_user_session,AuthRepository.commit",
+        "query": "AuthService.login_or_register,AuthRepository.get_user_by_account_id,AuthRepository.get_user_by_nickname,AuthRepository.create_user,AuthRepository.create_user_session,AuthRepository.commit",
         "skipUrlSync": false,
         "type": "custom"
       }

@@ -15,25 +15,37 @@ class AuthRepository:
     def __init__(self, db_session: AsyncSession) -> None:
         self.db_session = db_session
 
+    async def get_user_by_account_id(self, account_id: str) -> User | None:
+        """계정 ID로 유저를 조회하고, 없으면 None을 반환합니다."""
+        return await self._get_user_by_account_id(account_id)
+
+    @traced_method("AuthRepository.get_user_by_account_id", layer="repository")
+    async def _get_user_by_account_id(self, account_id: str) -> User | None:
+        """계정 ID 조회 query 실행 시간을 trace span으로 기록합니다."""
+        result = await self.db_session.execute(select(User).where(User.account_id == account_id))
+        return result.scalar_one_or_none()
+
     async def get_user_by_nickname(self, nickname: str) -> User | None:
         """닉네임으로 유저를 조회하고, 없으면 None을 반환합니다."""
         return await self._get_user_by_nickname(nickname)
 
     @traced_method("AuthRepository.get_user_by_nickname", layer="repository")
     async def _get_user_by_nickname(self, nickname: str) -> User | None:
-        """닉네임 조회 query 실행 시간을 trace span으로 기록합니다."""
+        """닉네임 중복 확인 query 실행 시간을 trace span으로 기록합니다."""
         result = await self.db_session.execute(select(User).where(User.nickname == nickname))
         return result.scalar_one_or_none()
 
     async def create_user(
         self,
         *,
+        account_id: str,
         nickname: str,
         password_hash: str,
         last_access_ip: str | None,
     ) -> User:
         """새 유저를 추가하고 flush해서 UUID 기본값을 사용할 수 있게 합니다."""
         return await self._create_user(
+            account_id=account_id,
             nickname=nickname,
             password_hash=password_hash,
             last_access_ip=last_access_ip,
@@ -43,12 +55,14 @@ class AuthRepository:
     async def _create_user(
         self,
         *,
+        account_id: str,
         nickname: str,
         password_hash: str,
         last_access_ip: str | None,
     ) -> User:
         """유저 insert와 flush 실행 시간을 trace span으로 기록합니다."""
         user = User(
+            account_id=account_id,
             nickname=nickname,
             password_hash=password_hash,
             last_access_ip=last_access_ip,

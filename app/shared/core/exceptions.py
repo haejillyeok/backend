@@ -1,12 +1,10 @@
 from typing import Any
 
-from grpc import StatusCode
-
 from app.shared.core.error_codes import ErrorCode, ErrorType, get_error_definition
 
 
 class AppException(Exception):
-    """HTTP, gRPC 등 프로토콜 handler가 변환할 수 있는 공통 애플리케이션 예외입니다."""
+    """HTTP/WebSocket handler가 변환할 수 있는 공통 애플리케이션 예외입니다."""
 
     def __init__(
         self,
@@ -15,7 +13,6 @@ class AppException(Exception):
         message: str | None = None,
         details: Any | None = None,
         http_status_code: int | None = None,
-        grpc_status_code: StatusCode | None = None,
         websocket_close_code: int | None = None,
         error_type: ErrorType | None = None,
     ) -> None:
@@ -32,13 +29,6 @@ class AppException(Exception):
             else definition.http_status_code
             if definition
             else 500
-        )
-        self.grpc_status_code = (
-            grpc_status_code
-            if grpc_status_code is not None
-            else definition.grpc_status_code
-            if definition
-            else StatusCode.UNKNOWN
         )
         self.websocket_close_code = (
             websocket_close_code
@@ -62,7 +52,7 @@ class AppException(Exception):
 
 
 class InvalidCredentialsError(AppException):
-    """닉네임은 존재하지만 비밀번호가 일치하지 않을 때 발생합니다."""
+    """계정 ID는 존재하지만 비밀번호가 일치하지 않을 때 발생합니다."""
 
     def __init__(self) -> None:
         super().__init__(

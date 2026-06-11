@@ -1,16 +1,20 @@
 ---
 title: Request Audit Logging
 type: decision
-updated: 2026-06-05
+updated: 2026-06-09
 audience: ai
+superseded_by: 2026-06-09-remove-application-grpc
 ---
 
 # Request Audit Logging
 
 ## Decision
 
-HTTP/gRPC 요청의 시작, 완료, 실패를 감사 로그로 남긴다. 감사 로그는 AOP 성격의 protocol adapter에서 처리하고,
+HTTP 요청의 시작, 완료, 실패를 감사 로그로 남긴다. 감사 로그는 AOP 성격의 protocol adapter에서 처리하고,
 endpoint, service, repository 로직에 반복해서 넣지 않는다.
+
+> 2026-06-09 기준으로 애플리케이션 gRPC는 제거되었고, gRPC 감사 로그 부분은
+> [Remove Application gRPC](2026-06-09-remove-application-grpc.md) 결정으로 대체되었다.
 
 ## Shared Format
 
@@ -33,22 +37,14 @@ audit protocol=http phase=completed service=haejillyeok-be operation=GET /api/v1
 - 완료 이벤트는 response status와 duration을 기록한다.
 - 예외 이벤트는 `phase=failed`, `status_code=500`, exception class 이름을 `error_code`로 기록한 뒤 예외를 다시 던진다.
 
-## gRPC
-
-- gRPC 요청 감사 로그는 `app/shared/grpc/audit.py`의 `AuditServerInterceptor`가 담당한다.
-- `be`, `agent` gRPC server factory에서 interceptor를 등록한다.
-- 현재 구현은 unary-unary RPC를 감싼다.
-- `AppException`이 발생하면 `grpc_status_code`와 공통 error code를 기록한 뒤 context abort로 변환한다.
-- streaming RPC가 생기면 같은 공통 formatter를 사용해 RPC type별 wrapper를 확장한다.
-
 ## Privacy Rules
 
 - request body, response body, password, session token, authorization header, cookie 값은 감사 로그에 남기지 않는다.
 - 사용자 식별자가 필요해지면 내부용 DB id가 아니라 정책적으로 허용된 외부 식별자 또는 session id hash만 검토한다.
-- IP/peer, method/path, RPC method, status, duration처럼 운영 감사에 필요한 metadata 중심으로 기록한다.
+- IP/peer, method/path, status, duration처럼 운영 감사에 필요한 metadata 중심으로 기록한다.
 
 ## Rationale
 
 - 요청 진입/종료 로그는 cross-cutting concern이므로 endpoint나 service에 직접 넣으면 중복과 누락이 생긴다.
-- shared formatter를 사용하면 HTTP와 gRPC가 같은 감사 로그 검색 패턴을 공유할 수 있다.
+- shared formatter를 사용하면 HTTP 감사 로그 검색 패턴을 일관되게 유지할 수 있다.
 - payload를 제외하면 인증 정보와 개인정보가 로그에 남을 위험을 줄일 수 있다.

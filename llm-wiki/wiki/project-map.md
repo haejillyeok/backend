@@ -1,7 +1,7 @@
 ---
 title: Project Map
 type: map
-updated: 2026-06-05
+updated: 2026-06-09
 ---
 
 # Project Map
@@ -17,13 +17,6 @@ updated: 2026-06-05
 - `app/be/api/`: 백엔드 REST API router와 endpoint
 - `app/agent/api/`: 에이전트 REST API router와 endpoint
 
-## gRPC
-
-- `app/be/grpc/`: 백엔드 내부 gRPC 서버와 proto
-- `app/agent/grpc/`: 에이전트 내부 gRPC 서버와 proto
-- `app/shared/grpc/`: gRPC 서버 lifecycle/helper와 client helper
-- `proto/`: 공통 proto 원본
-
 ## Data and Services
 
 - `app/be/models/`: 백엔드 SQLAlchemy ORM 모델과 Alembic metadata base
@@ -31,7 +24,7 @@ updated: 2026-06-05
 - `app/be/schemas/`: 백엔드 request/response schema
 - `app/be/services/`: 백엔드 비즈니스 로직
 - `app/agent/services/`: 에이전트 비즈니스 로직
-- `app/shared/core/config/`: 앱, DB, gRPC 설정
+- `app/shared/core/config/`: 앱, DB, HTTP 설정
 - `migrations/`: Alembic 환경과 DB schema migration revision
 
 ## Docs and Knowledge

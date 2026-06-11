@@ -2,6 +2,193 @@
 
 이 파일은 `llm-wiki/`의 시간순 작업 이력입니다. 새 항목은 위에 추가합니다.
 
+## [2026-06-10] maintenance | Add Loki log dashboard
+
+- 기존 FastAPI APM dashboard가 현재 Prometheus metric 이름과 label 기준을 쓰는지 확인했다.
+- Loki datasource를 사용하는 `Haejillyeok FastAPI Logs` dashboard를 추가했다.
+- 로그 dashboard는 `job`, `app_name`, `level`, `logger`, `search` 변수로 파일 로그를 필터링하고, level별 volume, error count, top logger, recent logs, error log lines, audit request logs panel을 제공한다.
+- 기본 검색어를 빈 값으로 두고 literal contains filter를 사용해 전체 로그 라인 highlight를 피한다.
+- Log Volume by Level graph는 ERROR/CRITICAL 빨강 계열, WARNING/WARN 노랑, INFO 녹색, 그 외 회색으로 고정했다.
+- Grafana 기본 logs panel에서 level별 전체 row 배경색을 provisioned dashboard JSON으로 안정 제어하기 어렵기 때문에 ERROR/CRITICAL 전용 log panel로 분리한다.
+- APM/trace dashboard에서 log dashboard로 이동하는 링크를 추가하고 README, development docs, observability wiki에 반영했다.
+
+## [2026-06-10] maintenance | Store deploy logs under var log
+
+- 배포 서버의 외부 로그 저장 경로를 `/var/log/haejillyeok/*.log*`로 정리했다.
+- 앱 컨테이너 내부 `LOG_DIR`은 `/app/logs`로 유지하고, workflow가 `/var/log/haejillyeok:/app/logs` bind mount를 사용하도록 했다.
+- Promtail이 host `/var/log/haejillyeok`를 컨테이너 `/var/log/haejillyeok`로 읽으면 같은 로그 파일을 수집할 수 있다.
+
+## [2026-06-10] maintenance | Report file logging setup failure
+
+- 파일 로그 handler 생성 중 `PermissionError` 같은 `OSError`가 나면 앱은 stdout logging만 유지하고 ERROR 로그를 남기도록 했다.
+- 파일 로그가 환경변수로 꺼진 경우에도 `File logging disabled log_dir=...` info 로그를 남긴다.
+- 배포 컨테이너에서 로그 파일이 생성되지 않을 때 `docker logs`로 실패 경로를 확인할 수 있도록 테스트로 고정했다.
+
+## [2026-06-10] maintenance | Fix OTLP HTTP endpoint and file log visibility
+
+- `OTEL_EXPORTER_OTLP_ENDPOINT` base URL에서 metric은 `/v1/metrics`, trace는 `/v1/traces`로 보정해 OpenTelemetry Collector 404를 피하도록 했다.
+- 파일 로그 handler를 붙인 직후 `File logging configured path=...` 로그를 남겨 실제 로그 파일 경로를 확인할 수 있게 했다.
+- OTLP endpoint 보정과 Uvicorn/file logging 동작을 테스트로 고정했다.
+
+## [2026-06-10] maintenance | Include Uvicorn logs in file logging
+
+- 파일 로그 handler를 root logger뿐 아니라 `uvicorn`, `uvicorn.access` logger에도 연결하도록 정리했다.
+- Uvicorn access/error 로그가 `logs/<app_name>.log`에 함께 기록된다는 테스트와 문서 기준을 추가했다.
+
+## [2026-06-10] maintenance | Mount deploy log directory
+
+- GitHub Actions Docker deploy workflow가 원격 `/opt/haejillyeok/backend/logs`를 컨테이너 `/app/logs`로 bind mount하도록 반영했다.
+- 배포 전에 원격 로그 디렉터리를 만들고 Docker image를 root로 한 번 실행해 컨테이너 `app` 사용자가 로그 디렉터리에 쓸 수 있게 소유권을 맞추도록 했다.
+- Workflow가 생성하는 `.env`에 `LOG_DIR=/app/logs`와 파일 로그 보존/용량 설정을 포함한다고 runtime configuration wiki에 기록했다.
+
+## [2026-06-10] maintenance | Add Loki Promtail file log management
+
+- 앱 공통 로깅에 `logs/<app_name>.log` 파일 handler를 추가하고 매일 회전, 14일 보존 기준을 정리했다.
+- `LOG_MAX_TOTAL_BYTES`를 넘으면 앱 시작 시와 파일 로그 emit 중 주기적으로 `*.log*` 파일을 오래된 순서로 삭제하는 파일 로그 정리 기준을 남겼다.
+- Docker Compose 로컬 관측 스택에 Loki와 Promtail을 추가하고 Grafana Loki datasource를 provision 하도록 기록했다.
+- Promtail이 앱 로그 포맷에서 `app_name`, `level`, `logger` label을 추출해 Loki로 전송한다고 `observability-stack.md`에 반영했다.
+
+## [2026-06-10] maintenance | Set server timezone to KST
+
+- 공통 앱 설정에 `APP_TIMEZONE`을 추가하고 기본값을 `Asia/Seoul`로 정했다.
+- `be`와 `agent` 서버 시작 시 `APP_TIMEZONE`을 프로세스 `TZ`와 C runtime timezone에 적용하도록 했다.
+- Docker image 기본 환경과 GitHub Actions 배포 `.env` 생성값에 `APP_TIMEZONE=Asia/Seoul`을 명시했다.
+- README, development docs, runtime configuration wiki에 서버 기본 타임존은 KST이며 DB timestamp 기준은 UTC를 유지한다고 기록했다.
+
+## [2026-06-10] maintenance | Use Docker env-file for deploy env
+
+- GitHub Actions Docker deploy workflow가 원격 `.env`를 `/app/.env:ro`로 마운트하지 않고 `docker run --env-file`로 주입하도록 바꿨다.
+- 원격 `.env`는 `chmod 600`을 유지해 `deploy` 계정만 읽고, 컨테이너 내부 `app` 유저가 bind mount 권한 때문에 `.env`를 읽지 못하는 문제를 피한다.
+- README와 runtime configuration wiki에 Docker 배포 env 주입 방식을 반영했다.
+
+## [2026-06-10] maintenance | Restrict CORS origin allowlist
+
+- CORS middleware 적용 대상을 브라우저에서 직접 호출되는 `be` 서버로 제한했다.
+- 허용 origin은 `http://localhost:3000`, `https://haejillyeok.com`, `https://agent.haejillyeok.com`, `https://www.haejillyeok.com`이다.
+- `agent` 서버는 `be`에서 서버 간 HTTP로 호출하므로 CORS를 등록하지 않고, 접근 제한은 네트워크/인증 계층에서 다룬다고 기록했다.
+
+## [2026-06-10] maintenance | Keep migration tunnel port internal
+
+- DB migration GitHub Actions workflow에서 `MIGRATION_LOCAL_DB_PORT` 사용자 설정값을 제거했다.
+- SSH 터널 runner 측 포트는 workflow 내부 값 `15432`로 고정하고, 사용자가 관리할 DB 변수는 private DB endpoint와 port만 남겼다.
+- `database-migrations.md`, `runtime-configuration.md`에서 선택 GitHub Variables 목록을 갱신했다.
+
+## [2026-06-10] maintenance | Add SSH-tunneled DB migration workflow
+
+- `.github/workflows/db-migration.yml`을 추가해 GitHub Actions 수동 실행으로 운영 DB migration 작업을 선택 실행할 수 있게 했다.
+- Workflow는 `deploy` SSH 인스턴스에 로컬 포워딩을 열고 private subnet DB에 접근한 뒤 `mise` DB task를 실행한다.
+- 기본 작업은 `db-upgrade-head`이며, `db-current`, `db-history`, `db-upgrade`, `db-downgrade`, `db-downgrade-one`을 선택할 수 있다.
+- 운영 DB migration 기준과 필요한 GitHub Secrets/Variables를 `database-migrations.md`, `runtime-configuration.md`에 반영했다.
+
+## [2026-06-10] maintenance | Select deploy Git tag manually
+
+- GitHub Actions Docker deploy workflow에 `target_tag` 수동 입력을 추가했다.
+- `confirm_deploy=no` 실행은 최근 Git tag 목록을 출력해 배포 전 태그 조회용으로 사용할 수 있게 했다.
+- 배포 job은 입력한 tag가 실제 commit tag이고 Docker image tag 형식에 맞는지 검증한 뒤 해당 tag ref를 checkout해 build/push/deploy한다.
+- README와 runtime configuration wiki에서 최신 tag 자동 선택 기준을 수동 tag 선택 기준으로 바꿨다.
+
+## [2026-06-09] maintenance | Move deploy env path under opt
+
+- GitHub Actions Docker deploy workflow의 원격 배포 디렉터리를 `/opt/haejillyeok/backend`로 바꿨다.
+- README와 runtime configuration wiki에 `deploy` 계정의 `/opt/haejillyeok/backend` 쓰기 권한 필요성을 명시했다.
+
+## [2026-06-09] maintenance | Use Docker DNS for OTLP endpoint
+
+- GitHub Actions Docker deploy workflow의 `OTEL_EXPORTER_OTLP_ENDPOINT` 기본값을 `http://otel-collector:4318`로 바꿨다.
+- 배포 컨테이너가 `DOCKER_NETWORK` user-defined Docker network에 붙도록 하고, 기본값을 `backend_default`로 정리했다.
+- README와 runtime/observability wiki에 Docker network 기반 OTLP endpoint 기준을 반영했다.
+
+## [2026-06-09] maintenance | Set OTEL_ENABLED default to true
+
+- GitHub Actions Docker deploy workflow의 `OTEL_ENABLED` 기본값을 `true`로 바꿨다.
+- README와 runtime configuration wiki에서 OpenTelemetry 기본값을 `true`로 정리했다.
+
+## [2026-06-09] maintenance | Fix deploy BE_ENV to prod
+
+- GitHub Actions Docker deploy workflow가 생성하는 `.env`에서 `BE_ENV`를 GitHub Variable이 아니라 `prod`로 고정했다.
+- README와 runtime configuration wiki에서 `BE_ENV`를 GitHub Variables 목록에서 제거했다.
+
+## [2026-06-09] maintenance | Use Git version tag for Docker image tag
+
+- GitHub Actions Docker deploy workflow에서 image tag를 `github.sha` 대신 선택한 ref가 도달할 수 있는 최신 Git tag로 결정하도록 바꿨다.
+- Docker Hub에는 Git version tag와 `latest`를 함께 push하고, SSH 배포는 Git version tag image를 pull하도록 했다.
+- Git tag가 없거나 Docker image tag 형식에 맞지 않으면 배포 job이 실패하도록 했다.
+
+## [2026-06-09] maintenance | Add manual GitHub Actions Docker deploy
+
+- `.github/workflows/docker-deploy.yml`을 추가해 `workflow_dispatch` 수동 실행만으로 Docker build/push/SSH deploy를 실행하도록 했다.
+- `confirm_deploy` input이 `deploy`일 때만 실제 배포 job을 실행하고, 기본값 `no`는 확인 job만 실행한다.
+- Runner에서 Docker Hub에 image를 push하고, 원격 서버에는 `deploy` 계정 SSH로 접속해 `/opt/haejillyeok/backend/.env`를 만들고 `/app/.env:ro` volume으로 마운트한다.
+- 원격 서버는 Docker Hub credential 없이 public image를 pull하고, 컨테이너는 기본 `APP_MODULE=be`, `PORT=8000`으로 실행한다.
+
+## [2026-06-09] maintenance | Document Docker runtime environment variables
+
+- 공개 runtime image에는 `.env`를 포함하지 않으므로 `docker run`에서 필요한 환경변수를 주입한다고 README에 명시했다.
+- be 실행 예시에 `BE_ENV`, `BE_DB_*`, `OTEL_*`, `APP_MODULE=be`, `PORT` 주입을 추가했다.
+- agent 실행 예시에 `APP_MODULE=agent`, `BE_ENV`, `OTEL_*`, `PORT` 주입을 추가했다.
+- Shell에서 그대로 복사 가능한 예시가 되도록 angle bracket placeholder 대신 일반 예시값을 사용했다.
+
+## [2026-06-09] maintenance | Simplify Docker app module selector
+
+- `APP_MODULE` Docker 환경변수는 전체 ASGI import string이 아니라 `be` 또는 `agent` 값만 받도록 바꿨다.
+- `Dockerfile`은 Uvicorn 실행 대상을 `app.${APP_MODULE}.main:app` 형태로 조립한다.
+- README의 agent 실행 예시를 `APP_MODULE=agent`로 갱신했다.
+
+## [2026-06-09] maintenance | Exclude migrations from runtime Docker image
+
+- Runtime Docker image에서 migration을 실행하지 않기로 하고 `Dockerfile`에서 `alembic.ini`와 `migrations/` 복사를 제거했다.
+- `.dockerignore`에 `alembic.ini`와 `migrations/`를 추가해 build context에서도 제외했다.
+- Alembic은 runtime dependency가 아니라 dev optional dependency로 옮겨 로컬 `mise run db-*` 절차에서만 사용하도록 했다.
+
+## [2026-06-09] maintenance | Remove Python cache files from Docker image
+
+- `.dockerignore`에 nested `__pycache__/`와 `*.pyc` 제외 규칙을 추가했다.
+- `Dockerfile`에서 copy 이후 `/app` 아래 Python bytecode/cache 파일을 삭제해 runtime image에 남지 않도록 했다.
+- 공개 Docker image에는 local secret, local path, Python cache 산출물이 들어가지 않아야 한다는 기준을 유지했다.
+
+## [2026-06-09] maintenance | Use Docker Hub image tags in README
+
+- Docker build 예시를 로컬 이미지명 대신 Docker Hub 계정명 기반 tag로 바꿨다.
+- `0.1.0`과 `latest` tag를 함께 붙이고 Docker Hub에 push하는 명령을 README에 추가했다.
+- Mac에서 빌드해 Linux 서버나 여러 CPU 아키텍처에서 실행할 때는 `docker buildx build --platform linux/amd64,linux/arm64 --push`를 사용한다고 기록했다.
+
+## [2026-06-09] maintenance | Document Docker PORT to PORT publishing
+
+- `docker run` 예시는 shell `PORT` 값을 `-e PORT="$PORT"`와 `-p "$PORT:$PORT"`에 함께 넘기도록 README에 추가했다.
+- be 서버는 기본 `APP_MODULE`을 사용하고 `PORT=8000`을 넘기며, agent 서버는 `APP_MODULE=app.agent.main:app`, `PORT=8001`을 넘기는 기준을 남겼다.
+
+## [2026-06-09] maintenance | Add environment-selected Docker runtime
+
+- 루트 `Dockerfile`을 추가해 `python:3.11-slim` 기반 runtime image를 만들도록 했다.
+- 기본 실행 대상은 `APP_MODULE=app.be.main:app`, `PORT=8000`인 be 서버로 두고, 환경변수로 `APP_MODULE=app.agent.main:app`, `PORT=8001`을 주입하면 agent 서버를 같은 image에서 실행할 수 있게 했다.
+- 컨테이너 port publishing을 위해 Uvicorn 기본 host는 `0.0.0.0`으로 두고, worker 수는 `WORKERS` 환경변수로 제어한다고 기록했다.
+
+## [2026-06-09] maintenance | Add Docker build context ignore rules
+
+- 공개 Docker image build context에 `.env`, `.env.*`, 로컬 도구 상태, 가상환경, 테스트/coverage/build 산출물, runtime artifact를 포함하지 않도록 `.dockerignore`를 추가했다.
+- 사람용 문서, AI용 `llm-wiki/`, 테스트 코드는 runtime image에 필요하지 않은 대상으로 제외한다고 기록했다.
+- 운영 secret은 image에 bake하지 않고 컨테이너 실행 환경에서 주입한다는 기준을 남겼다.
+
+## [2026-06-09] maintenance | Run infra-up from mise enter hook
+
+- `.mise.toml`의 enter hook이 `mise run infra-up`을 실행하도록 바꿨다.
+- 프로젝트 디렉터리 진입 시 PostgreSQL뿐 아니라 OpenTelemetry Collector, Prometheus, Tempo, Grafana도 함께 시작된다고 기록했다.
+
+## [2026-06-09] maintenance | Update auth account input rules
+
+- PoC 인증 기준을 닉네임 로그인에서 계정 ID 기반 로그인으로 갱신했다.
+- 계정 ID는 영어 문자, 숫자, `_`만 허용하고 3~20자로 제한한다고 정리했다.
+- 닉네임은 한글, 영어, 숫자, `_`만 허용하고 3~20자로 제한한다고 정리했다.
+- 비밀번호는 8~20자로 제한하고 PBKDF2-HMAC-SHA256 저장 기준은 유지한다고 남겼다.
+- `users.users.account_id`를 unique, not null 로그인 식별자로 관리한다고 기록했다.
+
+## [2026-06-08] maintenance | Add environment-controlled runtime ports
+
+- HTTP 개발 서버는 host를 `127.0.0.1`로 고정하고 서버 `.env`의 port 값만 제어한다.
+- gRPC 서버는 host를 `localhost`로 고정하고 서버 `.env`의 port 값만 제어한다.
+- Docker Compose 인프라 host port는 서버 `.env` 관리 대상에서 제외한다고 정리했다.
+- 앱은 기본적으로 APM exporter를 연결하고, 특정 상황에서만 서버 `.env` 값으로 비활성화한다는 기준을 남겼다.
+
 ## [2026-06-06] maintenance | Add centralized error codes and Swagger error examples
 
 - 공개 error code를 `app/shared/core/error_codes.py`의 `ErrorCode` enum에서 관리하도록 정리했다.
@@ -57,6 +244,13 @@
 - Grafana는 provisioned Prometheus datasource와 `fastapi-apm.json` dashboard로 throughput, 5xx error rate, p95, p99 latency를 시각화한다.
 - route label은 실제 path가 아니라 FastAPI route template을 사용해 metric cardinality를 낮춘다고 기록했다.
 
+## [2026-06-09] maintenance | Remove application gRPC
+
+- `be`와 `agent` 서버에서 gRPC 서버, proto 계약, proto 생성 태스크를 제거하기로 정리했다.
+- 서버 간 통신 기준을 gRPC에서 HTTP API와 기능별 client wrapper로 바꿨다.
+- OpenTelemetry exporter 기본 전송을 OTLP HTTP `http://localhost:4318`로 바꿨다.
+- 공통 예외와 error definition은 HTTP status와 WebSocket close code만 관리한다고 기록했다.
+
 ## [2026-06-05] maintenance | Add auth session login decision
 
 - 가입 겸 로그인 API는 `POST /api/v1/auth/login` 하나로 처리한다고 정리했다.
@@ -91,7 +285,7 @@
 ## [2026-06-05] maintenance | Clarify Alembic commands and target DB
 
 - Alembic logger 설정을 제거해 앱 로깅 설정과 겹칠 여지를 줄였다.
-- migration 대상 DB는 기본적으로 앱과 같은 `BE_DB_*` 설정을 쓰고, 일회성 override만 Alembic `-x database_url=...`로 하도록 정리했다.
+- migration 대상 DB는 기본적으로 앱과 같은 DB 접속 설정을 쓰고, 일회성 override만 Alembic `-x database_url=...`로 하도록 정리했다.
 - `mise` DB migration 태스크 이름과 사용법을 위키에 반영했다.
 - 별도 migration 설정 테스트는 제거했다.
 
