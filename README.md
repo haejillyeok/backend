@@ -160,6 +160,17 @@ mise run dev-agent
 
 `dev-agent`는 에이전트 REST API 서버를 실행합니다.
 HTTP host는 `127.0.0.1`로 고정하고, port는 서버 `.env`의 에이전트 포트 값으로 제어합니다.
+Agent 비즈니스 API를 사용하려면 최소 32자의 `AGENT_API_KEY`와 Qdrant 연결값을 설정합니다.
+
+```text
+QDRANT_URL=http://qdrant:6333
+QDRANT_COLLECTION=game_words
+VLLM_BASE_URL=http://vllm:8000
+VLLM_MODEL_NAME=shiritori-llm
+USE_VLLM=false
+USE_REDIS_COUNTER=false
+AGENT_API_KEY=<32자 이상 공유 키>
+```
 
 FastAPI 문서와 OpenAPI schema는 각 서버 실행 후 아래 경로에서 확인할 수 있습니다.
 
@@ -182,6 +193,32 @@ agent: GET /api/v1/health
 
 ```bash
 mise run test
+```
+
+## Agent k3s 배포
+
+`deploy/k3s/`는 Agent 2개 Pod, Qdrant StatefulSet/PV, vLLM 1개 GPU Pod를 배포합니다.
+배포 전에 control-plane node에는 `shiritori-role=agent-storage`, GPU node에는
+`shiritori-role=gpu`, `shiritori-model-qwen35-9b=true` label과 NVIDIA device plugin이 필요합니다.
+API 키 secret은 Git에 포함하지 않고 별도로 생성합니다.
+
+```bash
+kubectl create secret generic agent-api-auth \
+  -n shiritori-agent \
+  --from-literal=api-key='<32자 이상 공유 키>'
+
+kubectl apply -k deploy/k3s
+```
+
+Agent image는 단일 저장소 image를 사용하며 manifest 기본값은
+`haejillyeok-backend:0.1.0`, `APP_MODULE=agent`, `PORT=8001`입니다. 실제 registry tag를 쓰는
+환경에서는 배포 전 kustomize image override로 교체합니다. Qdrant 초기화는 Agent Pod에서
+실행할 수 있습니다.
+
+```bash
+python scripts/init_qdrant.py \
+  --url http://qdrant:6333 \
+  --collection game_words
 ```
 
 포맷은 `ruff`로 관리합니다. 변경 전 확인은 `format-check`, 로컬 자동 정리는 `format`을

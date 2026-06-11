@@ -57,6 +57,7 @@ tmp/
 temp/
 .tmp/
 uploads/
+model/MODEL/
 
 # Jupyter and notebook checkpoints
 .ipynb_checkpoints/

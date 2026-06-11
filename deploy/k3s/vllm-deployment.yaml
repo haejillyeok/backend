@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm
+  namespace: shiritori-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vllm
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: vllm
+    spec:
+      enableServiceLinks: false
+      nodeSelector:
+        shiritori-role: gpu
+        shiritori-model-qwen35-9b: "true"
+      runtimeClassName: nvidia
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:v0.22.1
+          imagePullPolicy: IfNotPresent
+          args:
+            - /models/Qwen3.5-9B
+            - --served-model-name
+            - shiritori-llm
+            - --host
+            - 0.0.0.0
+            - --port
+            - "8000"
+            - --gpu-memory-utilization
+            - "0.85"
+            - --max-model-len
+            - "4096"
+          ports:
+            - name: http
+              containerPort: 8000
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 90
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 180
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: "4"
+              memory: 16Gi
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: "12"
+              memory: 48Gi
+              nvidia.com/gpu: "1"
+          volumeMounts:
+            - name: model
+              mountPath: /models/Qwen3.5-9B
+              readOnly: true
+            - name: dshm
+              mountPath: /dev/shm
+      volumes:
+        - name: model
+          hostPath:
+            path: /home/goodsee/llm_model/model/MODEL/Qwen3.5-9B
+            type: Directory
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 8Gi

@@ -2,6 +2,16 @@
 
 이 파일은 `llm-wiki/`의 시간순 작업 이력입니다. 새 항목은 위에 추가합니다.
 
+## [2026-06-11] implementation | Integrate Qdrant Agent MVP
+
+- 별도 Agent 작업공간의 끝말잇기 MVP를 monorepo `app/agent` 소유 구조로 이식했다.
+- Qdrant repository, game handler, 후보 선택, 멱등성, 비동기 적재와 사용 횟수 갱신 계층을 추가했다.
+- 프롬프트는 `.txt`가 아닌 `app/agent/prompts.py` 변수로 관리한다.
+- 단일 Docker image에서 `APP_MODULE=agent`, `PORT=8001`로 실행하도록 k3s manifest를 추가했다.
+- Qdrant local PV와 vLLM 단일 GPU replica, 모델 hostPath, `enableServiceLinks=false`를 배포 기준으로 고정했다.
+- 회사 NodePort `31080`에서 Azure localhost로 이어지는 SSH reverse tunnel과 Azure Nginx를 외부 연결 경계로 기록했다.
+- Agent API, 한국어 처리, Qdrant 중복 적재, k3s manifest 테스트를 추가했다.
+
 ## [2026-06-10] maintenance | Add Loki log dashboard
 
 - 기존 FastAPI APM dashboard가 현재 Prometheus metric 이름과 label 기준을 쓰는지 확인했다.

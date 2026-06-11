@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent
+  namespace: shiritori-agent
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: agent
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: agent
+    spec:
+      nodeSelector:
+        shiritori-role: agent-storage
+      terminationGracePeriodSeconds: 30
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: agent
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app: agent
+      containers:
+        - name: agent
+          image: haejillyeok-backend:0.1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8001
+          env:
+            - name: APP_MODULE
+              value: agent
+            - name: PORT
+              value: "8001"
+            - name: WORKERS
+              value: "1"
+            - name: BE_ENV
+              value: prod
+            - name: APP_ENV
+              value: production
+            - name: QDRANT_URL
+              value: http://qdrant:6333
+            - name: QDRANT_COLLECTION
+              value: game_words
+            - name: VLLM_BASE_URL
+              value: http://vllm:8000
+            - name: VLLM_MODEL_NAME
+              value: shiritori-llm
+            - name: USE_VLLM
+              value: "false"
+            - name: USE_REDIS_COUNTER
+              value: "false"
+            - name: EXPOSE_DOCS
+              value: "false"
+            - name: OTEL_ENABLED
+              value: "false"
+            - name: AGENT_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: agent-api-auth
+                  key: api-key
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi

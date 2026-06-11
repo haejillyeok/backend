@@ -452,6 +452,8 @@ def test_server_layer_packages_are_owned_by_each_server():
         "app.be.schemas",
         "app.be.services",
         "app.agent.dependencies",
+        "app.agent.repository",
+        "app.agent.schemas",
         "app.agent.services",
         "app.shared.core",
     ):
@@ -464,8 +466,6 @@ def test_server_layer_packages_are_owned_by_each_server():
         "app.schemas",
         "app.services",
         "app.utils",
-        "app.agent.repository",
-        "app.agent.schemas",
     ):
         assert importlib.util.find_spec(module_name) is None
 

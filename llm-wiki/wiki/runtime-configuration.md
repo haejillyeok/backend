@@ -83,6 +83,24 @@ Docker run 시 `.env`는 image에 포함되지 않으므로 필요한 값을 컨
 배포에서만 `false`로 끈다. Collector와 같은 Docker network에서 실행하는 배포는
 `OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318`을 사용한다.
 
+## Agent Runtime
+
+Agent는 `QDRANT_URL=http://qdrant:6333`, `QDRANT_COLLECTION=game_words`,
+`VLLM_BASE_URL=http://vllm:8000`, `VLLM_MODEL_NAME=shiritori-llm`을 기본값으로 사용한다.
+`USE_VLLM=false`, `USE_REDIS_COUNTER=false`가 MVP 기본값이다. 비즈니스 API는 최소 32자의
+`AGENT_API_KEY`가 없으면 fail closed하며, k3s에서는 `agent-api-auth` Secret의 `api-key`에서
+주입한다.
+
+`deploy/k3s/agent-service.yaml`은 회사 내부 control-plane의 NodePort `31080`을 유지한다.
+공개 도메인/TLS를 회사 k3s Ingress가 직접 소유하지 않는다. 현재 운영 경로는 회사 서버가
+Azure VM의 `127.0.0.1:31080`으로 여는 SSH reverse tunnel과 Azure Nginx이다. 따라서
+`deploy/k3s/kustomization.yaml`에 공개 Agent Ingress나 TLS Secret을 포함하지 않는다.
+
+vLLM은 `vllm/vllm-openai:v0.22.1` 단일 replica이며 `enableServiceLinks=false`로 Kubernetes가
+주입하는 `VLLM_PORT=tcp://...`와 vLLM 자체 환경변수 이름 충돌을 막는다. 모델은 GPU node의
+`/home/goodsee/llm_model/model/MODEL/Qwen3.5-9B`를 Pod
+`/models/Qwen3.5-9B`에 read-only hostPath로 mount한다.
+
 ## GitHub Actions Deployment
 
 `.github/workflows/docker-deploy.yml`은 `workflow_dispatch`만 사용한다. 수동 실행 input
