@@ -13,6 +13,7 @@ from app.shared.core.config import AppSettings, configure_app_timezone
 from app.shared.core.http_audit import add_audit_log_middleware
 from app.shared.core.logging_config import configure_logging
 from app.shared.core.observability import add_observability
+from app.shared.core.route_guard import add_registered_route_guard_middleware
 
 
 settings = AppSettings(app_name="haejillyeok-agent")
@@ -46,6 +47,7 @@ def create_app(agent_settings: AgentSettings | None = None) -> FastAPI:
     add_audit_log_middleware(app, settings.app_name)
     app.include_router(health_router)
     app.include_router(api_router)
+    add_registered_route_guard_middleware(app)
 
     @app.exception_handler(InvalidGameCondition)
     async def invalid_game_condition_handler(

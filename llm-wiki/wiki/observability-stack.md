@@ -126,6 +126,8 @@ Grafana log dashboard는 `Haejillyeok FastAPI Logs` 제목으로 provision 된�
 파일에 남도록 한다. 로그 디렉터리 권한이나 경로 문제로 file handler를 만들 수 없으면 앱은
 stdout logging만 유지하고 `File logging setup failed path=... Continuing with stdout logging only.`
 ERROR 로그를 남긴다.
+등록되지 않은 HTTP path를 route guard가 차단한 경우에는 해당 path의 Uvicorn access log도 필터링해
+scanner 요청이 파일 로그를 채우지 않게 한다.
 
 - `LOG_FILE_ENABLED`: 파일 로그 활성화 여부, 기본값 `true`
 - `LOG_DIR`: 파일 로그 디렉터리, 기본값 `logs`

@@ -19,6 +19,7 @@ from app.shared.core.logging_config import (
     remove_project_file_handlers,
 )
 from app.shared.core.observability import resolve_otlp_http_endpoint
+from app.shared.core.route_guard import mark_blocked_access_log_path
 from app.shared.core.responses import fail, ok
 
 
@@ -117,6 +118,43 @@ def test_configure_logging_writes_uvicorn_logs_to_file(monkeypatch, tmp_path):
 
     assert "[test-app] [app.shared.core.logging_config] File logging configured" in log_text
     assert "[test-app] [uvicorn.access] GET /health 200" in log_text
+    remove_project_file_handlers(
+        logging.getLogger(),
+        logging.getLogger("uvicorn"),
+        logging.getLogger("uvicorn.access"),
+    )
+
+
+def test_configure_logging_filters_blocked_route_access_logs(monkeypatch, tmp_path):
+    monkeypatch.setenv("LOG_FILE_ENABLED", "true")
+    monkeypatch.setenv("LOG_DIR", str(tmp_path))
+
+    configure_logging("test-app", environment="prod")
+    uvicorn_access_logger = logging.getLogger("uvicorn.access")
+    mark_blocked_access_log_path("/.env")
+    uvicorn_access_logger.info(
+        '%s - "%s %s HTTP/%s" %d',
+        "testclient",
+        "GET",
+        "/.env",
+        "1.1",
+        404,
+    )
+    uvicorn_access_logger.info(
+        '%s - "%s %s HTTP/%s" %d',
+        "testclient",
+        "GET",
+        "/health",
+        "1.1",
+        200,
+    )
+    for handler in logging.getLogger().handlers + uvicorn_access_logger.handlers:
+        handler.flush()
+
+    log_text = (tmp_path / "test-app.log").read_text(encoding="utf-8")
+
+    assert "/.env" not in log_text
+    assert "/health" in log_text
     remove_project_file_handlers(
         logging.getLogger(),
         logging.getLogger("uvicorn"),
@@ -367,6 +405,23 @@ def test_be_openapi_documents_success_and_error_envelopes():
     assert invalid_credentials_example["data"] is None
     assert invalid_credentials_example["error"]["code"] == "INVALID_CREDENTIALS"
     assert invalid_credentials_example["error"]["details"] is None
+
+
+def test_be_openapi_description_links_websocket_api_docs():
+    schema = create_be_app().openapi()
+
+    description = schema["info"]["description"]
+
+    assert "[WebSocket API 문서](/ws-docs)" in description
+
+
+def test_be_keeps_fastapi_documentation_routes_open():
+    client = TestClient(create_be_app())
+
+    for path in ("/docs", "/redoc", "/openapi.json"):
+        response = client.get(path)
+
+        assert response.status_code == 200
 
 
 def test_agent_health_endpoints_return_ok():

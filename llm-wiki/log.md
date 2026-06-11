@@ -1,6 +1,8 @@
 # LLM Wiki Log
 
-이 파일은 `llm-wiki/`의 시간순 작업 이력입니다. 새 항목은 위에 추가합니다.
+이 파일은 `llm-wiki/` 정보 자체의 시간순 변경 이력입니다. 새 항목은 위에 추가합니다.
+코드 변경 상세는 Git history, PR, issue에서 확인하고, 이 파일에는 위키 페이지의 지식, 계약, 정책,
+컨벤션이 어떻게 바뀌었는지만 남깁니다.
 
 ## [2026-06-11] implementation | Integrate Qdrant Agent MVP
 
@@ -13,330 +15,81 @@
 - Agent API, 한국어 처리, Qdrant 중복 적재, k3s manifest 테스트를 추가했다.
 
 ## [2026-06-10] maintenance | Add Loki log dashboard
+=======
+## [2026-06-11] maintenance | Separate socket router from API router
 
-- 기존 FastAPI APM dashboard가 현재 Prometheus metric 이름과 label 기준을 쓰는지 확인했다.
-- Loki datasource를 사용하는 `Haejillyeok FastAPI Logs` dashboard를 추가했다.
-- 로그 dashboard는 `job`, `app_name`, `level`, `logger`, `search` 변수로 파일 로그를 필터링하고, level별 volume, error count, top logger, recent logs, error log lines, audit request logs panel을 제공한다.
-- 기본 검색어를 빈 값으로 두고 literal contains filter를 사용해 전체 로그 라인 highlight를 피한다.
-- Log Volume by Level graph는 ERROR/CRITICAL 빨강 계열, WARNING/WARN 노랑, INFO 녹색, 그 외 회색으로 고정했다.
-- Grafana 기본 logs panel에서 level별 전체 row 배경색을 provisioned dashboard JSON으로 안정 제어하기 어렵기 때문에 ERROR/CRITICAL 전용 log panel로 분리한다.
-- APM/trace dashboard에서 log dashboard로 이동하는 링크를 추가하고 README, development docs, observability wiki에 반영했다.
+- `realtime-websocket.md`에 WebSocket endpoint는 REST API router 밖의 `/ws/realtime`, 문서 페이지는 `/ws-docs`로 둔다는 계약을 반영했다.
+- `backend-guidelines.md`에 WebSocket route는 `/ws/{feature}` 형식으로 통일하고 `app/{server}/api/socket_router.py`에서 조립한다는 기준을 정리했다.
 
-## [2026-06-10] maintenance | Store deploy logs under var log
+## [2026-06-11] maintenance | Add registered route guard policy
 
-- 배포 서버의 외부 로그 저장 경로를 `/var/log/haejillyeok/*.log*`로 정리했다.
-- 앱 컨테이너 내부 `LOG_DIR`은 `/app/logs`로 유지하고, workflow가 `/var/log/haejillyeok:/app/logs` bind mount를 사용하도록 했다.
-- Promtail이 host `/var/log/haejillyeok`를 컨테이너 `/var/log/haejillyeok`로 읽으면 같은 로그 파일을 수집할 수 있다.
+- `backend-guidelines.md`에 등록된 HTTP route path만 통과시키고 미등록 path는 감사 로그 전에 body 없는 `404`로 차단하는 기준을 추가했다.
+- route guard가 차단한 path는 Uvicorn access log에서도 필터링한다는 로그 노이즈 관리 기준을 남겼다.
+- `/docs`, `/redoc`, `/openapi.json`은 등록된 문서 route로 계속 열어두는 기준을 명시했다.
 
-## [2026-06-10] maintenance | Report file logging setup failure
+## [2026-06-11] maintenance | Add commit message convention
 
-- 파일 로그 handler 생성 중 `PermissionError` 같은 `OSError`가 나면 앱은 stdout logging만 유지하고 ERROR 로그를 남기도록 했다.
-- 파일 로그가 환경변수로 꺼진 경우에도 `File logging disabled log_dir=...` info 로그를 남긴다.
-- 배포 컨테이너에서 로그 파일이 생성되지 않을 때 `docker logs`로 실패 경로를 확인할 수 있도록 테스트로 고정했다.
+- `code-conventions.md`에 `<type>: <english summary>` 형식의 한 줄 영어 커밋 메시지 기준을 추가했다.
+- 허용 type과 summary 작성 규칙을 AI 작업용 컨벤션으로 정리했다.
 
-## [2026-06-10] maintenance | Fix OTLP HTTP endpoint and file log visibility
+## [2026-06-11] lint | Clarify LLM Wiki scope and log policy
 
-- `OTEL_EXPORTER_OTLP_ENDPOINT` base URL에서 metric은 `/v1/metrics`, trace는 `/v1/traces`로 보정해 OpenTelemetry Collector 404를 피하도록 했다.
-- 파일 로그 handler를 붙인 직후 `File logging configured path=...` 로그를 남겨 실제 로그 파일 경로를 확인할 수 있게 했다.
-- OTLP endpoint 보정과 Uvicorn/file logging 동작을 테스트로 고정했다.
+- `llm-wiki/wiki/llm-wiki-maintenance.md`를 추가해 위키에 남길 정보와 남기지 않을 코드 변경 이력의 경계를 명시했다.
+- 과거 `log.md` 항목을 코드 변경 상세가 아니라 위키 지식 변경 단위로 압축했다.
+- `llm-wiki/index.md`와 `AGENTS.md`에 `log.md`를 코드 변경 로그로 쓰지 않는 기준을 연결했다.
 
-## [2026-06-10] maintenance | Include Uvicorn logs in file logging
+## [2026-06-11] maintenance | Add realtime WebSocket contract knowledge
 
-- 파일 로그 handler를 root logger뿐 아니라 `uvicorn`, `uvicorn.access` logger에도 연결하도록 정리했다.
-- Uvicorn access/error 로그가 `logs/<app_name>.log`에 함께 기록된다는 테스트와 문서 기준을 추가했다.
+- `realtime-websocket.md`에 BE realtime WebSocket endpoint, JSON envelope, `ping`/`realtime.pong`, validation close code 기준을 정리했다.
+- WebSocket 전용 문서 원본과 API-served docs route를 함께 갱신해야 한다는 문서 관리 기준을 남겼다.
 
-## [2026-06-10] maintenance | Mount deploy log directory
+## [2026-06-10] maintenance | Consolidate observability and logging knowledge
 
-- GitHub Actions Docker deploy workflow가 원격 `/opt/haejillyeok/backend/logs`를 컨테이너 `/app/logs`로 bind mount하도록 반영했다.
-- 배포 전에 원격 로그 디렉터리를 만들고 Docker image를 root로 한 번 실행해 컨테이너 `app` 사용자가 로그 디렉터리에 쓸 수 있게 소유권을 맞추도록 했다.
-- Workflow가 생성하는 `.env`에 `LOG_DIR=/app/logs`와 파일 로그 보존/용량 설정을 포함한다고 runtime configuration wiki에 기록했다.
+- `observability-stack.md`에 OpenTelemetry, Prometheus, Tempo, Loki, Promtail, Grafana의 데이터 흐름과 dashboard 기준을 통합했다.
+- 파일 로그, Uvicorn 로그 연결, log rotation/retention, Promtail label 추출, Loki/Grafana 조회 기준을 현재 운영 규칙으로 정리했다.
+- metric label cardinality, trace span attribute, 민감값 제외 기준을 관측 작업의 재사용 지식으로 남겼다.
 
-## [2026-06-10] maintenance | Add Loki Promtail file log management
+## [2026-06-10] maintenance | Consolidate runtime and deployment configuration knowledge
 
-- 앱 공통 로깅에 `logs/<app_name>.log` 파일 handler를 추가하고 매일 회전, 14일 보존 기준을 정리했다.
-- `LOG_MAX_TOTAL_BYTES`를 넘으면 앱 시작 시와 파일 로그 emit 중 주기적으로 `*.log*` 파일을 오래된 순서로 삭제하는 파일 로그 정리 기준을 남겼다.
-- Docker Compose 로컬 관측 스택에 Loki와 Promtail을 추가하고 Grafana Loki datasource를 provision 하도록 기록했다.
-- Promtail이 앱 로그 포맷에서 `app_name`, `level`, `logger` label을 추출해 Loki로 전송한다고 `observability-stack.md`에 반영했다.
+- `runtime-configuration.md`에 KST 서버 타임존, CORS allowlist, Docker runtime, Docker Hub image tag, 배포 `.env`, 로그 디렉터리, Docker network 기반 OTLP endpoint 기준을 통합했다.
+- GitHub Actions Docker 배포와 운영 DB migration workflow는 실행 절차가 아니라 앞으로 따라야 할 runtime/deployment 계약으로 요약했다.
+- `database-migrations.md`에는 SSH tunnel 기반 운영 DB migration 기준과 concurrency/confirmation 규칙을 반영했다.
 
-## [2026-06-10] maintenance | Set server timezone to KST
+## [2026-06-09] maintenance | Replace application gRPC knowledge with HTTP boundary
 
-- 공통 앱 설정에 `APP_TIMEZONE`을 추가하고 기본값을 `Asia/Seoul`로 정했다.
-- `be`와 `agent` 서버 시작 시 `APP_TIMEZONE`을 프로세스 `TZ`와 C runtime timezone에 적용하도록 했다.
-- Docker image 기본 환경과 GitHub Actions 배포 `.env` 생성값에 `APP_TIMEZONE=Asia/Seoul`을 명시했다.
-- README, development docs, runtime configuration wiki에 서버 기본 타임존은 KST이며 DB timestamp 기준은 UTC를 유지한다고 기록했다.
+- `decisions/2026-06-09-remove-application-grpc.md`에 애플리케이션 gRPC를 제거하고 FastAPI HTTP와 기능별 client wrapper를 서버 간 통신 기준으로 삼는 결정을 남겼다.
+- gRPC status 기준은 HTTP status와 WebSocket close code 기준으로 대체되었음을 관련 결정 문서에 표시했다.
 
-## [2026-06-10] maintenance | Use Docker env-file for deploy env
+## [2026-06-09] maintenance | Update auth account and runtime port rules
 
-- GitHub Actions Docker deploy workflow가 원격 `.env`를 `/app/.env:ro`로 마운트하지 않고 `docker run --env-file`로 주입하도록 바꿨다.
-- 원격 `.env`는 `chmod 600`을 유지해 `deploy` 계정만 읽고, 컨테이너 내부 `app` 유저가 bind mount 권한 때문에 `.env`를 읽지 못하는 문제를 피한다.
-- README와 runtime configuration wiki에 Docker 배포 env 주입 방식을 반영했다.
+- 인증 PoC 기준을 계정 ID 기반 가입 겸 로그인 흐름으로 갱신하고 `users.users.account_id`를 로그인 식별자로 관리하도록 정리했다.
+- 서버 HTTP host/port, Docker Compose 인프라 port, OpenTelemetry 기본 활성화 기준을 runtime 지식으로 정리했다.
 
-## [2026-06-10] maintenance | Restrict CORS origin allowlist
+## [2026-06-06] maintenance | Add API error and OpenAPI operation rules
 
-- CORS middleware 적용 대상을 브라우저에서 직접 호출되는 `be` 서버로 제한했다.
-- 허용 origin은 `http://localhost:3000`, `https://haejillyeok.com`, `https://agent.haejillyeok.com`, `https://www.haejillyeok.com`이다.
-- `agent` 서버는 `be`에서 서버 간 HTTP로 호출하므로 CORS를 등록하지 않고, 접근 제한은 네트워크/인증 계층에서 다룬다고 기록했다.
+- `openapi-swagger.md`에 public HTTP endpoint의 `response_model`, `status_code`, `summary`, `operation_id`, 실패 응답 문서화 기준을 정리했다.
+- 공통 response envelope, `AppException`, error code catalog, Swagger error example 기준을 API 계약 지식으로 남겼다.
+- Swagger 표시 문구와 schema 테스트를 언제 고정할지에 대한 테스트 기준을 정리했다.
 
-## [2026-06-10] maintenance | Keep migration tunnel port internal
+## [2026-06-05] maintenance | Add database and user identity knowledge
 
-- DB migration GitHub Actions workflow에서 `MIGRATION_LOCAL_DB_PORT` 사용자 설정값을 제거했다.
-- SSH 터널 runner 측 포트는 workflow 내부 값 `15432`로 고정하고, 사용자가 관리할 DB 변수는 private DB endpoint와 port만 남겼다.
-- `database-migrations.md`, `runtime-configuration.md`에서 선택 GitHub Variables 목록을 갱신했다.
+- `database-schema-conventions.md`와 `database-migrations.md`에 UUID v7, PostgreSQL `text`, 내부/외부 관리번호, Alembic migration 운영 기준을 정리했다.
+- 유저 도메인은 `users` schema를 사용하고, 내부 join 식별자와 외부 노출 식별자를 분리한다는 결정을 남겼다.
+- PoC 유저 테이블과 세션 로그인 결정 기록을 추가했다.
 
-## [2026-06-10] maintenance | Add SSH-tunneled DB migration workflow
+## [2026-06-05] maintenance | Separate human docs and AI wiki roles
 
-- `.github/workflows/db-migration.yml`을 추가해 GitHub Actions 수동 실행으로 운영 DB migration 작업을 선택 실행할 수 있게 했다.
-- Workflow는 `deploy` SSH 인스턴스에 로컬 포워딩을 열고 private subnet DB에 접근한 뒤 `mise` DB task를 실행한다.
-- 기본 작업은 `db-upgrade-head`이며, `db-current`, `db-history`, `db-upgrade`, `db-downgrade`, `db-downgrade-one`을 선택할 수 있다.
-- 운영 DB migration 기준과 필요한 GitHub Secrets/Variables를 `database-migrations.md`, `runtime-configuration.md`에 반영했다.
-
-## [2026-06-10] maintenance | Select deploy Git tag manually
-
-- GitHub Actions Docker deploy workflow에 `target_tag` 수동 입력을 추가했다.
-- `confirm_deploy=no` 실행은 최근 Git tag 목록을 출력해 배포 전 태그 조회용으로 사용할 수 있게 했다.
-- 배포 job은 입력한 tag가 실제 commit tag이고 Docker image tag 형식에 맞는지 검증한 뒤 해당 tag ref를 checkout해 build/push/deploy한다.
-- README와 runtime configuration wiki에서 최신 tag 자동 선택 기준을 수동 tag 선택 기준으로 바꿨다.
-
-## [2026-06-09] maintenance | Move deploy env path under opt
-
-- GitHub Actions Docker deploy workflow의 원격 배포 디렉터리를 `/opt/haejillyeok/backend`로 바꿨다.
-- README와 runtime configuration wiki에 `deploy` 계정의 `/opt/haejillyeok/backend` 쓰기 권한 필요성을 명시했다.
-
-## [2026-06-09] maintenance | Use Docker DNS for OTLP endpoint
-
-- GitHub Actions Docker deploy workflow의 `OTEL_EXPORTER_OTLP_ENDPOINT` 기본값을 `http://otel-collector:4318`로 바꿨다.
-- 배포 컨테이너가 `DOCKER_NETWORK` user-defined Docker network에 붙도록 하고, 기본값을 `backend_default`로 정리했다.
-- README와 runtime/observability wiki에 Docker network 기반 OTLP endpoint 기준을 반영했다.
-
-## [2026-06-09] maintenance | Set OTEL_ENABLED default to true
-
-- GitHub Actions Docker deploy workflow의 `OTEL_ENABLED` 기본값을 `true`로 바꿨다.
-- README와 runtime configuration wiki에서 OpenTelemetry 기본값을 `true`로 정리했다.
-
-## [2026-06-09] maintenance | Fix deploy BE_ENV to prod
-
-- GitHub Actions Docker deploy workflow가 생성하는 `.env`에서 `BE_ENV`를 GitHub Variable이 아니라 `prod`로 고정했다.
-- README와 runtime configuration wiki에서 `BE_ENV`를 GitHub Variables 목록에서 제거했다.
-
-## [2026-06-09] maintenance | Use Git version tag for Docker image tag
-
-- GitHub Actions Docker deploy workflow에서 image tag를 `github.sha` 대신 선택한 ref가 도달할 수 있는 최신 Git tag로 결정하도록 바꿨다.
-- Docker Hub에는 Git version tag와 `latest`를 함께 push하고, SSH 배포는 Git version tag image를 pull하도록 했다.
-- Git tag가 없거나 Docker image tag 형식에 맞지 않으면 배포 job이 실패하도록 했다.
-
-## [2026-06-09] maintenance | Add manual GitHub Actions Docker deploy
-
-- `.github/workflows/docker-deploy.yml`을 추가해 `workflow_dispatch` 수동 실행만으로 Docker build/push/SSH deploy를 실행하도록 했다.
-- `confirm_deploy` input이 `deploy`일 때만 실제 배포 job을 실행하고, 기본값 `no`는 확인 job만 실행한다.
-- Runner에서 Docker Hub에 image를 push하고, 원격 서버에는 `deploy` 계정 SSH로 접속해 `/opt/haejillyeok/backend/.env`를 만들고 `/app/.env:ro` volume으로 마운트한다.
-- 원격 서버는 Docker Hub credential 없이 public image를 pull하고, 컨테이너는 기본 `APP_MODULE=be`, `PORT=8000`으로 실행한다.
-
-## [2026-06-09] maintenance | Document Docker runtime environment variables
-
-- 공개 runtime image에는 `.env`를 포함하지 않으므로 `docker run`에서 필요한 환경변수를 주입한다고 README에 명시했다.
-- be 실행 예시에 `BE_ENV`, `BE_DB_*`, `OTEL_*`, `APP_MODULE=be`, `PORT` 주입을 추가했다.
-- agent 실행 예시에 `APP_MODULE=agent`, `BE_ENV`, `OTEL_*`, `PORT` 주입을 추가했다.
-- Shell에서 그대로 복사 가능한 예시가 되도록 angle bracket placeholder 대신 일반 예시값을 사용했다.
-
-## [2026-06-09] maintenance | Simplify Docker app module selector
-
-- `APP_MODULE` Docker 환경변수는 전체 ASGI import string이 아니라 `be` 또는 `agent` 값만 받도록 바꿨다.
-- `Dockerfile`은 Uvicorn 실행 대상을 `app.${APP_MODULE}.main:app` 형태로 조립한다.
-- README의 agent 실행 예시를 `APP_MODULE=agent`로 갱신했다.
-
-## [2026-06-09] maintenance | Exclude migrations from runtime Docker image
-
-- Runtime Docker image에서 migration을 실행하지 않기로 하고 `Dockerfile`에서 `alembic.ini`와 `migrations/` 복사를 제거했다.
-- `.dockerignore`에 `alembic.ini`와 `migrations/`를 추가해 build context에서도 제외했다.
-- Alembic은 runtime dependency가 아니라 dev optional dependency로 옮겨 로컬 `mise run db-*` 절차에서만 사용하도록 했다.
-
-## [2026-06-09] maintenance | Remove Python cache files from Docker image
-
-- `.dockerignore`에 nested `__pycache__/`와 `*.pyc` 제외 규칙을 추가했다.
-- `Dockerfile`에서 copy 이후 `/app` 아래 Python bytecode/cache 파일을 삭제해 runtime image에 남지 않도록 했다.
-- 공개 Docker image에는 local secret, local path, Python cache 산출물이 들어가지 않아야 한다는 기준을 유지했다.
-
-## [2026-06-09] maintenance | Use Docker Hub image tags in README
-
-- Docker build 예시를 로컬 이미지명 대신 Docker Hub 계정명 기반 tag로 바꿨다.
-- `0.1.0`과 `latest` tag를 함께 붙이고 Docker Hub에 push하는 명령을 README에 추가했다.
-- Mac에서 빌드해 Linux 서버나 여러 CPU 아키텍처에서 실행할 때는 `docker buildx build --platform linux/amd64,linux/arm64 --push`를 사용한다고 기록했다.
-
-## [2026-06-09] maintenance | Document Docker PORT to PORT publishing
-
-- `docker run` 예시는 shell `PORT` 값을 `-e PORT="$PORT"`와 `-p "$PORT:$PORT"`에 함께 넘기도록 README에 추가했다.
-- be 서버는 기본 `APP_MODULE`을 사용하고 `PORT=8000`을 넘기며, agent 서버는 `APP_MODULE=app.agent.main:app`, `PORT=8001`을 넘기는 기준을 남겼다.
-
-## [2026-06-09] maintenance | Add environment-selected Docker runtime
-
-- 루트 `Dockerfile`을 추가해 `python:3.11-slim` 기반 runtime image를 만들도록 했다.
-- 기본 실행 대상은 `APP_MODULE=app.be.main:app`, `PORT=8000`인 be 서버로 두고, 환경변수로 `APP_MODULE=app.agent.main:app`, `PORT=8001`을 주입하면 agent 서버를 같은 image에서 실행할 수 있게 했다.
-- 컨테이너 port publishing을 위해 Uvicorn 기본 host는 `0.0.0.0`으로 두고, worker 수는 `WORKERS` 환경변수로 제어한다고 기록했다.
-
-## [2026-06-09] maintenance | Add Docker build context ignore rules
-
-- 공개 Docker image build context에 `.env`, `.env.*`, 로컬 도구 상태, 가상환경, 테스트/coverage/build 산출물, runtime artifact를 포함하지 않도록 `.dockerignore`를 추가했다.
-- 사람용 문서, AI용 `llm-wiki/`, 테스트 코드는 runtime image에 필요하지 않은 대상으로 제외한다고 기록했다.
-- 운영 secret은 image에 bake하지 않고 컨테이너 실행 환경에서 주입한다는 기준을 남겼다.
-
-## [2026-06-09] maintenance | Run infra-up from mise enter hook
-
-- `.mise.toml`의 enter hook이 `mise run infra-up`을 실행하도록 바꿨다.
-- 프로젝트 디렉터리 진입 시 PostgreSQL뿐 아니라 OpenTelemetry Collector, Prometheus, Tempo, Grafana도 함께 시작된다고 기록했다.
-
-## [2026-06-09] maintenance | Update auth account input rules
-
-- PoC 인증 기준을 닉네임 로그인에서 계정 ID 기반 로그인으로 갱신했다.
-- 계정 ID는 영어 문자, 숫자, `_`만 허용하고 3~20자로 제한한다고 정리했다.
-- 닉네임은 한글, 영어, 숫자, `_`만 허용하고 3~20자로 제한한다고 정리했다.
-- 비밀번호는 8~20자로 제한하고 PBKDF2-HMAC-SHA256 저장 기준은 유지한다고 남겼다.
-- `users.users.account_id`를 unique, not null 로그인 식별자로 관리한다고 기록했다.
-
-## [2026-06-08] maintenance | Add environment-controlled runtime ports
-
-- HTTP 개발 서버는 host를 `127.0.0.1`로 고정하고 서버 `.env`의 port 값만 제어한다.
-- gRPC 서버는 host를 `localhost`로 고정하고 서버 `.env`의 port 값만 제어한다.
-- Docker Compose 인프라 host port는 서버 `.env` 관리 대상에서 제외한다고 정리했다.
-- 앱은 기본적으로 APM exporter를 연결하고, 특정 상황에서만 서버 `.env` 값으로 비활성화한다는 기준을 남겼다.
-
-## [2026-06-06] maintenance | Add centralized error codes and Swagger error examples
-
-- 공개 error code를 `app/shared/core/error_codes.py`의 `ErrorCode` enum에서 관리하도록 정리했다.
-- `ErrorDefinition` catalog가 error type, HTTP status, gRPC status, WebSocket close code를 함께 관리하도록 확장했다.
-- Swagger 실패 응답은 `ErrorResponse` schema와 endpoint별 example/examples를 함께 표시하도록 `error_response(...)`, `error_responses(...)`, `error_example(...)` helper 기준을 추가했다.
-- endpoint는 `error_responses_by_status(codes=[...])`로 error code 목록을 넘겨 HTTP status별 Swagger responses를 자동 생성하도록 정리했다.
-- BE auth login의 `401`, `422` 실패 응답에 실제 application error code example을 노출했다.
-- 성공 응답에는 `error` 필드를 넣지 않도록 `SuccessResponse[T]`를 도입하고, error example의 `data: null`, `details: null`은 OpenAPI 후처리로 복원하도록 정리했다.
-- 일반 Swagger 문구 고정 테스트는 추가하지 않고, shared error code/helper 동작과 기존 endpoint runtime 응답 테스트를 유지했다.
-
-## [2026-06-05] maintenance | Add request audit logging
-
-- HTTP/gRPC 요청의 시작, 완료, 실패를 `audit.request` logger로 남기는 AOP 관측 기준을 정리했다.
-- 공통 감사 이벤트 포맷은 `app/shared/core/audit.py`에 두고, HTTP middleware와 gRPC interceptor가 같은 포맷을 쓰도록 기록했다.
-- payload, password, session token, cookie, authorization header는 감사 로그에 남기지 않는 privacy rule을 남겼다.
-
-## [2026-06-05] maintenance | Add common protocol response and exceptions
-
-- HTTP/gRPC 같은 프로토콜 경계에서 쓰는 `success`, `data`, `error` 공통 response envelope를 `app/shared/core` 기준으로 정리했다.
-- 커스텀 예외는 `AppException` 기준으로 관리하고 각 프로토콜 handler에서 변환한다고 기록했다.
-- BE `/api/v1/*`는 shared envelope를 HTTP JSON으로 반환하고, root `/health`는 운영 probe 용도이므로 raw response를 유지한다고 남겼다.
-
-## [2026-06-05] maintenance | Add format check management
-
-- 개발 의존성에 `ruff`를 추가했다.
-- `mise run format`과 `mise run format-check` 태스크로 포맷 적용과 확인을 분리했다.
-- README, 개발 문서, 코드 컨벤션, AI용 현재 상태 위키에 포맷 관리 기준을 반영했다.
-
-## [2026-06-05] maintenance | Relax Swagger metadata testing rule
-
-- 일반 Swagger 표시용 `summary`, 설명 문구, 단순 `operation_id`는 전용 OpenAPI schema 테스트로 고정하지 않기로 정리했다.
-- `test_be_openapi_has_stable_swagger_metadata` 테스트를 제거했다.
-- OpenAPI schema 테스트는 프론트 SDK 자동 생성, CI schema diff, breaking change 감지처럼 schema 자체가 제품 계약일 때만 추가한다고 남겼다.
-
-## [2026-06-05] maintenance | Add OpenAPI Swagger metadata guide
-
-- `llm-wiki/wiki/openapi-swagger.md`에 FastAPI OpenAPI schema와 Swagger UI 운영 기준을 추가했다.
-- public HTTP endpoint는 `response_model`, `status_code`, `summary`, `operation_id`, 주요 실패 `responses`를 명시한다고 정리했다.
-- OpenAPI Generator나 프론트 client 생성을 대비해 `operation_id`를 안정적인 snake_case 이름으로 고정하는 기준을 남겼다.
-- BE auth/health endpoint의 Swagger metadata를 OpenAPI schema 테스트로 고정했다.
-
-## [2026-06-06] maintenance | Add Tempo object-level tracing
-
-- OpenTelemetry trace pipeline을 debug exporter뿐 아니라 Tempo로도 전달하도록 Docker Compose와 Collector 설정을 확장했다.
-- Grafana에 Tempo datasource와 `Haejillyeok FastAPI Traces` dashboard를 provision하고, 객체별 실행 시간은 trace table과 waterfall에서 확인하도록 정리했다.
-- `app/shared/core/observability.py`에 `@traced_method` helper를 추가하고 인증 service/repository 경계에 child span을 붙였다.
-- span attribute에는 객체명, 계층, 코드 namespace/function만 넣고 payload, token, cookie 같은 민감값은 넣지 않는 기준을 남겼다.
-
-## [2026-06-06] maintenance | Add local APM observability stack
-
-- FastAPI 앱은 `app/shared/core/observability.py`에서 OpenTelemetry trace instrumentation과 HTTP metric middleware를 등록한다고 정리했다.
-- OpenTelemetry Collector, Prometheus, Grafana를 Docker Compose 로컬 인프라로 추가했다.
-- Grafana는 provisioned Prometheus datasource와 `fastapi-apm.json` dashboard로 throughput, 5xx error rate, p95, p99 latency를 시각화한다.
-- route label은 실제 path가 아니라 FastAPI route template을 사용해 metric cardinality를 낮춘다고 기록했다.
-
-## [2026-06-09] maintenance | Remove application gRPC
-
-- `be`와 `agent` 서버에서 gRPC 서버, proto 계약, proto 생성 태스크를 제거하기로 정리했다.
-- 서버 간 통신 기준을 gRPC에서 HTTP API와 기능별 client wrapper로 바꿨다.
-- OpenTelemetry exporter 기본 전송을 OTLP HTTP `http://localhost:4318`로 바꿨다.
-- 공통 예외와 error definition은 HTTP status와 WebSocket close code만 관리한다고 기록했다.
-
-## [2026-06-05] maintenance | Add auth session login decision
-
-- 가입 겸 로그인 API는 `POST /api/v1/auth/login` 하나로 처리한다고 정리했다.
-- 닉네임이 없으면 가입하고, 있으면 비밀번호를 검증하는 PoC 인증 흐름을 기록했다.
-- 성공 시 opaque session token을 `session_token` HttpOnly cookie로 발급하고 DB에는 `token_hash`를 저장한다고 결정했다.
-- `users.user_sessions` table의 역할과 멀티 서버 확장 기준을 위키에 남겼다.
-
-## [2026-06-05] maintenance | Use domain schema for users
-
-- PostgreSQL schema namespace는 프로젝트명이 아니라 도메인 기준으로 관리한다고 정리했다.
-- 유저 도메인은 `users` schema를 사용하고, 유저 테이블은 `users.users`로 관리한다고 기록했다.
-- ORM 모델은 `__table_args__`로 schema를 명시하고 migration은 domain schema를 생성한 뒤 table을 만들도록 기준을 남겼다.
-
-## [2026-06-05] maintenance | Add users external identifier
-
-- `users.public_id`를 UUID v7 외부용 관리번호로 두고 `users.id`는 내부 join용 관리번호로 유지한다고 정리했다.
-- PoC 유저 테이블 결정 기록에서 외부 응답/API 식별자는 `public_id`, 내부 참조는 `id`를 사용하도록 갱신했다.
-
-## [2026-06-05] maintenance | Add PoC users table decision
-
-- PoC 유저 테이블 결정을 `llm-wiki/wiki/decisions/2026-06-05-users-table-poc.md`에 추가했다.
-- `users.id`는 UUID v7 내부용 관리번호로 두고 외부용 관리번호는 현재 만들지 않기로 정리했다.
-- 닉네임은 `text` column과 코드 단 15자 제한으로 관리하고, 비밀번호는 PBKDF2-HMAC-SHA256 hash로 저장한다고 기록했다.
-
-## [2026-06-05] maintenance | Add database schema conventions
-
-- `llm-wiki/wiki/database-schema-conventions.md`를 추가했다.
-- UUID는 v7을 사용하고, PostgreSQL 문자열은 기본적으로 `text`를 사용하도록 정리했다.
-- 외부 노출이 필요한 경우에만 외부용 관리번호를 두고, join과 foreign key는 내부용 관리번호를 기준으로 한다는 규칙을 남겼다.
-- DB migration 작업 전 schema 규칙을 확인하도록 `database-migrations.md`와 `index.md`에 연결했다.
-
-## [2026-06-05] maintenance | Clarify Alembic commands and target DB
-
-- Alembic logger 설정을 제거해 앱 로깅 설정과 겹칠 여지를 줄였다.
-- migration 대상 DB는 기본적으로 앱과 같은 DB 접속 설정을 쓰고, 일회성 override만 Alembic `-x database_url=...`로 하도록 정리했다.
-- `mise` DB migration 태스크 이름과 사용법을 위키에 반영했다.
-- 별도 migration 설정 테스트는 제거했다.
-
-## [2026-06-05] maintenance | Add Alembic migration knowledge
-
-- DB schema migration을 Alembic으로 관리하는 기준을 `llm-wiki/wiki/database-migrations.md`에 정리했다.
-- `app/be/models/`를 SQLAlchemy ORM 모델과 Alembic metadata base 위치로 기록했다.
-- `migrations/`를 Alembic 환경과 revision 파일 위치로 기록했다.
-- 앱 시작 시 migration을 자동 실행하지 않고 배포 절차에서 앱 실행 전에 `alembic upgrade head`를 실행하는 운영 기준을 남겼다.
-
-## [2026-06-05] maintenance | Treat docs as human-only and llm-wiki as AI knowledge
-
-- `docs/`를 사람이 보는 문서로 재정의했다.
-- `llm-wiki/`를 AI가 작업할 때 사용하는 전체 지식 레이어로 재정의했다.
-- FastAPI/gRPC/WebSocket 가이드라인과 코드 컨벤션의 작업용 본문을 `llm-wiki/wiki/`에 추가했다.
-- `AGENTS.md`의 구현 전 참조 대상을 `docs/`에서 `llm-wiki/`로 바꿨다.
-
-## [2026-06-05] maintenance | Korean comment and docstring rules
-
-- `docs/code-conventions.md`에 로직 설명과 함수 docstring을 한국어로 작성하는 규칙을 추가했다.
-- public 함수, service/repository 메서드, gRPC handler, WebSocket connection manager 메서드에는 의도, 입력, 반환값, 부작용을 설명하도록 정리했다.
-- 복잡한 분기, 비즈니스 규칙, timeout/cancellation, transaction, retry/compensation 로직에는 이유 중심의 한국어 주석을 남기도록 했다.
-- `AGENTS.md`와 AI용 `backend-guidelines-summary.md`에도 같은 기준을 반영했다.
+- `docs/`는 사람이 보는 문서, `llm-wiki/`는 AI 작업 지식 레이어라는 역할 분리를 결정 기록으로 남겼다.
+- FastAPI/WebSocket 가이드라인과 Python 코드 컨벤션의 AI 작업 기준을 `llm-wiki/wiki/`에 둔다고 정리했다.
+- 한국어 주석/docstring 기준과 레이어별 테스트 기준을 AI 작업용 컨벤션에 반영했다.
 
 ## [2026-06-05] ingest | Backend framework and code conventions
 
-- `docs/index.md`를 만들어 사람용 문서 입구를 추가했다.
-- `docs/backend-guidelines.md`에 사람이 읽는 FastAPI, gRPC, WebSocket 설명을 정리했다.
-- `docs/code-conventions.md`에 사람이 읽는 Python 코드 스타일과 레이어 책임 설명을 정리했다.
-- `README.md`와 `AGENTS.md`에서 새 문서를 참조하도록 연결했다.
-- AI용 요약과 결정 기록을 `llm-wiki/wiki/`에 추가했다.
-
-## [2026-06-05] maintenance | Clarify docs and LLM Wiki roles
-
-- `docs/`는 사람이 보는 문서로 정의했다.
-- `llm-wiki/`는 AI가 작업할 때 사용하는 지식 레이어로 정의했다.
-- `docs/`에만 있는 내용이 AI 작업에도 필요하면 `llm-wiki/`에도 정리한다는 규칙을 `AGENTS.md`와 결정 기록에 추가했다.
+- 사람용 backend/code convention 문서의 핵심을 AI 작업 기준으로 컴파일해 `backend-guidelines.md`, `code-conventions.md`, `backend-guidelines-summary.md`에 반영했다.
+- FastAPI, WebSocket, 서버 간 client wrapper, 레이어 책임, 테스트 기준을 초기 작업 지식으로 정리했다.
 
 ## [2026-06-05] maintenance | LLM Wiki bootstrap
 
-- 루트 `AGENTS.md`에 Karpathy 4원칙과 LLM Wiki 운영 규칙을 추가했다.
-- `llm-wiki/index.md`를 콘텐츠 카탈로그로 만들었다.
-- `llm-wiki/wiki/` 아래에 현재 상태, 프로젝트 맵, 개념, 결정, 출처 페이지를 추가했다.
-- 향후 LLM은 위키를 읽거나 갱신할 때 `llm-wiki/index.md`를 먼저 확인하고, 변경 이력을 이 파일에 남긴다.
+- `llm-wiki/index.md`를 콘텐츠 카탈로그로 만들고 `log.md`를 위키 작업 이력으로 분리했다.
+- `current-status.md`, `project-map.md`, Karpathy LLM Wiki 개념, 초기 결정/출처 페이지를 추가했다.
+- 위키를 읽거나 갱신할 때 `index.md`를 먼저 확인한다는 운영 기준을 세웠다.
