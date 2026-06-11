@@ -9,6 +9,8 @@ class ErrorCode(StrEnum):
     SESSION_EXPIRED = "SESSION_EXPIRED"
     VALIDATION_ERROR = "VALIDATION_ERROR"
     HTTP_ERROR = "HTTP_ERROR"
+    AGENT_CLIENT_NOT_CONFIGURED = "AGENT_CLIENT_NOT_CONFIGURED"
+    AGENT_HEALTH_UNAVAILABLE = "AGENT_HEALTH_UNAVAILABLE"
 
 
 class ErrorType(StrEnum):
@@ -80,6 +82,20 @@ ERROR_DEFINITIONS: dict[ErrorCode, ErrorDefinition] = {
         type=ErrorType.INTERNAL,
         message="요청 처리 중 오류가 발생했습니다.",
         http_status_code=500,
+        websocket_close_code=1011,
+    ),
+    ErrorCode.AGENT_CLIENT_NOT_CONFIGURED: ErrorDefinition(
+        code=ErrorCode.AGENT_CLIENT_NOT_CONFIGURED,
+        type=ErrorType.INTERNAL,
+        message="Agent client is not configured.",
+        http_status_code=503,
+        websocket_close_code=1011,
+    ),
+    ErrorCode.AGENT_HEALTH_UNAVAILABLE: ErrorDefinition(
+        code=ErrorCode.AGENT_HEALTH_UNAVAILABLE,
+        type=ErrorType.INTERNAL,
+        message="Agent health check failed.",
+        http_status_code=502,
         websocket_close_code=1011,
     ),
 }

@@ -4,6 +4,11 @@
 코드 변경 상세는 Git history, PR, issue에서 확인하고, 이 파일에는 위키 페이지의 지식, 계약, 정책,
 컨벤션이 어떻게 바뀌었는지만 남깁니다.
 
+## [2026-06-11] maintenance | Add BE to Agent health runtime contract
+
+- `runtime-configuration.md`에 BE가 Agent health API를 호출할 때 전용 client wrapper와 배포 주입 설정을 사용한다는 기준을 추가했다.
+- Agent 연결 정보는 기본값 없이 GitHub Secrets에서 필수로 주입한다는 배포 기준을 정리했다.
+
 ## [2026-06-11] implementation | Integrate Qdrant Agent MVP
 
 - 별도 Agent 작업공간의 끝말잇기 MVP를 monorepo `app/agent` 소유 구조로 이식했다.

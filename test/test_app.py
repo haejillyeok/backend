@@ -214,6 +214,53 @@ def test_be_health_endpoints_return_ok():
     }
 
 
+def test_be_agent_health_endpoint_returns_agent_status():
+    from app.be.dependencies.services import get_agent_health_client
+    from app.be.schemas.response.health import HealthResponse
+
+    class FakeAgentHealthClient:
+        async def get_health(self) -> HealthResponse:
+            return HealthResponse(status="ok")
+
+    app = create_be_app()
+    app.dependency_overrides[get_agent_health_client] = lambda: FakeAgentHealthClient()
+    client = TestClient(app)
+
+    response = client.get("/api/v1/agent/health")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "success": True,
+        "data": {"status": "ok"},
+    }
+
+
+def test_be_agent_health_endpoint_maps_agent_failure_to_bad_gateway():
+    from app.be.dependencies.services import get_agent_health_client
+    from app.shared.clients.agent import AgentClientError
+
+    class FakeAgentHealthClient:
+        async def get_health(self):
+            raise AgentClientError("agent health check failed", status_code=503)
+
+    app = create_be_app()
+    app.dependency_overrides[get_agent_health_client] = lambda: FakeAgentHealthClient()
+    client = TestClient(app)
+
+    response = client.get("/api/v1/agent/health")
+
+    assert response.status_code == 502
+    assert response.json() == {
+        "success": False,
+        "data": None,
+        "error": {
+            "code": "AGENT_HEALTH_UNAVAILABLE",
+            "message": "Agent health check failed.",
+            "details": {"agent_status_code": 503},
+        },
+    }
+
+
 def test_be_custom_exception_returns_common_error_response():
     app = create_be_app()
 

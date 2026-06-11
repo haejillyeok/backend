@@ -44,6 +44,8 @@ Swagger 실패 응답은 `ErrorResponse` schema를 참조하고, endpoint별 예
 | `SESSION_EXPIRED` | `AUTHENTICATION` | `401` | `1008` | 세션 만료 |
 | `VALIDATION_ERROR` | `VALIDATION` | `422` | `1008` | 요청 body validation 실패 |
 | `HTTP_ERROR` | `INTERNAL` | `500` | `1011` | FastAPI `HTTPException` fallback |
+| `AGENT_CLIENT_NOT_CONFIGURED` | `INTERNAL` | `503` | `1011` | BE의 Agent client 설정 누락 |
+| `AGENT_HEALTH_UNAVAILABLE` | `INTERNAL` | `502` | `1011` | BE에서 Agent health API 호출 실패 |
 
 ## BE Health
 
@@ -53,6 +55,30 @@ Swagger 실패 응답은 `ErrorResponse` schema를 참조하고, endpoint별 예
 | --- | --- | --- |
 | GET | `/health` | `{"status": "ok"}` |
 | GET | `/api/v1/health` | `{"success": true, "data": {"status": "ok"}}` |
+
+## BE Agent Health
+
+BE가 Agent 서버의 versioned health API를 호출해 Agent 상태를 확인합니다. Agent 연결 정보와
+공유 secret은 배포 환경에서 주입합니다.
+
+### GET `/api/v1/agent/health`
+
+Response:
+
+```json
+{
+  "success": true,
+  "data": {
+    "status": "ok"
+  }
+}
+```
+
+| Status | Meaning |
+| --- | --- |
+| `200` | Agent health API 응답 성공 |
+| `502` / `AGENT_HEALTH_UNAVAILABLE` | Agent health API 호출 실패, timeout, 비정상 응답 |
+| `503` / `AGENT_CLIENT_NOT_CONFIGURED` | Agent client 설정 누락 |
 
 ## BE Auth
 

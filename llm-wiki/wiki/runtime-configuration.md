@@ -101,6 +101,17 @@ vLLM은 `vllm/vllm-openai:v0.22.1` 단일 replica이며 `enableServiceLinks=fals
 `/home/goodsee/llm_model/model/MODEL/Qwen3.5-9B`를 Pod
 `/models/Qwen3.5-9B`에 read-only hostPath로 mount한다.
 
+## BE to Agent Runtime
+
+BE에서 Agent 서버를 호출할 때는 `app/shared/clients/agent.py`의 전용 HTTP client wrapper를
+사용한다. BE의 public `/api/v1/agent/health`는 배포 환경에서 주입한 Agent base URL과 공유
+secret으로 Agent `/api/v1/health`를 호출한다. Agent health API 자체는 인증을 강제하지 않더라도
+BE client는 비즈니스 API와 같은 인증 header를 항상 보낸다.
+
+배포 workflow에는 Agent 연결 정보 기본값을 두지 않는다. 실제 운영 네트워크에서 BE가 접근할 수
+있는 Agent base URL과 Agent k3s Secret `agent-api-auth`의 `api-key`와 같은 공유 secret을 GitHub
+Secrets로 주입해야 한다.
+
 ## GitHub Actions Deployment
 
 `.github/workflows/docker-deploy.yml`은 `workflow_dispatch`만 사용한다. 수동 실행 input
@@ -125,7 +136,7 @@ Docker network에 붙인다. Workflow가 생성하는 `.env`에는 `BE_ENV=prod`
 credential을 전달하지 않고 public image를 pull한다.
 
 필수 GitHub Secrets는 `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `DEPLOY_HOST`, `DEPLOY_SSH_KEY`,
-`BE_DB_HOST`, `BE_DB_USER`, `BE_DB_PASSWORD`, `BE_DB_NAME`이다. 선택 GitHub Variables는
+`BE_DB_HOST`, `BE_DB_USER`, `BE_DB_PASSWORD`, `BE_DB_NAME`과 Agent 연결 secrets이다. 선택 GitHub Variables는
 `DEPLOY_SSH_PORT`, `DOCKER_NETWORK`, `BE_DB_PORT`, `OTEL_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`,
 `OTEL_METRIC_EXPORT_INTERVAL`, `LOG_FILE_ENABLED`, `LOG_RETENTION_DAYS`, `LOG_MAX_TOTAL_BYTES`,
 `LOG_CLEANUP_INTERVAL_SECONDS`이다. `DOCKER_NETWORK` 기본값은 `backend_default`이고,
