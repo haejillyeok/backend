@@ -4,10 +4,13 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.shared.core.observability import start_span
+
 
 AGENT_API_KEY_HEADER = "X-Agent-API-Key"
 AGENT_HEALTH_PATH = "/api/v1/health"
 DEFAULT_AGENT_TIMEOUT_SECONDS = 3.0
+AGENT_HEALTH_SPAN_NAME = "AgentHealthClient.get_health"
 
 
 class AgentHealthStatus(BaseModel):
@@ -76,7 +79,18 @@ class AgentHealthClient:
                 timeout=httpx.Timeout(self._settings.timeout_seconds),
                 transport=self._transport,
             ) as client:
-                response = await client.get(AGENT_HEALTH_PATH)
+                with start_span(
+                    AGENT_HEALTH_SPAN_NAME,
+                    attributes={
+                        "app.layer": "client",
+                        "peer.service": "haejillyeok-agent",
+                        "http.request.method": "GET",
+                        "url.path": AGENT_HEALTH_PATH,
+                    },
+                ) as span:
+                    response = await client.get(AGENT_HEALTH_PATH)
+                    if hasattr(span, "set_attribute"):
+                        span.set_attribute("http.response.status_code", response.status_code)
         except httpx.TimeoutException as exc:
             raise AgentClientError("agent health check timed out") from exc
         except httpx.HTTPError as exc:
