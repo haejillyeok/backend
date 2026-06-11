@@ -22,6 +22,7 @@
 | [wiki/realtime-websocket.md](wiki/realtime-websocket.md) | BE `/ws/realtime` 연결 테스트용 WebSocket endpoint, `/ws-docs` 문서 라우터, WSS 노출 기준, JSON envelope 계약 |
 | [wiki/database-migrations.md](wiki/database-migrations.md) | Alembic 기반 DB migration 형상관리와 운영 기준 |
 | [wiki/database-schema-conventions.md](wiki/database-schema-conventions.md) | UUID v7, PostgreSQL text, 내부/외부 관리번호, join 기준 등 DB schema 규칙 |
+| [wiki/sunset-game-database-design.md](wiki/sunset-game-database-design.md) | 해질녘 게임 플랫폼 공통 DB, 게임군 확장 table, Mermaid ERD, UUID v7/int 번호 구분 기준 |
 | [wiki/code-conventions.md](wiki/code-conventions.md) | Python 코드 스타일, 주석/docstring, 레이어 책임, 테스트, 커밋 메시지 기준 |
 | [wiki/backend-guidelines-summary.md](wiki/backend-guidelines-summary.md) | FastAPI, WebSocket, 서버 간 HTTP client, 코드 컨벤션의 빠른 요약 |
 

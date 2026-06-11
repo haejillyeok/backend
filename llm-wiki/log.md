@@ -4,6 +4,12 @@
 코드 변경 상세는 Git history, PR, issue에서 확인하고, 이 파일에는 위키 페이지의 지식, 계약, 정책,
 컨벤션이 어떻게 바뀌었는지만 남깁니다.
 
+## [2026-06-11] maintenance | Add Sunset game DB design draft
+
+- `sunset-game-database-design.md`에 해질녘 게임 플랫폼의 결과/복구 중심 DB 저장 범위와 table 초안을 정리했다.
+- UUID v7은 row 식별자와 외부 노출 식별자에 쓰고, 게임 안 순서/번호/점수/개수는 integer로 둔다는 기준을 추가했다.
+- `session_phases`, `participant_actions`, `state_snapshots`, `game_events`를 공통 진행 기록으로 두고 단어 게임은 `word_game` 확장 table로 분리하는 기준과 Mermaid ERD를 추가했다.
+
 ## [2026-06-11] maintenance | Split lobby and match WebSocket direction
 
 - `realtime-websocket.md`에서 `/ws/realtime`을 실제 게임 상태가 아닌 ping/pong 연결 테스트용 endpoint로 정리했다.
