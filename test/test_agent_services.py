@@ -95,6 +95,31 @@ async def test_no_qdrant_candidate_uses_vllm_fallback_once() -> None:
     ]
 
 
+async def test_non_shiritori_no_candidate_uses_game_specific_fallback() -> None:
+    vllm_service = FakeVllmService("고구마")
+    service = build_service(FakeWordRepository(), vllm_service)
+
+    execution = await service.answer(
+        AgentAnswerRequest(
+            request_id="req-chosung",
+            room_id="room-1",
+            game_type="chosung",
+            used_words=["사과"],
+            condition={"chosung": "ㄱㄱㅁ"},
+        )
+    )
+
+    assert execution.response.status == "ok"
+    assert execution.response.answer == "고구마"
+    assert vllm_service.calls == [
+        {
+            "game_type": "chosung",
+            "condition": "ㄱㄱㅁ",
+            "used_words": {"사과"},
+        }
+    ]
+
+
 async def test_candidate_response_records_only_returned_answer() -> None:
     repository = FakeWordRepository([candidate("줄넘기")])
     vllm_service = FakeVllmService("줄사랑")
@@ -178,7 +203,6 @@ async def test_stack_builds_payload_and_avoids_duplicate_job() -> None:
     )
     request = DataStackRequest(
         request_id="stack-1",
-        game_types=["shiritori", "chosung", "contains"],
         words=["사과", " 사과 ", "고구마밭"],
     )
 
@@ -188,6 +212,34 @@ async def test_stack_builds_payload_and_avoids_duplicate_job() -> None:
     assert first.response.received_count == 2
     assert first.job is not None
     assert first.job.payloads[0]["chosung"] == "ㅅㄱ"
+    assert first.job.payloads[0] == {
+        "word": "사과",
+        "start_word": "사",
+        "end_word": "과",
+        "chosung": "ㅅㄱ",
+        "syllables": ["사", "과"],
+        "length": 2,
+        "used_count": 0,
+    }
     assert second.job is None
     await service.process(first.job)
     assert len(repository.upsert_calls) == 1
+
+
+def test_stack_request_accepts_legacy_fields_without_storing_them() -> None:
+    request = DataStackRequest.model_validate(
+        {
+            "game_types": ["shiritori", "chosung", "contains"],
+            "words": ["사과"],
+            "options": {
+                "is_valid": True,
+                "is_banned": False,
+                "preserve_ai_used_count": False,
+            },
+        }
+    )
+
+    assert request.words == ["사과"]
+    assert request.options.preserve_used_count is False
+    assert "game_types" not in request.model_dump()
+    assert "is_valid" not in request.options.model_dump()

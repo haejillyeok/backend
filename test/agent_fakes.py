@@ -25,19 +25,19 @@ class FakeWordRepository:
         payloads: Sequence[dict],
         *,
         overwrite_existing: bool,
-        preserve_ai_used_count: bool,
+        preserve_used_count: bool,
     ) -> int:
         self.upsert_calls.append(
             {
                 "payloads": list(payloads),
                 "overwrite_existing": overwrite_existing,
-                "preserve_ai_used_count": preserve_ai_used_count,
+                "preserve_used_count": preserve_used_count,
             }
         )
         return len(payloads)
 
-    async def increment_ai_used_count(self, word_norm: str) -> None:
-        self.incremented.append(word_norm)
+    async def increment_used_count(self, word: str) -> None:
+        self.incremented.append(word)
 
 
 def candidate(
@@ -47,12 +47,10 @@ def candidate(
 ) -> WordCandidate:
     return WordCandidate(
         word=word,
-        word_norm=word,
-        game_types=["shiritori", "chosung", "contains"],
         start_word=word[0],
         end_word=word[-1],
         chosung="",
         syllables=list(word),
         length=len(word),
-        ai_used_count=used_count,
+        used_count=used_count,
     )

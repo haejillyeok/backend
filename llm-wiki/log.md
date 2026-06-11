@@ -4,10 +4,18 @@
 코드 변경 상세는 Git history, PR, issue에서 확인하고, 이 파일에는 위키 페이지의 지식, 계약, 정책,
 컨벤션이 어떻게 바뀌었는지만 남깁니다.
 
+## [2026-06-11] maintenance | Simplify Agent word payload
+
+- Backend의 `game_type`은 handler 선택에 사용하고 Qdrant payload에는 저장하지 않는 기준을
+  기록했다.
+- Qdrant payload를 단어 구조 필드와 `used_count`로 제한하고 `used_words`를 `word`
+  블랙리스트로 제외하는 검색 계약을 기록했다.
+
 ## [2026-06-11] maintenance | Add Qdrant-first vLLM fallback policy
 
 - Qdrant 후보가 있으면 최대 10개 무작위 후보군에서 하나를 반환하는 선택 정책을 기록했다.
-- 끝말잇기 후보가 없을 때만 vLLM으로 2~4글자 단어를 생성하고 형식과 중복을 검증하는 기준을 추가했다.
+- 세 게임 후보가 없을 때 game type별 vLLM 프롬프트로 2~4글자 단어를 생성하고 규칙과 중복을
+  검증하는 기준을 추가했다.
 - 생성 단어의 사전 등재 여부는 외부 사전 없이 완전히 보장할 수 없고 Qdrant에 자동 적재하지 않는다고 명시했다.
 
 ## [2026-06-11] maintenance | Add BE to Agent health runtime contract
