@@ -14,13 +14,42 @@ from app.agent.services.word import WordService
 from test.agent_fakes import FakeWordRepository, candidate
 
 
-def build_service(repository: FakeWordRepository) -> AgentService:
+class FakeVllmService:
+    def __init__(self, generated_word: str | None = None) -> None:
+        self.generated_word = generated_word
+        self.calls: list[dict] = []
+
+    async def generate_fallback(
+        self,
+        game_type,
+        condition: str,
+        used_words: set[str],
+    ) -> str | None:
+        self.calls.append(
+            {
+                "game_type": game_type,
+                "condition": condition,
+                "used_words": used_words,
+            }
+        )
+        return self.generated_word
+
+
+def build_service(
+    repository: FakeWordRepository,
+    vllm_service: VllmService | FakeVllmService | None = None,
+) -> AgentService:
     return AgentService(
-        CandidateService(repository, random_source=random.Random(0)),
+        CandidateService(
+            repository,
+            shortlist_size=10,
+            random_source=random.Random(0),
+        ),
         build_handler_registry(),
         InMemoryIdempotencyStore(),
         QdrantUsageService(repository),
-        VllmService(
+        vllm_service
+        or VllmService(
             "http://vllm:8000",
             "shiritori-llm",
             enabled=False,
@@ -48,15 +77,35 @@ async def test_no_candidate_returns_without_usage() -> None:
     assert execution.usage_word is None
 
 
+async def test_no_qdrant_candidate_uses_vllm_fallback_once() -> None:
+    vllm_service = FakeVllmService("줄사랑")
+    service = build_service(FakeWordRepository(), vllm_service)
+
+    execution = await service.answer(answer_request())
+
+    assert execution.response.status == "ok"
+    assert execution.response.answer == "줄사랑"
+    assert execution.usage_word is None
+    assert vllm_service.calls == [
+        {
+            "game_type": "shiritori",
+            "condition": "줄",
+            "used_words": {"거미줄"},
+        }
+    ]
+
+
 async def test_candidate_response_records_only_returned_answer() -> None:
     repository = FakeWordRepository([candidate("줄넘기")])
-    service = build_service(repository)
+    vllm_service = FakeVllmService("줄사랑")
+    service = build_service(repository, vllm_service)
 
     execution = await service.answer(answer_request())
     await service.record_usage(execution.usage_word)
 
     assert execution.response.answer == "줄넘기"
     assert repository.incremented == ["줄넘기"]
+    assert vllm_service.calls == []
 
 
 async def test_duplicate_answer_request_queries_and_counts_once() -> None:
@@ -94,14 +143,14 @@ async def test_used_words_are_excluded_after_single_repository_query() -> None:
     assert repository.find_calls == 1
 
 
-async def test_lower_usage_and_shorter_words_are_preferred() -> None:
-    repository = FakeWordRepository(
-        [
-            candidate("줄넘기", used_count=10),
-            candidate("줄자", used_count=0),
-        ]
+async def test_candidate_selection_uses_random_shortlist_of_ten() -> None:
+    candidates = [candidate(f"줄{index:02d}") for index in range(20)]
+    repository = FakeWordRepository(candidates)
+    service = CandidateService(
+        repository,
+        shortlist_size=10,
+        random_source=random.Random(0),
     )
-    service = CandidateService(repository, random_source=random.Random(0))
 
     result = await service.select(
         AgentAnswerRequest(
@@ -113,8 +162,11 @@ async def test_lower_usage_and_shorter_words_are_preferred() -> None:
         ShiritoriHandler(),
     )
 
-    assert result is not None
-    assert result.selected.word == "줄자"
+    assert result.selected is not None
+    assert len(result.shortlist) == 10
+    assert len({item.word for item in result.shortlist}) == 10
+    assert result.selected in result.shortlist
+    assert repository.find_calls == 1
 
 
 async def test_stack_builds_payload_and_avoids_duplicate_job() -> None:

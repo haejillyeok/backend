@@ -4,6 +4,12 @@
 코드 변경 상세는 Git history, PR, issue에서 확인하고, 이 파일에는 위키 페이지의 지식, 계약, 정책,
 컨벤션이 어떻게 바뀌었는지만 남깁니다.
 
+## [2026-06-11] maintenance | Add Qdrant-first vLLM fallback policy
+
+- Qdrant 후보가 있으면 최대 10개 무작위 후보군에서 하나를 반환하는 선택 정책을 기록했다.
+- 끝말잇기 후보가 없을 때만 vLLM으로 2~4글자 단어를 생성하고 형식과 중복을 검증하는 기준을 추가했다.
+- 생성 단어의 사전 등재 여부는 외부 사전 없이 완전히 보장할 수 없고 Qdrant에 자동 적재하지 않는다고 명시했다.
+
 ## [2026-06-11] maintenance | Add BE to Agent health runtime contract
 
 - `runtime-configuration.md`에 BE가 Agent health API를 호출할 때 전용 client wrapper와 배포 주입 설정을 사용한다는 기준을 추가했다.
