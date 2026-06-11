@@ -95,6 +95,31 @@ async def test_no_qdrant_candidate_uses_vllm_fallback_once() -> None:
     ]
 
 
+async def test_non_shiritori_no_candidate_uses_game_specific_fallback() -> None:
+    vllm_service = FakeVllmService("고구마")
+    service = build_service(FakeWordRepository(), vllm_service)
+
+    execution = await service.answer(
+        AgentAnswerRequest(
+            request_id="req-chosung",
+            room_id="room-1",
+            game_type="chosung",
+            used_words=["사과"],
+            condition={"chosung": "ㄱㄱㅁ"},
+        )
+    )
+
+    assert execution.response.status == "ok"
+    assert execution.response.answer == "고구마"
+    assert vllm_service.calls == [
+        {
+            "game_type": "chosung",
+            "condition": "ㄱㄱㅁ",
+            "used_words": {"사과"},
+        }
+    ]
+
+
 async def test_candidate_response_records_only_returned_answer() -> None:
     repository = FakeWordRepository([candidate("줄넘기")])
     vllm_service = FakeVllmService("줄사랑")

@@ -89,9 +89,9 @@ Agent는 `QDRANT_URL=http://qdrant:6333`, `QDRANT_COLLECTION=game_words`,
 `VLLM_BASE_URL=http://vllm:8000`, `VLLM_MODEL_NAME=shiritori-llm`을 기본값으로 사용한다.
 `USE_VLLM=true`, `CANDIDATE_SHORTLIST_SIZE=10`, `VLLM_TIMEOUT_SECONDS=10`,
 `USE_REDIS_COUNTER=false`가 현재 기본값이다. Qdrant 후보가 있으면 최대 10개 무작위 후보군에서
-하나를 선택하고, 끝말잇기 후보가 없을 때만 vLLM 생성 fallback을 한 번 호출한다. 비즈니스 API는 최소 32자의
-`AGENT_API_KEY`가 없으면 fail closed하며, k3s에서는 `agent-api-auth` Secret의 `api-key`에서
-주입한다.
+하나를 선택하고, `shiritori`, `chosung`, `contains` 후보가 없을 때 game type별 vLLM 생성
+fallback을 한 번 호출한다. 비즈니스 API는 최소 32자의 `AGENT_API_KEY`가 없으면 fail closed하며,
+k3s에서는 `agent-api-auth` Secret의 `api-key`에서 주입한다.
 
 `deploy/k3s/agent-service.yaml`은 회사 내부 control-plane의 NodePort `31080`을 유지한다.
 공개 도메인/TLS를 회사 k3s Ingress가 직접 소유하지 않는다. 현재 운영 경로는 회사 서버가

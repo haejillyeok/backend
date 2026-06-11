@@ -12,9 +12,9 @@ updated: 2026-06-11
 - Agent는 `shiritori`, `chosung`, `contains` handler로 Qdrant payload filter를 만든다.
 - Qdrant 후보가 있으면 `used_words`를 제외한 후보 중 최대 10개를 무작위 추출하고 그중 하나를
   무작위로 반환한다.
-- 끝말잇기 Qdrant 후보가 없으면 vLLM을 한 번 호출해 마지막 글자로 시작하는 2~4글자 단어를
-  생성한다.
-- 생성 결과는 시작 글자, 길이, 완성형 한글, `used_words` 중복 여부를 검증한다.
+- Qdrant 후보가 없으면 game type별 프롬프트로 vLLM을 한 번 호출해 2~4글자 단어를 생성한다.
+- 생성 결과는 `shiritori` 시작 글자, `chosung` 전체 초성, `contains` 포함 글자 조건과 길이,
+  완성형 한글, `used_words` 중복 여부를 검증한다.
 - 단어 적재와 답변 사용 횟수 증가는 FastAPI background task로 처리한다.
 - request 멱등성은 MVP에서 프로세스 로컬 cache를 사용하고 Redis 교체 경계를 유지한다.
 - Qdrant 사용 횟수는 read-modify-write이며 multi-pod 정합성 한계를 문서화한다.
