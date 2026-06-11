@@ -103,9 +103,9 @@ Response:
 ## BE Realtime WebSocket
 
 BE 서버의 사용자-facing 실시간 통신 엔드포인트입니다. 운영 환경에서 HTTPS/TLS 앞단을 통해
-노출할 때 클라이언트는 아래 path를 `wss://<host>/api/v1/ws/realtime`로 연결합니다.
-로컬 개발에서는 `ws://127.0.0.1:8000/api/v1/ws/realtime`를 사용할 수 있습니다.
-BE 서버에서 `GET /api/v1/ws-docs`를 호출하면 WebSocket API 전용 문서 페이지를 조회할 수 있습니다.
+노출할 때 클라이언트는 아래 path를 `wss://<host>/ws/realtime`로 연결합니다.
+로컬 개발에서는 `ws://127.0.0.1:8000/ws/realtime`를 사용할 수 있습니다.
+BE 서버에서 `GET /ws-docs`를 호출하면 WebSocket API 전용 문서 페이지를 조회할 수 있습니다.
 
 WebSocket 메시지는 JSON envelope를 사용합니다.
 
@@ -116,7 +116,7 @@ WebSocket 메시지는 JSON envelope를 사용합니다.
 }
 ```
 
-### `wss://<host>/api/v1/ws/realtime`
+### `wss://<host>/ws/realtime`
 
 지원 메시지:
 

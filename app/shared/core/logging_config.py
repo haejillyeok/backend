@@ -6,6 +6,8 @@ from datetime import UTC, datetime, timedelta
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
+from app.shared.core.route_guard import consume_blocked_access_log_path
+
 
 DEFAULT_LOG_DIR = "logs"
 DEFAULT_LOG_RETENTION_DAYS = 14
@@ -90,6 +92,17 @@ class ManagedTimedRotatingFileHandler(TimedRotatingFileHandler):
         )
 
 
+class BlockedRouteAccessLogFilter(logging.Filter):
+    """route guard가 조용히 차단한 요청의 Uvicorn access log를 버립니다."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        """Uvicorn access log record에서 path를 추출해 차단된 path이면 기록하지 않습니다."""
+        path = _extract_uvicorn_access_path(record)
+        if path is None:
+            return True
+        return not consume_blocked_access_log_path(path)
+
+
 def configure_logging(app_name: str, environment: str | None = None) -> None:
     """앱 공통 로깅을 stdout과 rotating file handler에 설정합니다.
 
@@ -113,6 +126,7 @@ def configure_logging(app_name: str, environment: str | None = None) -> None:
     )
     root_logger = logging.getLogger()
     root_logger.setLevel(log_level)
+    install_blocked_route_access_log_filter(logging.getLogger("uvicorn.access"))
 
     formatter = logging.Formatter(log_format)
     for handler in root_logger.handlers:
@@ -130,6 +144,23 @@ def configure_logging(app_name: str, environment: str | None = None) -> None:
             "File logging setup failed path=%s. Continuing with stdout logging only.",
             log_file_settings.directory / f"{app_name}.log",
         )
+
+
+def install_blocked_route_access_log_filter(access_logger: logging.Logger) -> None:
+    """Uvicorn access logger에 route guard 차단 path 필터를 한 번만 등록합니다."""
+    if any(isinstance(filter_, BlockedRouteAccessLogFilter) for filter_ in access_logger.filters):
+        return
+    access_logger.addFilter(BlockedRouteAccessLogFilter())
+
+
+def _extract_uvicorn_access_path(record: logging.LogRecord) -> str | None:
+    """Uvicorn access log record 인자에서 query string을 제외한 path를 추출합니다."""
+    if not isinstance(record.args, tuple) or len(record.args) < 3:
+        return None
+    raw_path = record.args[2]
+    if not isinstance(raw_path, str) or not raw_path.startswith("/"):
+        return None
+    return raw_path.split("?", 1)[0]
 
 
 def add_file_log_handler(

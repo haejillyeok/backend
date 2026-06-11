@@ -8,22 +8,22 @@ audience: ai
 # Realtime WebSocket
 
 BE 서버는 사용자-facing 실시간 통신용 WebSocket endpoint를
-`/api/v1/ws/realtime`에 둔다. 운영 HTTPS/TLS 앞단에서는 같은 path를
-`wss://<host>/api/v1/ws/realtime`로 연결한다. 로컬 개발에서는
-`ws://127.0.0.1:8000/api/v1/ws/realtime`를 사용한다.
+`/ws/realtime`에 둔다. 운영 HTTPS/TLS 앞단에서는 같은 path를
+`wss://<host>/ws/realtime`로 연결한다. 로컬 개발에서는
+`ws://127.0.0.1:8000/ws/realtime`를 사용한다.
 
 ## Code Map
 
 - Endpoint: `app/be/api/endpoints/realtime_ws.py`
 - HTML docs endpoint: `app/be/api/endpoints/ws_docs.py`
 - Connection manager and message handling: `app/be/services/realtime.py`
-- Router include: `app/be/api/router.py`
+- Socket router include: `app/be/socket_router.py`
 - Contract tests: `test/test_realtime_websocket.py`
 - API-served docs source: `app/be/api/docs/ws-api.md`
 
 ## Docs Route
 
-BE 서버는 WebSocket API 전용 문서 페이지를 `GET /api/v1/ws-docs`에서 `text/html`로 반환한다.
+BE 서버는 WebSocket API 전용 문서 페이지를 `GET /ws-docs`에서 `text/html`로 반환한다.
 문서 원본은 `app/be/api/docs/ws-api.md`이며, Docker image에 포함되도록 `docs/`가 아니라 `app/` 아래에서
 관리한다. 라우터는 이 Markdown 원본을 HTML 페이지로 렌더링한다. WebSocket message contract가 늘어나면
 이 파일을 먼저 갱신한다.

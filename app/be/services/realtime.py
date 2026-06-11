@@ -83,7 +83,7 @@ async def handle_realtime_message(
     websocket: WebSocket,
     message: RealtimeMessage,
 ) -> None:
-    """`/api/v1/ws/realtime` WebSocket message type을 처리합니다.
+    """`/ws/realtime` WebSocket message type을 처리합니다.
 
     현재 공개 계약은 연결 확인용 `ping`이며, 같은 payload를 담은 `realtime.pong`을 반환합니다.
     지원하지 않는 message type은 클라이언트가 고칠 수 있는 계약 오류로 보고 연결을 닫습니다.

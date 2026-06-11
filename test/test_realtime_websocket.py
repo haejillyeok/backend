@@ -9,7 +9,7 @@ from app.be.services.realtime import realtime_connection_manager
 def test_realtime_websocket_returns_pong_and_cleans_up_connection():
     client = TestClient(create_app())
 
-    with client.websocket_connect("/api/v1/ws/realtime") as websocket:
+    with client.websocket_connect("/ws/realtime") as websocket:
         assert realtime_connection_manager.connection_count == 1
 
         websocket.send_json({"type": "ping", "payload": {"client_time": "2026-06-11T00:00:00Z"}})
@@ -25,7 +25,7 @@ def test_realtime_websocket_returns_pong_and_cleans_up_connection():
 def test_realtime_websocket_rejects_invalid_json_envelope():
     client = TestClient(create_app())
 
-    with client.websocket_connect("/api/v1/ws/realtime") as websocket:
+    with client.websocket_connect("/ws/realtime") as websocket:
         websocket.send_text("not-json")
 
         assert websocket.receive_json() == {
@@ -50,7 +50,7 @@ def test_realtime_websocket_rejects_invalid_json_envelope():
 def test_realtime_websocket_rejects_unknown_message_type():
     client = TestClient(create_app())
 
-    with client.websocket_connect("/api/v1/ws/realtime") as websocket:
+    with client.websocket_connect("/ws/realtime") as websocket:
         websocket.send_json({"type": "unknown", "payload": {}})
 
         assert websocket.receive_json()["payload"]["error"]["details"] == {
@@ -67,12 +67,12 @@ def test_realtime_websocket_rejects_unknown_message_type():
 def test_ws_docs_renders_websocket_api_page():
     client = TestClient(create_app())
 
-    response = client.get("/api/v1/ws-docs")
+    response = client.get("/ws-docs")
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
     assert "content-disposition" not in response.headers
     assert "<h1>WebSocket API</h1>" in response.text
-    assert "wss://&lt;host&gt;/api/v1/ws/realtime" in response.text
+    assert "wss://&lt;host&gt;/ws/realtime" in response.text
     assert "&quot;type&quot;: &quot;ping&quot;" in response.text
     assert "&quot;type&quot;: &quot;realtime.pong&quot;" in response.text

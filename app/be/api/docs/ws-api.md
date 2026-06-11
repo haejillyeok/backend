@@ -6,8 +6,8 @@ BE 서버의 사용자-facing 실시간 통신 API입니다.
 
 | Environment | URL |
 | --- | --- |
-| Production | `wss://<host>/api/v1/ws/realtime` |
-| Local | `ws://127.0.0.1:8000/api/v1/ws/realtime` |
+| Production | `wss://<host>/ws/realtime` |
+| Local | `ws://127.0.0.1:8000/ws/realtime` |
 
 모든 메시지는 JSON envelope를 사용합니다.
 
@@ -69,4 +69,8 @@ Server:
 
 ## Docs Route
 
-이 문서는 BE 서버에서 `GET /api/v1/ws-docs`로 조회할 수 있습니다.
+이 문서는 BE 서버에서 `GET /ws-docs`로 조회할 수 있습니다.
+
+## Test Client
+
+- [Hoppscotch WebSocket client](https://hoppscotch.io/realtime/websocket)에서 WebSocket 연결과 메시지 송수신을 테스트할 수 있습니다.

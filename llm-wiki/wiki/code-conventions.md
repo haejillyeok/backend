@@ -1,7 +1,7 @@
 ---
 title: Code Conventions
 type: guide
-updated: 2026-06-09
+updated: 2026-06-11
 audience: ai
 ---
 
@@ -113,6 +113,24 @@ audience: ai
 - dependency override가 필요한 테스트는 `create_app()`으로 앱을 생성한다.
 - client wrapper는 timeout, status handling, mapping을 테스트한다.
 - WebSocket은 연결, 메시지 송수신, disconnect cleanup을 테스트한다.
+
+## Git Commit Messages
+
+- 커밋 메시지는 `<type>: <english summary>` 형식의 한 줄 영어 문장으로 작성한다.
+- 허용 type은 `feat`, `fix`, `refactor`, `chore`, `test`, `ci`, `docs`를 기본으로 한다.
+- summary는 imperative mood를 사용하고 첫 단어는 소문자로 시작한다.
+- summary 끝에는 마침표를 붙이지 않는다.
+- 기본 형식에는 scope를 넣지 않는다.
+
+```text
+feat: add realtime websocket endpoint
+fix: handle file logging setup errors
+refactor: simplify docker app module selection
+chore: update runtime configuration defaults
+test: add websocket validation coverage
+ci: add manual database migration workflow
+docs: clarify llm wiki maintenance policy
+```
 
 ## Documentation
 

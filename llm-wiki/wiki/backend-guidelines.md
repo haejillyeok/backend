@@ -1,7 +1,7 @@
 ---
 title: Backend Guidelines
 type: guide
-updated: 2026-06-09
+updated: 2026-06-11
 audience: ai
 ---
 
@@ -34,6 +34,15 @@ audience: ai
 - endpoint 파일은 request parsing, dependency wiring, response mapping만 담당한다.
 - 비즈니스 로직은 `services/`, DB 접근은 `repository/`, 입출력 모델은 `schemas/`에 둔다.
 - router-level 공통 인증, 태그, response metadata가 필요하면 `APIRouter(...)` 또는 `include_router(...)`에 둔다.
+
+### Route Guard
+
+- BE와 agent 서버는 등록된 HTTP route path만 통과시키는 route guard middleware를 둔다.
+- 미등록 path는 감사 로그와 HTTP metric middleware에 도달하기 전에 body 없는 `404`로 종료한다.
+- route guard가 차단한 path는 Uvicorn access log에서도 필터링해 scanner 로그 노이즈를 줄인다.
+- scanner가 자주 요청하는 source map, `.env`, WordPress, 임의 `/api/*` path는 별도 로그 노이즈 없이 차단한다.
+- `/docs`, `/redoc`, `/openapi.json`처럼 FastAPI에 등록된 문서 route는 계속 열어둔다.
+- 새 public HTTP endpoint를 추가할 때는 FastAPI router에 등록하면 route guard allowlist에 자동 반영된다.
 
 ### Dependencies
 
@@ -88,7 +97,7 @@ WebSocket은 사용자-facing 양방향 통신이 필요한 경우에 사용한�
 ### Route Placement
 
 - WebSocket endpoint는 `app/{server}/api/endpoints/{feature}_ws.py` 또는 `realtime.py`에 둔다.
-- URL은 `/ws/{feature}` 또는 `/api/v1/ws/{feature}` 중 하나로 통일한다.
+- URL은 `/ws/{feature}` 형식으로 통일하고, REST API router와 분리한다.
 - 인증/권한 정책은 HTTP API와 같은 원칙을 적용한다.
 
 ### Connection Management

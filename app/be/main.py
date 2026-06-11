@@ -5,7 +5,9 @@ from fastapi import FastAPI
 
 from app.be.api.exception_handlers import register_exception_handlers
 from app.be.api.endpoints.health import router as health_router
+from app.be.api.endpoints.ws_docs import router as ws_docs_router
 from app.be.api.router import router as api_router
+from app.be.socket_router import socket_router
 from app.shared.core.config import (
     AppSettings,
     configure_app_timezone,
@@ -16,6 +18,7 @@ from app.shared.core.http_audit import add_audit_log_middleware
 from app.shared.core.logging_config import configure_logging
 from app.shared.core.observability import add_observability
 from app.shared.core.openapi import install_openapi_schema
+from app.shared.core.route_guard import add_registered_route_guard_middleware
 
 
 settings = AppSettings(app_name="haejillyeok-be")
@@ -24,7 +27,7 @@ Haejillyeok BE HTTP API입니다.
 
 WebSocket API는 Swagger/OpenAPI에 자동 포함되지 않으므로 별도 문서 페이지에서 관리합니다.
 
-- [WebSocket API 문서](/api/v1/ws-docs)
+- [WebSocket API 문서](/ws-docs)
 """
 
 
@@ -51,7 +54,10 @@ def create_app() -> FastAPI:
     register_exception_handlers(app)
     app.include_router(health_router)
     app.include_router(api_router)
+    app.include_router(socket_router)
+    app.include_router(ws_docs_router)
     install_openapi_schema(app)
+    add_registered_route_guard_middleware(app)
 
     return app
 

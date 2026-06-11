@@ -19,7 +19,7 @@
 - `llm-wiki/raw/`: 원본 자료. LLM은 원칙적으로 수정하지 않는다.
 - `llm-wiki/wiki/`: 원본과 작업 이력을 바탕으로 LLM이 유지하는 요약, 개념, 결정, 연결
 - `llm-wiki/index.md`: LLM Wiki 콘텐츠 카탈로그. 위키를 읽거나 갱신하기 전에 먼저 확인한다.
-- `llm-wiki/log.md`: LLM Wiki 작업 이력. ingest, query, lint, maintenance를 시간순으로 남긴다.
+- `llm-wiki/log.md`: LLM Wiki 정보 변경 이력. ingest, query, lint, maintenance를 시간순으로 남기되 코드 변경 로그로 쓰지 않는다.
 
 ## Purpose
 
@@ -28,6 +28,8 @@
 `llm-wiki/`는 AI용 작업 기억이자 작업 지식 전체입니다. 코드 컨벤션, 프레임워크 가이드라인, 결정 기록, 요약, 열린 질문처럼 AI가 작업할 때 사용할 수 있는 모든 정보는 `llm-wiki/`에 있어야 합니다. Karpathy의 LLM Wiki 패턴처럼 원본 자료를 매번 다시 검색해서 답하는 대신, LLM이 원본을 읽고 구조화된 Markdown 위키로 컴파일해 프로젝트 지식이 누적되도록 합니다.
 
 `docs/`에 사람이 읽는 문서를 추가하더라도, 그 내용이 AI 작업에 필요하면 `llm-wiki/`에도 정리합니다. AI는 작업 전 `docs/`보다 `llm-wiki/index.md`를 먼저 읽고, 필요한 경우 사람용 문서인 `docs/`를 보조 참고 자료로 확인합니다.
+
+`llm-wiki/`에는 다음 작업에서 재사용할 정책, 도메인 개념, API/DB/WebSocket 계약, 코드 컨벤션, 아키텍처 결정만 남깁니다. 특정 파일을 추가, 삭제, 수정했다는 코드 변경 이력은 Git commit, PR, issue의 책임이며 `llm-wiki/log.md`에 누적하지 않습니다.
 
 ## Karpathy 4 Principles
 
@@ -68,6 +70,7 @@
 4. 새 개념, 결정, 출처, 열린 질문이 생기면 적절한 하위 폴더에 문서를 만들거나 업데이트한다.
 5. `llm-wiki/index.md`에 링크와 1줄 요약을 추가한다.
 6. `llm-wiki/log.md`에 `## [YYYY-MM-DD] ingest | 제목` 형식으로 이력을 남긴다.
+7. 로그에는 위키 정보가 어떻게 바뀌었는지만 적고, 코드 변경 상세는 적지 않는다.
 
 ### Query
 
@@ -76,6 +79,7 @@
 3. 답변 중 보존 가치가 있는 비교, 결정, 분석은 위키 페이지로 남긴다.
 4. 위키를 갱신했다면 `llm-wiki/index.md`와 `llm-wiki/log.md`도 함께 갱신한다.
 5. 사람이 읽을 필요가 있는 내용이면 `docs/`에도 반영할지 판단하되, AI 작업 기준은 반드시 `llm-wiki/`에 남긴다.
+6. 코드 변경을 위키에 남겨야 할 때는 작업 내역이 아니라 앞으로 따를 현재 기준으로 압축한다.
 
 ### Lint
 
@@ -92,11 +96,14 @@
 - 확실하지 않은 내용은 단정하지 말고 `Open Questions`에 남긴다.
 - 코드, 설정, 테스트가 최종 사실 기준이고, `llm-wiki/`는 AI가 작업에 쓰는 지식 레이어다.
 - `docs/`는 사람 전용 문서다. `docs/`의 내용이 AI 작업에도 필요하면 `llm-wiki/`에도 둔다.
+- `llm-wiki/log.md`는 코드 변경 로그가 아니라 위키 정보 변경 로그다.
 
 ## Engineering References
 
 - FastAPI, WebSocket 구현 전 [llm-wiki/wiki/backend-guidelines.md](/Users/723poil/Documents/git/haejillyeok/backend/llm-wiki/wiki/backend-guidelines.md)를 확인한다.
 - 코드 스타일, 레이어 책임, 테스트 기준은 [llm-wiki/wiki/code-conventions.md](/Users/723poil/Documents/git/haejillyeok/backend/llm-wiki/wiki/code-conventions.md)를 따른다.
+- 커밋 메시지는 [llm-wiki/wiki/code-conventions.md](/Users/723poil/Documents/git/haejillyeok/backend/llm-wiki/wiki/code-conventions.md)의 `<type>: <english summary>` 규칙을 따른다.
+- LLM Wiki를 갱신할 때는 [llm-wiki/wiki/llm-wiki-maintenance.md](/Users/723poil/Documents/git/haejillyeok/backend/llm-wiki/wiki/llm-wiki-maintenance.md)의 저장 범위와 로그 기준을 따른다.
 - public API 계약이 바뀌면 AI 작업 기준은 `llm-wiki/`에, 사람이 읽는 설명은 필요 시 [docs/api.md](/Users/723poil/Documents/git/haejillyeok/backend/docs/api.md)에 반영한다.
 - 아키텍처 경계가 바뀌면 AI 작업 기준은 `llm-wiki/`에, 사람이 읽는 설명은 필요 시 [docs/architecture.md](/Users/723poil/Documents/git/haejillyeok/backend/docs/architecture.md)에 반영한다.
 

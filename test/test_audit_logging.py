@@ -43,15 +43,21 @@ def test_be_http_api_writes_audit_log_for_request_completion(caplog):
     )
 
 
-def test_be_http_api_writes_audit_log_for_request_error(caplog):
+def test_be_blocks_unknown_paths_without_audit_log(caplog):
     caplog.set_level(logging.INFO, logger="audit.request")
     client = TestClient(create_be_app())
 
-    response = client.get("/api/v1/missing")
+    for path in (
+        "/static/js/main.chunk.js.map",
+        "/.env",
+        "/api/v1/missing",
+    ):
+        caplog.clear()
 
-    assert response.status_code == 404
-    assert any(
-        "audit protocol=http phase=completed service=haejillyeok-be "
-        "operation=GET /api/v1/missing status_code=404" in record.message
-        for record in caplog.records
-    )
+        response = client.get(path)
+
+        assert response.status_code == 404
+        assert response.content == b""
+        assert not any(
+            record.name == "audit.request" and path in record.message for record in caplog.records
+        )

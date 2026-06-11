@@ -102,7 +102,7 @@ def render_websocket_api_docs(markdown: str) -> str:
 </head>
 <body>
   <main>
-    <p class="meta">GET /api/v1/ws-docs</p>
+    <p class="meta">GET /ws-docs</p>
     <article>
       {_render_markdown_body(markdown)}
     </article>

@@ -6,7 +6,7 @@
 
 | Page | Summary |
 | --- | --- |
-| [log.md](log.md) | ingest, query, lint, maintenance 작업의 시간순 이력 |
+| [log.md](log.md) | ingest, query, lint, maintenance로 남기는 LLM Wiki 정보 변경 이력 |
 
 ## Project Overview
 
@@ -14,14 +14,15 @@
 | --- | --- |
 | [wiki/current-status.md](wiki/current-status.md) | 현재 backend 레포의 실행 구조, 문서 상태, 다음에 확인할 지점 |
 | [wiki/project-map.md](wiki/project-map.md) | 주요 디렉터리와 소유 책임 요약 |
+| [wiki/llm-wiki-maintenance.md](wiki/llm-wiki-maintenance.md) | LLM Wiki에 남길 지식과 남기지 않을 코드 변경 이력의 경계, log.md 운영 기준 |
 | [wiki/backend-guidelines.md](wiki/backend-guidelines.md) | FastAPI, WebSocket, 서버 간 HTTP client 구현 시 AI가 따라야 하는 작업 기준 |
 | [wiki/runtime-configuration.md](wiki/runtime-configuration.md) | 서버 `.env`에서 관리하는 KST timezone, HTTP port, OpenTelemetry exporter, Docker build/push/runtime/deploy 기준 |
 | [wiki/openapi-swagger.md](wiki/openapi-swagger.md) | FastAPI OpenAPI schema, Swagger UI, operation_id, metadata 관리 기준 |
 | [wiki/observability-stack.md](wiki/observability-stack.md) | OpenTelemetry, Prometheus, Tempo, Loki/Promtail, Grafana 기반 로컬 관측 스택과 metric/log 기준 |
-| [wiki/realtime-websocket.md](wiki/realtime-websocket.md) | BE `/api/v1/ws/realtime` WebSocket endpoint, `/api/v1/ws-docs` 문서 라우터, WSS 노출 기준, JSON envelope 계약 |
+| [wiki/realtime-websocket.md](wiki/realtime-websocket.md) | BE `/ws/realtime` WebSocket endpoint, `/ws-docs` 문서 라우터, WSS 노출 기준, JSON envelope 계약 |
 | [wiki/database-migrations.md](wiki/database-migrations.md) | Alembic 기반 DB migration 형상관리와 운영 기준 |
 | [wiki/database-schema-conventions.md](wiki/database-schema-conventions.md) | UUID v7, PostgreSQL text, 내부/외부 관리번호, join 기준 등 DB schema 규칙 |
-| [wiki/code-conventions.md](wiki/code-conventions.md) | Python 코드 스타일, 주석/docstring, 레이어 책임, 테스트 기준 |
+| [wiki/code-conventions.md](wiki/code-conventions.md) | Python 코드 스타일, 주석/docstring, 레이어 책임, 테스트, 커밋 메시지 기준 |
 | [wiki/backend-guidelines-summary.md](wiki/backend-guidelines-summary.md) | FastAPI, WebSocket, 서버 간 HTTP client, 코드 컨벤션의 빠른 요약 |
 
 ## Concepts
@@ -54,5 +55,7 @@
 
 - 새 위키 페이지를 만들면 이 인덱스에 링크와 1줄 요약을 추가한다.
 - 기존 페이지의 역할이 바뀌면 요약도 같이 갱신한다.
+- 위키에는 코드 변경 보고가 아니라 다음 작업에 재사용할 정책, 계약, 개념, 컨벤션을 남긴다.
+- `log.md`에는 `llm-wiki/` 정보 자체가 어떻게 바뀌었는지만 남긴다.
 - 답변을 시작할 때는 이 파일을 먼저 읽고 관련 페이지로 들어간다.
 - 인덱스에 없는 위키 파일을 발견하면 누락으로 보고 추가한다.
