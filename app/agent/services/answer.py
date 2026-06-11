@@ -17,6 +17,12 @@ class AgentExecution:
     usage_word: str | None
 
 
+@dataclass(frozen=True)
+class AnswerDecision:
+    response: AgentAnswerResponse
+    usage_word: str | None
+
+
 class AgentService:
     """게임 handler, 후보 선택, 멱등성, 사용 횟수 처리를 조정합니다."""
 
@@ -35,51 +41,63 @@ class AgentService:
         self._vllm_service = vllm_service
 
     async def answer(self, request: AgentAnswerRequest) -> AgentExecution:
-        """동일 요청은 한 번만 조회하며 검증된 후보가 없으면 즉시 실패 응답을 반환합니다."""
+        """Qdrant 후보를 우선 사용하고 없을 때만 vLLM fallback을 호출합니다."""
         key = self._idempotency_key(request)
 
-        async def create_response() -> AgentAnswerResponse:
+        async def create_decision() -> AnswerDecision:
             handler = self._handlers[request.game_type]
             selection = await self._candidate_service.select(request, handler)
-            if selection is None:
-                return AgentAnswerResponse(
-                    request_id=request.request_id,
-                    room_id=request.room_id,
-                    game_type=request.game_type,
-                    answer=None,
-                    status="no_candidate",
-                    reason="no_available_word",
+            if selection.selected is not None:
+                return AnswerDecision(
+                    response=AgentAnswerResponse(
+                        request_id=request.request_id,
+                        room_id=request.room_id,
+                        game_type=request.game_type,
+                        answer=selection.selected.word,
+                        status="ok",
+                    ),
+                    usage_word=selection.selected.word,
                 )
 
-            chosen = await self._vllm_service.refine_choice(
-                request.game_type,
-                selection.ranked,
-                selection.selected,
-            )
             used_words = {normalize_word(word) for word in request.used_words}
-            if chosen.word_norm in used_words:
-                return AgentAnswerResponse(
+            generated_word = await self._vllm_service.generate_fallback(
+                request.game_type,
+                selection.condition,
+                used_words,
+            )
+            if generated_word is None:
+                return AnswerDecision(
+                    response=AgentAnswerResponse(
+                        request_id=request.request_id,
+                        room_id=request.room_id,
+                        game_type=request.game_type,
+                        answer=None,
+                        status="no_candidate",
+                        reason="no_available_word",
+                    ),
+                    usage_word=None,
+                )
+
+            return AnswerDecision(
+                response=AgentAnswerResponse(
                     request_id=request.request_id,
                     room_id=request.room_id,
                     game_type=request.game_type,
-                    answer=None,
-                    status="no_candidate",
-                    reason="no_available_word",
-                )
-            return AgentAnswerResponse(
-                request_id=request.request_id,
-                room_id=request.room_id,
-                game_type=request.game_type,
-                answer=chosen.word,
-                status="ok",
+                    answer=generated_word,
+                    status="ok",
+                ),
+                # 생성 단어는 Qdrant point가 없으므로 사용 횟수 갱신 대상이 아닙니다.
+                usage_word=None,
             )
 
-        response, created = await self._idempotency_store.get_or_create(
+        decision, created = await self._idempotency_store.get_or_create(
             key,
-            create_response,
+            create_decision,
         )
-        usage_word = response.answer if created and response.answer else None
-        return AgentExecution(response=response, usage_word=usage_word)
+        return AgentExecution(
+            response=decision.response,
+            usage_word=decision.usage_word if created else None,
+        )
 
     async def record_usage(self, word: str) -> None:
         """실제로 반환된 답변 단어의 AI 사용 횟수를 증가시킵니다."""

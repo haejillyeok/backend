@@ -20,9 +20,11 @@ class GameHandler(ABC):
         self,
         request: AgentAnswerRequest,
         normalized_used_words: set[str],
+        *,
+        condition: str | None = None,
     ) -> models.Filter:
         """공통 유효성 조건과 게임별 조건, 사용 단어 제외 조건을 결합합니다."""
-        condition = self.get_condition(request)
+        resolved_condition = condition or self.get_condition(request)
         must = [
             models.FieldCondition(
                 key="game_types",
@@ -36,7 +38,7 @@ class GameHandler(ABC):
                 key="is_banned",
                 match=models.MatchValue(value=False),
             ),
-            self.condition_filter(condition),
+            self.condition_filter(resolved_condition),
         ]
         must_not = []
         if normalized_used_words:
