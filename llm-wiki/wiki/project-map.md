@@ -1,7 +1,7 @@
 ---
 title: Project Map
 type: map
-updated: 2026-06-09
+updated: 2026-06-11
 ---
 
 # Project Map
@@ -24,8 +24,15 @@ updated: 2026-06-09
 - `app/be/schemas/`: 백엔드 request/response schema
 - `app/be/services/`: 백엔드 비즈니스 로직
 - `app/agent/services/`: 에이전트 비즈니스 로직
+- `app/agent/services/game_handlers/`: game_type별 조건 검증과 Qdrant filter 생성
+- `app/agent/repository/`: Qdrant 단어 collection 접근
+- `app/agent/schemas/`: Agent request/response와 단어 후보 schema
+- `app/agent/utils/`: 한국어 음절/초성 처리와 결정적 point ID/hash 생성
 - `app/shared/core/config/`: 앱, DB, HTTP 설정
 - `migrations/`: Alembic 환경과 DB schema migration revision
+- `deploy/k3s/`: Agent, Qdrant, vLLM k3s manifest
+- `scripts/init_qdrant.py`: collection과 payload index 초기화
+- `scripts/seed_words.py`: 파일 기반 단어 seed 적재
 
 ## Docs and Knowledge
 

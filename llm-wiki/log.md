@@ -4,6 +4,18 @@
 코드 변경 상세는 Git history, PR, issue에서 확인하고, 이 파일에는 위키 페이지의 지식, 계약, 정책,
 컨벤션이 어떻게 바뀌었는지만 남깁니다.
 
+## [2026-06-11] implementation | Integrate Qdrant Agent MVP
+
+- 별도 Agent 작업공간의 끝말잇기 MVP를 monorepo `app/agent` 소유 구조로 이식했다.
+- Qdrant repository, game handler, 후보 선택, 멱등성, 비동기 적재와 사용 횟수 갱신 계층을 추가했다.
+- 프롬프트는 `.txt`가 아닌 `app/agent/prompts.py` 변수로 관리한다.
+- 단일 Docker image에서 `APP_MODULE=agent`, `PORT=8001`로 실행하도록 k3s manifest를 추가했다.
+- Qdrant local PV와 vLLM 단일 GPU replica, 모델 hostPath, `enableServiceLinks=false`를 배포 기준으로 고정했다.
+- 회사 NodePort `31080`에서 Azure localhost로 이어지는 SSH reverse tunnel과 Azure Nginx를 외부 연결 경계로 기록했다.
+- Agent API, 한국어 처리, Qdrant 중복 적재, k3s manifest 테스트를 추가했다.
+
+## [2026-06-10] maintenance | Add Loki log dashboard
+=======
 ## [2026-06-11] maintenance | Separate socket router from API router
 
 - `realtime-websocket.md`에 WebSocket endpoint는 REST API router 밖의 `/ws/realtime`, 문서 페이지는 `/ws-docs`로 둔다는 계약을 반영했다.

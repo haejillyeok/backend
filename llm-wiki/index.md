@@ -43,6 +43,7 @@
 | [wiki/decisions/2026-06-05-common-api-response-and-exceptions.md](wiki/decisions/2026-06-05-common-api-response-and-exceptions.md) | `app/shared/core` 공통 response envelope와 `AppException` 기반 HTTP 예외 처리 결정. gRPC status 기준은 2026-06-09 결정으로 대체됨 |
 | [wiki/decisions/2026-06-05-request-audit-logging.md](wiki/decisions/2026-06-05-request-audit-logging.md) | HTTP 요청 시작, 완료, 실패를 shared 감사 로그 포맷으로 기록하는 AOP 관측 결정. gRPC 감사 기준은 2026-06-09 결정으로 대체됨 |
 | [wiki/decisions/2026-06-09-remove-application-grpc.md](wiki/decisions/2026-06-09-remove-application-grpc.md) | 애플리케이션 gRPC를 제거하고 FastAPI HTTP와 OTLP HTTP만 사용하기로 한 결정 |
+| [wiki/decisions/2026-06-11-agent-qdrant-mvp.md](wiki/decisions/2026-06-11-agent-qdrant-mvp.md) | Qdrant 후보 검색 기반 Agent MVP와 k3s/Azure reverse tunnel 운영 경계 결정 |
 
 ## Sources
 

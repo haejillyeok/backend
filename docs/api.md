@@ -3,7 +3,8 @@
 ## Common Response
 
 HTTP API에서 사용하는 공통 응답 envelope입니다. HTTP API는 이 형태를 JSON으로 반환합니다.
-BE `/api/v1/*` REST API는 이 envelope를 사용합니다. 운영 probe 성격의 root `/health`는 예외적으로 raw 응답을 유지합니다.
+BE `/api/v1/*` REST API는 이 envelope를 사용합니다. 운영 probe 성격의 root `/health`와
+Backend-to-Agent 전용 Agent API는 별도 명시된 raw 응답 계약을 유지합니다.
 
 Success:
 
@@ -162,3 +163,98 @@ Response:
 | --- | --- | --- |
 | GET | `/health` | `{"status": "ok"}` |
 | GET | `/api/v1/health` | `{"status": "ok"}` |
+
+## Agent Authentication
+
+Agent 비즈니스 API는 모든 요청에 아래 공유 키 header를 요구합니다. `/health` 계열에는 적용하지
+않습니다.
+
+```text
+X-Agent-API-Key: <shared-secret>
+```
+
+서버의 `AGENT_API_KEY`가 설정되지 않으면 `503`, 값이 없거나 다르면 `401`을 반환합니다.
+
+## Agent Answer
+
+### POST `/api/v1/agent/answer`
+
+Backend가 처리한 게임 상태를 받아 Qdrant의 검증된 후보 중 하나를 반환합니다. Agent는 턴, 라운드,
+사람 입력 유효성, 투표, 마피아 규칙을 처리하지 않습니다.
+
+```json
+{
+  "request_id": "req-20260610-0001",
+  "room_id": "room-001",
+  "game_type": "shiritori",
+  "used_words": ["자전거", "거미줄"],
+  "last_char": "줄",
+  "ai_policy": {
+    "allow_fake_mistake": false,
+    "allow_reuse_word": false
+  }
+}
+```
+
+후보가 있으면:
+
+```json
+{
+  "request_id": "req-20260610-0001",
+  "room_id": "room-001",
+  "game_type": "shiritori",
+  "answer": "줄넘기",
+  "status": "ok",
+  "reason": null
+}
+```
+
+후보가 없으면:
+
+```json
+{
+  "request_id": "req-20260610-0001",
+  "room_id": "room-001",
+  "game_type": "shiritori",
+  "answer": null,
+  "status": "no_candidate",
+  "reason": "no_available_word"
+}
+```
+
+`game_type`은 `shiritori`, `chosung`, `contains`를 지원합니다. `condition.last_char`,
+`condition.chosung`, `condition.contains_word`를 각각 사용하며, 끝말잇기는 기존 호환을 위해
+root `last_char`도 허용합니다.
+
+## Agent Data Stack
+
+### POST `/api/v1/data/stack`
+
+단어 목록을 정규화한 뒤 background task로 Qdrant에 적재합니다.
+
+```json
+{
+  "request_id": "stack-20260610-0001",
+  "source": "manual",
+  "game_types": ["shiritori", "chosung", "contains"],
+  "words": ["사과", "고구마밭", "줄넘기"],
+  "options": {
+    "is_valid": true,
+    "is_banned": false,
+    "overwrite_existing": false,
+    "preserve_ai_used_count": true
+  }
+}
+```
+
+응답 status는 `202 Accepted`입니다.
+
+```json
+{
+  "request_id": "stack-20260610-0001",
+  "status": "accepted",
+  "job_id": "job-9f81c2",
+  "received_count": 3,
+  "message": "word stack job accepted"
+}
+```
