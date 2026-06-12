@@ -26,6 +26,39 @@ class FakeWebSocket:
         self.sent_json.append(message)
 
 
+class FakeWebSocketMetrics:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict]] = []
+
+    def record_connect(self, **kwargs) -> None:
+        self.calls.append(("connect", kwargs))
+
+    def record_message(self, **kwargs) -> None:
+        self.calls.append(("message", kwargs))
+
+    def record_error(self, **kwargs) -> None:
+        self.calls.append(("error", kwargs))
+
+    def record_disconnect(self, **kwargs) -> None:
+        self.calls.append(("disconnect", kwargs))
+
+    def record_duration(self, **kwargs) -> None:
+        self.calls.append(("duration", kwargs))
+
+
+class FakeSpan:
+    def __init__(self, names: list[str], name: str) -> None:
+        self.names = names
+        self.name = name
+
+    def __enter__(self):
+        self.names.append(self.name)
+        return self
+
+    def __exit__(self, exc_type, exc, traceback) -> bool:
+        return False
+
+
 def current_user() -> CurrentUser:
     return CurrentUser(
         id=uuid4(),
@@ -108,6 +141,56 @@ def test_room_lobby_websocket_connects_with_path_room_id_and_cleans_up() -> None
 
     assert lobby_connection_manager.connection_count == 0
     assert lobby_connection_manager.room_subscription_count(room_public_id) == 0
+
+
+def test_room_lobby_websocket_records_apm_metrics_and_spans(monkeypatch) -> None:
+    user = current_user()
+    room_public_id = uuid4()
+    metrics = FakeWebSocketMetrics()
+    span_names: list[str] = []
+
+    class FakeGameService:
+        async def authorize_room_lobby_connection(
+            self,
+            *,
+            room_public_id: UUID,
+            user_id: UUID,
+        ) -> RoomLobbyConnectionResult:
+            return RoomLobbyConnectionResult(room_public_id=room_public_id)
+
+    monkeypatch.setattr(
+        lobby_ws,
+        "start_span",
+        lambda name, attributes=None: FakeSpan(span_names, name),
+    )
+    app = create_app()
+    app.state.websocket_metrics = metrics
+    app.dependency_overrides[get_auth_service] = lambda: FakeAuthService(user)
+    app.dependency_overrides[get_game_service] = lambda: FakeGameService()
+    client = TestClient(app)
+    client.cookies.set("session_token", "valid-session")
+
+    with client.websocket_connect(f"/ws/lobby/rooms/{room_public_id}") as websocket:
+        websocket.receive_json()
+        websocket.send_json({"type": "ping", "payload": {"client_time": "now"}})
+        websocket.receive_json()
+
+    message_calls = [call for call in metrics.calls if call[0] == "message"]
+    assert (
+        "connect",
+        {"ws_route": lobby_ws.LOBBY_WS_ROUTE, "ws_endpoint": "lobby"},
+    ) in metrics.calls
+    assert message_calls[0][1]["message_type"] == "lobby.room.connected"
+    assert message_calls[0][1]["direction"] == "outbound"
+    assert message_calls[1][1]["message_type"] == "ping"
+    assert message_calls[1][1]["direction"] == "inbound"
+    assert message_calls[2][1]["message_type"] == "lobby.pong"
+    assert message_calls[2][1]["direction"] == "outbound"
+    assert any(call[0] == "disconnect" for call in metrics.calls)
+    assert any(call[0] == "duration" for call in metrics.calls)
+    assert "WebSocket.lobby.connect" in span_names
+    assert "WebSocket.lobby.message" in span_names
+    assert "WebSocket.lobby.disconnect" in span_names
 
 
 def test_room_lobby_websocket_closes_when_heartbeat_timeout_passes(monkeypatch) -> None:

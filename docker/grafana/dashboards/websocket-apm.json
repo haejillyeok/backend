@@ -39,18 +39,6 @@
       "keepTime": true,
       "tags": [],
       "targetBlank": false,
-      "title": "WebSocket APM",
-      "tooltip": "Open the WebSocket Prometheus metric dashboard.",
-      "type": "dashboards",
-      "uid": "haejillyeok-websocket-apm"
-    },
-    {
-      "asDropdown": false,
-      "icon": "dashboard",
-      "includeVars": true,
-      "keepTime": true,
-      "tags": [],
-      "targetBlank": false,
       "title": "FastAPI Logs",
       "tooltip": "Open the Loki log dashboard.",
       "type": "dashboards",
@@ -59,6 +47,64 @@
   ],
   "liveNow": false,
   "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum(websocket_connections_active{service_name=~\"$service\", ws_route=~\"$ws_route\", ws_endpoint=~\"$ws_endpoint\"})",
+          "legendFormat": "active connections",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Active Connections",
+      "type": "gauge"
+    },
     {
       "datasource": {
         "type": "prometheus",
@@ -78,17 +124,17 @@
             "showPoints": "never",
             "spanNulls": false
           },
-          "unit": "reqps"
+          "unit": "ops"
         },
         "overrides": []
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
-        "x": 0,
+        "w": 8,
+        "x": 8,
         "y": 0
       },
-      "id": 1,
+      "id": 2,
       "options": {
         "legend": {
           "calcs": [
@@ -111,82 +157,14 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (service_name) (rate(http_server_requests_total{service_name=~\"$service\", http_route=~\"$route\"}[$__rate_interval]))",
-          "legendFormat": "{{service_name}}",
+          "expr": "sum by (ws_endpoint) (rate(websocket_connections_total{service_name=~\"$service\", ws_route=~\"$ws_route\", ws_endpoint=~\"$ws_endpoint\"}[$__rate_interval]))",
+          "legendFormat": "{{ws_endpoint}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Throughput",
+      "title": "Connection Rate",
       "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "max": 100,
-          "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "orange",
-                "value": 1
-              },
-              {
-                "color": "red",
-                "value": 5
-              }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 0
-      },
-      "id": 2,
-      "options": {
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showThresholdLabels": false,
-        "showThresholdMarkers": true
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "100 * (sum(rate(http_server_errors_total{service_name=~\"$service\", http_route=~\"$route\"}[$__rate_interval])) or vector(0)) / clamp_min(sum(rate(http_server_requests_total{service_name=~\"$service\", http_route=~\"$route\"}[$__rate_interval])), 0.001)",
-          "legendFormat": "5xx error rate",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Error Rate",
-      "type": "gauge"
     },
     {
       "datasource": {
@@ -200,28 +178,28 @@
           },
           "custom": {
             "drawStyle": "line",
-            "fillOpacity": 15,
+            "fillOpacity": 20,
             "lineInterpolation": "linear",
             "lineWidth": 2,
             "pointSize": 5,
             "showPoints": "never",
             "spanNulls": false
           },
-          "unit": "s"
+          "unit": "ops"
         },
         "overrides": []
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 8
+        "w": 8,
+        "x": 16,
+        "y": 0
       },
       "id": 3,
       "options": {
         "legend": {
           "calcs": [
-            "lastNotNull",
+            "mean",
             "max"
           ],
           "displayMode": "table",
@@ -240,13 +218,13 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le, service_name, http_route) (rate(http_server_request_duration_seconds_bucket{service_name=~\"$service\", http_route=~\"$route\"}[$__rate_interval])))",
-          "legendFormat": "{{service_name}} {{http_route}}",
+          "expr": "sum by (ws_endpoint, ws_message_direction, ws_message_type) (rate(websocket_messages_total{service_name=~\"$service\", ws_route=~\"$ws_route\", ws_endpoint=~\"$ws_endpoint\"}[$__rate_interval]))",
+          "legendFormat": "{{ws_endpoint}} {{ws_message_direction}} {{ws_message_type}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "p95 Latency",
+      "title": "Message Rate",
       "type": "timeseries"
     },
     {
@@ -261,28 +239,28 @@
           },
           "custom": {
             "drawStyle": "line",
-            "fillOpacity": 15,
+            "fillOpacity": 20,
             "lineInterpolation": "linear",
             "lineWidth": 2,
             "pointSize": 5,
             "showPoints": "never",
             "spanNulls": false
           },
-          "unit": "s"
+          "unit": "ops"
         },
         "overrides": []
       },
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 12,
+        "x": 0,
         "y": 8
       },
       "id": 4,
       "options": {
         "legend": {
           "calcs": [
-            "lastNotNull",
+            "mean",
             "max"
           ],
           "displayMode": "table",
@@ -301,13 +279,13 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.99, sum by (le, service_name, http_route) (rate(http_server_request_duration_seconds_bucket{service_name=~\"$service\", http_route=~\"$route\"}[$__rate_interval])))",
-          "legendFormat": "{{service_name}} {{http_route}}",
+          "expr": "sum by (ws_endpoint, ws_error_type) (rate(websocket_errors_total{service_name=~\"$service\", ws_route=~\"$ws_route\", ws_endpoint=~\"$ws_endpoint\"}[$__rate_interval]))",
+          "legendFormat": "{{ws_endpoint}} {{ws_error_type}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "p99 Latency",
+      "title": "Error Rate",
       "type": "timeseries"
     },
     {
@@ -322,22 +300,22 @@
           },
           "custom": {
             "drawStyle": "line",
-            "fillOpacity": 10,
+            "fillOpacity": 20,
             "lineInterpolation": "linear",
             "lineWidth": 2,
             "pointSize": 5,
             "showPoints": "never",
             "spanNulls": false
           },
-          "unit": "reqps"
+          "unit": "ops"
         },
         "overrides": []
       },
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 0,
-        "y": 16
+        "x": 12,
+        "y": 8
       },
       "id": 5,
       "options": {
@@ -362,13 +340,13 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (service_name, http_response_status_code) (rate(http_server_requests_total{service_name=~\"$service\", http_route=~\"$route\"}[$__rate_interval]))",
-          "legendFormat": "{{service_name}} {{http_response_status_code}}",
+          "expr": "sum by (ws_endpoint, ws_close_code) (rate(websocket_disconnects_total{service_name=~\"$service\", ws_route=~\"$ws_route\", ws_endpoint=~\"$ws_endpoint\"}[$__rate_interval]))",
+          "legendFormat": "{{ws_endpoint}} close={{ws_close_code}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Throughput by Status",
+      "title": "Disconnect Rate by Close Code",
       "type": "timeseries"
     },
     {
@@ -379,45 +357,42 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "thresholds"
+            "mode": "palette-classic"
           },
           "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            },
-            "inspect": false
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "never",
+            "spanNulls": false
           },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
+          "unit": "s"
         },
         "overrides": []
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
-        "x": 12,
+        "w": 24,
+        "x": 0,
         "y": 16
       },
       "id": 6,
       "options": {
-        "cellHeight": "sm",
-        "footer": {
-          "countRows": false,
-          "fields": "",
-          "reducer": [
-            "sum"
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
           ],
-          "show": false
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
         },
-        "showHeader": true
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
         {
@@ -426,10 +401,9 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (service_name, http_route) (rate(http_server_requests_total{service_name=~\"$service\", http_route=~\"$route\"}[$__rate_interval]))",
-          "format": "table",
-          "instant": true,
-          "legendFormat": "__auto",
+          "expr": "histogram_quantile(0.95, sum by (le, ws_endpoint) (rate(websocket_connection_duration_seconds_bucket{service_name=~\"$service\", ws_route=~\"$ws_route\", ws_endpoint=~\"$ws_endpoint\"}[$__rate_interval])))",
+          "legendFormat": "{{ws_endpoint}} p95",
+          "range": true,
           "refId": "A"
         },
         {
@@ -438,47 +412,47 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le, service_name, http_route) (rate(http_server_request_duration_seconds_bucket{service_name=~\"$service\", http_route=~\"$route\"}[$__rate_interval])))",
-          "format": "table",
-          "instant": true,
-          "legendFormat": "__auto",
+          "expr": "histogram_quantile(0.99, sum by (le, ws_endpoint) (rate(websocket_connection_duration_seconds_bucket{service_name=~\"$service\", ws_route=~\"$ws_route\", ws_endpoint=~\"$ws_endpoint\"}[$__rate_interval])))",
+          "legendFormat": "{{ws_endpoint}} p99",
+          "range": true,
           "refId": "B"
         }
       ],
-      "title": "Route Summary",
-      "type": "table"
+      "title": "Connection Duration",
+      "type": "timeseries"
     }
   ],
-  "refresh": "5s",
+  "refresh": "10s",
   "schemaVersion": 39,
   "style": "dark",
   "tags": [
     "haejillyeok",
-    "fastapi",
-    "apm"
+    "websocket",
+    "apm",
+    "prometheus"
   ],
   "templating": {
     "list": [
       {
         "current": {
-          "selected": true,
-          "text": "All",
-          "value": "$__all"
+          "selected": false,
+          "text": "haejillyeok-be",
+          "value": "haejillyeok-be"
         },
         "datasource": {
           "type": "prometheus",
           "uid": "prometheus"
         },
-        "definition": "label_values(http_server_requests_total, service_name)",
+        "definition": "label_values(websocket_connections_total, service_name)",
         "hide": 0,
-        "includeAll": true,
+        "includeAll": false,
         "label": "Service",
-        "multi": true,
+        "multi": false,
         "name": "service",
         "options": [],
         "query": {
-          "query": "label_values(http_server_requests_total, service_name)",
-          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+          "query": "label_values(websocket_connections_total, service_name)",
+          "refId": "StandardVariableQuery"
         },
         "refresh": 1,
         "regex": "",
@@ -496,16 +470,43 @@
           "type": "prometheus",
           "uid": "prometheus"
         },
-        "definition": "label_values(http_server_requests_total{service_name=~\"$service\"}, http_route)",
+        "definition": "label_values(websocket_connections_total{service_name=~\"$service\"}, ws_endpoint)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Endpoint",
+        "multi": false,
+        "name": "ws_endpoint",
+        "options": [],
+        "query": {
+          "query": "label_values(websocket_connections_total{service_name=~\"$service\"}, ws_endpoint)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(websocket_connections_total{service_name=~\"$service\", ws_endpoint=~\"$ws_endpoint\"}, ws_route)",
         "hide": 0,
         "includeAll": true,
         "label": "Route",
-        "multi": true,
-        "name": "route",
+        "multi": false,
+        "name": "ws_route",
         "options": [],
         "query": {
-          "query": "label_values(http_server_requests_total{service_name=~\"$service\"}, http_route)",
-          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+          "query": "label_values(websocket_connections_total{service_name=~\"$service\", ws_endpoint=~\"$ws_endpoint\"}, ws_route)",
+          "refId": "StandardVariableQuery"
         },
         "refresh": 1,
         "regex": "",
@@ -521,8 +522,8 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "Haejillyeok FastAPI APM",
-  "uid": "haejillyeok-fastapi-apm",
+  "title": "Haejillyeok WebSocket APM",
+  "uid": "haejillyeok-websocket-apm",
   "version": 1,
   "weekStart": ""
 }

@@ -96,14 +96,20 @@ Grafana metric dashboard는 `docker/grafana/dashboards/fastapi-apm.json`에서 p
 Prometheus metric은 route template label을 사용해 `/items/{item_id}`처럼 집계하며,
 개별 path parameter 값은 label에 넣지 않습니다.
 
+WebSocket metric dashboard는 `docker/grafana/dashboards/websocket-apm.json`에서 provision 됩니다.
+`websocket.connections.active`, `websocket.connections.total`, `websocket.messages.total`,
+`websocket.errors.total`, `websocket.disconnects.total`, `websocket.connection.duration` 기반으로
+active connection, 연결률, message rate, error rate, close code별 disconnect, 연결 지속 시간을
+확인합니다. label은 `service_name`, `ws_route`, `ws_endpoint`, `ws_message_type`, `ws_close_code`처럼
+route template과 낮은 cardinality 값만 사용합니다.
+
 객체별 실행 시간은 trace span으로 확인합니다. FastAPI 요청 span 아래에 service/repository span을
 수동으로 붙이려면 `app/shared/core/observability.py`의 `@traced_method`를 사용합니다.
-예를 들어 인증 흐름은 `AuthService.login_or_register`,
-`AuthRepository.get_user_by_account_id`, `AuthRepository.get_user_by_nickname`,
-`AuthRepository.create_user_session` 같은 child span을
-Tempo에 저장합니다. Grafana trace dashboard는
+service/repository/client 계층 child span을 Tempo에 저장합니다. WebSocket endpoint는
+`WebSocket.<endpoint>.connect`, `WebSocket.<endpoint>.message`, `WebSocket.<endpoint>.disconnect`,
+`WebSocket.<endpoint>.grace_leave` 같은 수동 span으로 Tempo에 기록합니다. Grafana trace dashboard는
 `docker/grafana/dashboards/fastapi-traces.json`에서 provision 됩니다. Dashboard 이름은
-`Haejillyeok FastAPI Traces`이며, request trace와 service/repository object span search panel을
+`Haejillyeok FastAPI Traces`이며, request trace와 service/repository layer span search panel을
 포함합니다.
 
 ### Migration

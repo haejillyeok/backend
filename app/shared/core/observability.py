@@ -53,6 +53,18 @@ HTTP_DURATION_BUCKET_SECONDS = (
     5.0,
     10.0,
 )
+WEBSOCKET_DURATION_BUCKET_SECONDS = (
+    1.0,
+    5.0,
+    15.0,
+    30.0,
+    60.0,
+    120.0,
+    300.0,
+    600.0,
+    1800.0,
+    3600.0,
+)
 
 
 class ObservabilitySettings(BaseSettings):
@@ -126,6 +138,137 @@ class HttpServerMetricsMiddleware(BaseHTTPMiddleware):
         return response
 
 
+class WebSocketServerMetrics:
+    """WebSocket 연결, 메시지, 종료를 OpenTelemetry metric으로 기록합니다."""
+
+    def __init__(self, service_name: str, meter: Any | None = None) -> None:
+        self.service_name = service_name
+        self.meter = meter or _get_meter(service_name)
+        self.active_connections = self.meter.create_up_down_counter(
+            "websocket.connections.active",
+            unit="{connection}",
+            description="Active WebSocket connections.",
+        )
+        self.connection_counter = self.meter.create_counter(
+            "websocket.connections.total",
+            unit="{connection}",
+            description="Accepted WebSocket connections.",
+        )
+        self.message_counter = self.meter.create_counter(
+            "websocket.messages.total",
+            unit="{message}",
+            description="WebSocket messages by direction and type.",
+        )
+        self.error_counter = self.meter.create_counter(
+            "websocket.errors.total",
+            unit="{error}",
+            description="WebSocket protocol or application errors.",
+        )
+        self.disconnect_counter = self.meter.create_counter(
+            "websocket.disconnects.total",
+            unit="{disconnect}",
+            description="WebSocket disconnects by close code.",
+        )
+        self.duration_histogram = self.meter.create_histogram(
+            "websocket.connection.duration",
+            unit="s",
+            description="WebSocket connection duration.",
+            explicit_bucket_boundaries_advisory=WEBSOCKET_DURATION_BUCKET_SECONDS,
+        )
+
+    def record_connect(self, *, ws_route: str, ws_endpoint: str) -> None:
+        """연결 수락 시 active connection과 총 연결 수 metric을 증가시킵니다."""
+        attributes = self._base_attributes(ws_route=ws_route, ws_endpoint=ws_endpoint)
+        self.active_connections.add(1, attributes=attributes)
+        self.connection_counter.add(1, attributes=attributes)
+
+    def record_message(
+        self,
+        *,
+        ws_route: str,
+        ws_endpoint: str,
+        message_type: str,
+        direction: str,
+    ) -> None:
+        """WebSocket message type과 방향별 처리량 metric을 기록합니다."""
+        attributes = self._base_attributes(ws_route=ws_route, ws_endpoint=ws_endpoint)
+        attributes["ws.message.type"] = message_type
+        attributes["ws.message.direction"] = direction
+        self.message_counter.add(1, attributes=attributes)
+
+    def record_error(self, *, ws_route: str, ws_endpoint: str, error_type: str) -> None:
+        """WebSocket 오류 발생 metric을 오류 유형별로 기록합니다."""
+        attributes = self._base_attributes(ws_route=ws_route, ws_endpoint=ws_endpoint)
+        attributes["ws.error.type"] = error_type
+        self.error_counter.add(1, attributes=attributes)
+
+    def record_disconnect(self, *, ws_route: str, ws_endpoint: str, close_code: int) -> None:
+        """연결 종료 시 active connection 감소와 close code별 종료 metric을 기록합니다."""
+        attributes = self._base_attributes(ws_route=ws_route, ws_endpoint=ws_endpoint)
+        self.active_connections.add(-1, attributes=attributes)
+        attributes["ws.close_code"] = str(close_code)
+        self.disconnect_counter.add(1, attributes=attributes)
+
+    def record_duration(
+        self,
+        *,
+        ws_route: str,
+        ws_endpoint: str,
+        duration_seconds: float,
+        close_code: int,
+    ) -> None:
+        """WebSocket 연결 지속 시간을 close code와 함께 histogram에 기록합니다."""
+        attributes = self._base_attributes(ws_route=ws_route, ws_endpoint=ws_endpoint)
+        attributes["ws.close_code"] = str(close_code)
+        self.duration_histogram.record(duration_seconds, attributes=attributes)
+
+    def _base_attributes(self, *, ws_route: str, ws_endpoint: str) -> dict[str, str]:
+        return {
+            "service.name": self.service_name,
+            "ws.route": ws_route,
+            "ws.endpoint": ws_endpoint,
+        }
+
+
+class _NoopWebSocketServerMetrics:
+    def record_connect(self, *, ws_route: str, ws_endpoint: str) -> None:
+        return None
+
+    def record_message(
+        self,
+        *,
+        ws_route: str,
+        ws_endpoint: str,
+        message_type: str,
+        direction: str,
+    ) -> None:
+        return None
+
+    def record_error(self, *, ws_route: str, ws_endpoint: str, error_type: str) -> None:
+        return None
+
+    def record_disconnect(self, *, ws_route: str, ws_endpoint: str, close_code: int) -> None:
+        return None
+
+    def record_duration(
+        self,
+        *,
+        ws_route: str,
+        ws_endpoint: str,
+        duration_seconds: float,
+        close_code: int,
+    ) -> None:
+        return None
+
+
+NOOP_WEBSOCKET_METRICS = _NoopWebSocketServerMetrics()
+
+
+def get_websocket_metrics(app: FastAPI):
+    """FastAPI app.state에 등록된 WebSocket metric recorder를 반환합니다."""
+    return getattr(app.state, "websocket_metrics", NOOP_WEBSOCKET_METRICS)
+
+
 def add_observability(
     app: FastAPI,
     service_name: str,
@@ -138,6 +281,7 @@ def add_observability(
         return
 
     configure_observability_sdk(observability_settings, service_name, environment)
+    app.state.websocket_metrics = WebSocketServerMetrics(service_name)
     app.add_middleware(HttpServerMetricsMiddleware, service_name=service_name)
 
     if FastAPIInstrumentor is None:

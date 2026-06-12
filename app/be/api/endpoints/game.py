@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 
 from app.be.dependencies.services import get_current_user, get_game_service
 from app.be.schemas.request.game import CreateGameRoomRequest
@@ -24,6 +24,7 @@ from app.be.services.game import (
     RoomJoinResult,
 )
 from app.be.services.lobby import lobby_connection_manager
+from app.shared.core.observability import get_websocket_metrics
 from app.shared.core.error_codes import ErrorCode
 from app.shared.core.openapi import error_responses_by_status
 from app.shared.core.responses import SuccessResponse, ok
@@ -99,6 +100,7 @@ async def create_game_room(
     ),
 )
 async def join_game_room(
+    request: Request,
     room_public_id: UUID,
     current_user: Annotated[CurrentUser, Depends(get_current_user)],
     game_service: Annotated[GameService, Depends(get_game_service)],
@@ -112,6 +114,12 @@ async def join_game_room(
             "type": "lobby.room.joined",
             "payload": response.model_dump(mode="json"),
         },
+    )
+    get_websocket_metrics(request.app).record_message(
+        ws_route="/ws/lobby/rooms/{room_public_id}",
+        ws_endpoint="lobby",
+        message_type="lobby.room.joined",
+        direction="outbound",
     )
     return ok(response)
 

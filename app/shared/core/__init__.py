@@ -13,8 +13,10 @@ from app.shared.core.http_audit import AuditLogMiddleware, add_audit_log_middlew
 from app.shared.core.observability import (
     HttpServerMetricsMiddleware,
     ObservabilitySettings,
+    WebSocketServerMetrics,
     add_observability,
     configure_observability_sdk,
+    get_websocket_metrics,
     start_span,
     traced_method,
 )
@@ -49,6 +51,7 @@ __all__ = [
     "ObservabilitySettings",
     "ResponseEnvelope",
     "SuccessResponse",
+    "WebSocketServerMetrics",
     "add_audit_log_middleware",
     "add_observability",
     "configure_observability_sdk",
@@ -59,6 +62,7 @@ __all__ = [
     "fail",
     "format_audit_event",
     "get_error_definition",
+    "get_websocket_metrics",
     "install_openapi_schema",
     "log_audit_event",
     "ok",

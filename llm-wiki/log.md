@@ -4,6 +4,11 @@
 코드 변경 상세는 Git history, PR, issue에서 확인하고, 이 파일에는 위키 페이지의 지식, 계약, 정책,
 컨벤션이 어떻게 바뀌었는지만 남깁니다.
 
+## [2026-06-12] maintenance | Add generic WebSocket APM observability
+
+- `observability-stack.md`에 WebSocket 연결, 메시지, 오류, 종료, 연결 지속 시간 metric과 낮은 cardinality label 기준을 추가했다.
+- Grafana trace dashboard는 Auth 도메인 고정 패널이 아니라 service/repository layer 기준으로 조회하고, WebSocket APM dashboard는 별도 범용 dashboard로 관리한다는 기준을 남겼다.
+
 ## [2026-06-12] maintenance | Add room lobby heartbeat and grace leave policy
 
 - `realtime-websocket.md`에 room 로비 WebSocket은 client `ping`을 heartbeat로 보고, 45초 timeout 후 연결을 닫으며, 90초 grace time 안에 재연결하지 않으면 DB 퇴장 처리한다는 기준을 추가했다.
