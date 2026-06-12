@@ -29,8 +29,8 @@
       "targetBlank": false,
       "title": "FastAPI Trace Dashboard",
       "tooltip": "Open the Tempo trace dashboard.",
-      "type": "dashboards",
-      "uid": "haejillyeok-fastapi-traces"
+      "type": "link",
+      "url": "/d/haejillyeok-fastapi-traces"
     },
     {
       "asDropdown": false,
@@ -41,8 +41,8 @@
       "targetBlank": false,
       "title": "FastAPI Logs",
       "tooltip": "Open the Loki log dashboard.",
-      "type": "dashboards",
-      "uid": "haejillyeok-fastapi-logs"
+      "type": "link",
+      "url": "/d/haejillyeok-fastapi-logs"
     }
   ],
   "liveNow": false,

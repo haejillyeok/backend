@@ -4,6 +4,10 @@
 코드 변경 상세는 Git history, PR, issue에서 확인하고, 이 파일에는 위키 페이지의 지식, 계약, 정책,
 컨벤션이 어떻게 바뀌었는지만 남깁니다.
 
+## [2026-06-12] maintenance | Clarify Grafana dashboard link policy
+
+- `observability-stack.md`에 Grafana dashboard 간 이동은 `type: link`와 `/d/<dashboard_uid>` URL을 사용하고, `type: dashboards`는 tag 기반 목록 확장용이라 빈 tag와 함께 쓰지 않는다는 기준을 추가했다.
+
 ## [2026-06-12] maintenance | Add generic WebSocket APM observability
 
 - `observability-stack.md`에 WebSocket 연결, 메시지, 오류, 종료, 연결 지속 시간 metric과 낮은 cardinality label 기준을 추가했다.

@@ -95,6 +95,9 @@ Grafana metric dashboard는 `docker/grafana/dashboards/fastapi-apm.json`에서 p
 주요 panel은 throughput, 5xx error rate, p95 latency, p99 latency, status별 throughput입니다.
 Prometheus metric은 route template label을 사용해 `/items/{item_id}`처럼 집계하며,
 개별 path parameter 값은 label에 넣지 않습니다.
+Dashboard 간 이동 링크는 특정 dashboard URL인 `/d/<uid>`를 가리키는 `type: link`로 둡니다.
+`type: dashboards`는 tag 기반 dashboard 목록을 펼치므로 빈 tag와 함께 쓰면 같은 dashboard 링크가
+반복 표시될 수 있습니다.
 
 WebSocket metric dashboard는 `docker/grafana/dashboards/websocket-apm.json`에서 provision 됩니다.
 `websocket.connections.active`, `websocket.connections.total`, `websocket.messages.total`,

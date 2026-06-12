@@ -29,8 +29,8 @@
       "targetBlank": false,
       "title": "FastAPI APM Metrics",
       "tooltip": "Open the Prometheus metric dashboard.",
-      "type": "dashboards",
-      "uid": "haejillyeok-fastapi-apm"
+      "type": "link",
+      "url": "/d/haejillyeok-fastapi-apm"
     },
     {
       "asDropdown": false,
@@ -41,8 +41,8 @@
       "targetBlank": false,
       "title": "WebSocket APM",
       "tooltip": "Open the WebSocket Prometheus metric dashboard.",
-      "type": "dashboards",
-      "uid": "haejillyeok-websocket-apm"
+      "type": "link",
+      "url": "/d/haejillyeok-websocket-apm"
     },
     {
       "asDropdown": false,
@@ -53,8 +53,8 @@
       "targetBlank": false,
       "title": "FastAPI Logs",
       "tooltip": "Open the Loki log dashboard.",
-      "type": "dashboards",
-      "uid": "haejillyeok-fastapi-logs"
+      "type": "link",
+      "url": "/d/haejillyeok-fastapi-logs"
     }
   ],
   "liveNow": false,

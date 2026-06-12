@@ -13,6 +13,17 @@ def dashboard_text(dashboard: dict) -> str:
     return json.dumps(dashboard, ensure_ascii=False)
 
 
+def test_dashboard_links_point_to_specific_dashboards() -> None:
+    for dashboard_path in DASHBOARD_DIR.glob("*.json"):
+        dashboard = load_dashboard(dashboard_path.name)
+
+        for link in dashboard.get("links", []):
+            assert link["type"] == "link"
+            assert link["url"].startswith("/d/")
+            assert "uid" not in link
+            assert link.get("tags", []) == []
+
+
 def test_trace_dashboard_uses_generic_span_filters() -> None:
     dashboard = load_dashboard("fastapi-traces.json")
     text = dashboard_text(dashboard)

@@ -110,6 +110,10 @@ Grafana metric dashboard는 `Haejillyeok FastAPI APM` 제목으로 provision 된
 - p99 latency: `histogram_quantile(0.99, rate(http_server_request_duration_seconds_bucket[...]))`
 - Throughput by Status: status code별 request rate
 
+Dashboard 간 이동 링크는 `type: link`와 `/d/<dashboard_uid>` URL을 사용한다. `type: dashboards`는
+tag 기준 dashboard 목록을 펼치는 링크이므로, 빈 `tags`와 함께 쓰면 현재 provision된 dashboard가
+반복 표시된다.
+
 Grafana WebSocket metric dashboard는 `Haejillyeok WebSocket APM` 제목으로 provision 된다.
 
 - Active Connections: route/endpoint별 현재 WebSocket 연결 수
