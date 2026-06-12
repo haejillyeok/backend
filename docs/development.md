@@ -170,6 +170,9 @@ HTTP host는 `127.0.0.1`로 고정하고, port는 서버 `.env`의 에이전트 
 mise run test
 ```
 
+테스트는 `pytest-cov`로 전체 `app` package coverage를 측정하며, 총 coverage가 90% 미만이면
+실패합니다.
+
 ## Format
 
 포맷은 `ruff`로 관리합니다. 변경 전 확인은 아래 명령으로 실행합니다.

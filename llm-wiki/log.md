@@ -4,6 +4,10 @@
 코드 변경 상세는 Git history, PR, issue에서 확인하고, 이 파일에는 위키 페이지의 지식, 계약, 정책,
 컨벤션이 어떻게 바뀌었는지만 남깁니다.
 
+## [2026-06-12] maintenance | Add test coverage threshold
+
+- `code-conventions.md`에 `pytest`가 전체 `app` package coverage를 측정하고 총 coverage 90% 이상을 유지한다는 테스트 기준을 추가했다.
+
 ## [2026-06-12] maintenance | Add BE protected router session policy
 
 - `backend-guidelines.md`에 BE REST API는 public router와 protected router를 분리하고, protected router에서 `session_token` 기반 `get_current_user` dependency를 공통 적용한다는 기준을 추가했다.

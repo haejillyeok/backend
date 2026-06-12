@@ -1,7 +1,7 @@
 ---
 title: Code Conventions
 type: guide
-updated: 2026-06-11
+updated: 2026-06-12
 audience: ai
 ---
 
@@ -109,6 +109,7 @@ audience: ai
 ## Tests
 
 - 테스트 파일은 `test/` 아래에 둔다.
+- `pytest`는 전체 `app` package coverage를 측정하고 총 coverage 90% 이상을 유지한다.
 - 새 public API는 정상 응답과 주요 실패 응답을 테스트한다.
 - dependency override가 필요한 테스트는 `create_app()`으로 앱을 생성한다.
 - client wrapper는 timeout, status handling, mapping을 테스트한다.
