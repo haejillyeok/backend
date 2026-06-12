@@ -36,6 +36,22 @@ HTTP status metadata를 가질 수 있고, HTTP handler가 JSON 응답 형식으
 Swagger 실패 응답은 `ErrorResponse` schema를 참조하고, endpoint별 예시에 실제 `code` 값을 함께 표시합니다.
 같은 HTTP status에서 여러 application error code가 나올 수 있으면 Swagger `examples`로 각각의 code 예시를 모두 표시합니다.
 
+## Session Authentication
+
+BE REST API는 public router와 protected router를 분리합니다.
+
+- Public: `GET /health`, `GET /api/v1/health`, `GET /api/v1/agent/health`, `POST /api/v1/auth/login`
+- Protected: 게임 세션 등 로그인 유저 권한이 필요한 `/api/v1/*` API
+
+Protected router는 `session_token` HttpOnly 쿠키를 공통 dependency에서 검증합니다. 세션 토큰 원문은
+SHA-256 hash로 변환해 `users.user_sessions.token_hash`와 비교하고, `revoked_at IS NULL`,
+`expires_at > now`인 세션만 허용합니다. 통과하면 서버가 `CurrentUser`를 복원하며, 각 endpoint는
+필요할 때 이 `CurrentUser.id`로 도메인 권한을 확인합니다.
+
+새 BE API를 추가할 때 로그인/헬스처럼 공개되어야 하는 API만 public router에 넣고, 기본은 protected
+router에 등록합니다. endpoint 본문에서 유저 ID가 필요하면 같은 `get_current_user` dependency를
+파라미터로 주입받아 사용합니다.
+
 ### Error Codes
 
 | Code | Type | HTTP | WebSocket | Meaning |

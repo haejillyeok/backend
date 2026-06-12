@@ -5,9 +5,11 @@ import tomllib
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
 from app.agent.main import create_app as create_agent_app
+from app.be.dependencies.services import get_current_user
 from app.be.main import create_app as create_be_app
 from app.shared.core import logging_config
 from app.shared.core.config import AppSettings, configure_app_timezone
@@ -259,6 +261,34 @@ def test_be_agent_health_endpoint_maps_agent_failure_to_bad_gateway():
             "details": {"agent_status_code": 503},
         },
     }
+
+
+def test_be_game_routes_use_router_level_session_authentication():
+    app = create_be_app()
+    game_route = _find_api_route(app, "/api/v1/game/rooms/{room_public_id}/start")
+
+    assert any(
+        dependency.call is get_current_user and dependency.name is None
+        for dependency in game_route.dependant.dependencies
+    )
+
+
+def test_be_public_routes_do_not_use_router_level_session_authentication():
+    app = create_be_app()
+
+    for path in ("/api/v1/auth/login", "/api/v1/health", "/api/v1/agent/health"):
+        route = _find_api_route(app, path)
+        assert all(
+            not (dependency.call is get_current_user and dependency.name is None)
+            for dependency in route.dependant.dependencies
+        )
+
+
+def _find_api_route(app, path: str) -> APIRoute:
+    for route in app.routes:
+        if isinstance(route, APIRoute) and route.path == path:
+            return route
+    raise AssertionError(f"route not found: {path}")
 
 
 def test_be_custom_exception_returns_common_error_response():

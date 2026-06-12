@@ -1,7 +1,7 @@
 ---
 title: Backend Guidelines
 type: guide
-updated: 2026-06-11
+updated: 2026-06-12
 audience: ai
 ---
 
@@ -34,6 +34,17 @@ audience: ai
 - endpoint 파일은 request parsing, dependency wiring, response mapping만 담당한다.
 - 비즈니스 로직은 `services/`, DB 접근은 `repository/`, 입출력 모델은 `schemas/`에 둔다.
 - router-level 공통 인증, 태그, response metadata가 필요하면 `APIRouter(...)` 또는 `include_router(...)`에 둔다.
+
+BE REST API는 public router와 protected router를 분리한다.
+
+- Public: `GET /health`, `GET /api/v1/health`, `GET /api/v1/agent/health`, `POST /api/v1/auth/login`
+- Protected: 게임 세션처럼 로그인 유저 권한이 필요한 `/api/v1/*` API
+
+Protected router는 `dependencies=[Depends(get_current_user)]`로 `session_token` cookie를 공통 검증한다.
+새 BE API는 공개 endpoint가 명확한 경우에만 public router에 넣고, 기본은 protected router에 등록한다.
+endpoint 내부에서 `user_id`가 필요하면 같은 `get_current_user` dependency를 파라미터로 주입받는다.
+FastAPI는 request 단위 dependency cache를 사용하므로 router-level 검증과 endpoint 파라미터 주입이 같은
+dependency를 공유할 수 있다.
 
 ### Route Guard
 

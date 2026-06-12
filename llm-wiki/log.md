@@ -4,6 +4,11 @@
 코드 변경 상세는 Git history, PR, issue에서 확인하고, 이 파일에는 위키 페이지의 지식, 계약, 정책,
 컨벤션이 어떻게 바뀌었는지만 남깁니다.
 
+## [2026-06-12] maintenance | Add BE protected router session policy
+
+- `backend-guidelines.md`에 BE REST API는 public router와 protected router를 분리하고, protected router에서 `session_token` 기반 `get_current_user` dependency를 공통 적용한다는 기준을 추가했다.
+- 로그인과 health 계열 API만 public router에 두고, 새 BE API는 기본적으로 protected router에 등록한다는 운영 기준을 남겼다.
+
 ## [2026-06-12] maintenance | Add WebSocket docs TOC and Mermaid flow
 
 - `realtime-websocket.md`에 `/ws-docs` 렌더러가 heading 기반 자동 목차와 Mermaid code block 렌더링을 지원한다는 문서 운영 기준을 추가했다.
