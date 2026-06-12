@@ -44,14 +44,18 @@ class GameSessionParticipantResponse(SchemaModel):
 
 
 class StartGameSessionResponse(SchemaModel):
-    session_public_id: UUID
+    game_session_public_id: UUID
     room_public_id: UUID
     game_type: GameType
     status: GameSessionStatus
+    game_session_token: str
+    game_session_token_expires_at: datetime
     participants: list[GameSessionParticipantResponse]
 
 
 class GameSessionEntryResponse(SchemaModel):
-    session_public_id: UUID
+    game_session_public_id: UUID
     allowed: bool
+    game_session_token: str
+    game_session_token_expires_at: datetime
     participant: GameSessionParticipantResponse

@@ -255,7 +255,7 @@ async def test_game_repository_returns_active_session_with_participant_snapshot(
     missing_session = await repository.get_active_session_by_room_id(uuid4())
 
     assert active_session is not None
-    assert active_session.session_public_id == game_session.public_id
+    assert active_session.game_session_public_id == game_session.public_id
     assert active_session.participants[0].participant_id == participant.id
     assert active_session.participants[0].display_name == "방장"
     assert missing_session is None
@@ -371,20 +371,20 @@ async def test_game_repository_skips_leave_when_no_active_room_member() -> None:
 async def test_game_repository_creates_game_session_and_participant_snapshot() -> None:
     owner_id = uuid4()
     room = build_room(owner_user_id=owner_id)
-    session_public_id = uuid4()
+    game_session_public_id = uuid4()
     db_session = FakeDbSession([FakeResult(scalar=room)])
     repository = GameRepository(db_session)
 
     result = await repository.create_game_session(
         session=GameSessionStartResult(
-            session_public_id=session_public_id,
+            game_session_public_id=game_session_public_id,
             room_public_id=room.public_id,
             game_type="shiritori",
             status="starting",
             participants=[
                 GameSessionParticipantRecord(
                     participant_id=None,
-                    session_public_id=session_public_id,
+                    game_session_public_id=game_session_public_id,
                     user_id=owner_id,
                     participant_type="user",
                     display_name="방장",
@@ -393,7 +393,7 @@ async def test_game_repository_creates_game_session_and_participant_snapshot() -
                 ),
                 GameSessionParticipantRecord(
                     participant_id=None,
-                    session_public_id=session_public_id,
+                    game_session_public_id=game_session_public_id,
                     user_id=None,
                     participant_type="ai",
                     display_name="수상한 손님",
@@ -405,7 +405,7 @@ async def test_game_repository_creates_game_session_and_participant_snapshot() -
     )
     await repository.commit()
 
-    assert result.session_public_id == session_public_id
+    assert result.game_session_public_id == game_session_public_id
     assert room.status == "starting"
     assert isinstance(db_session.added[0], GameSession)
     assert [participant.original_nickname for participant in db_session.added_batches[0]] == [
@@ -438,15 +438,82 @@ async def test_game_repository_resolves_user_participant_for_session_entry() -> 
     repository = GameRepository(db_session)
 
     record = await repository.get_user_participant_for_session(
-        session_public_id=game_session.public_id,
+        game_session_public_id=game_session.public_id,
         user_id=user_id,
     )
     missing = await repository.get_user_participant_for_session(
-        session_public_id=uuid4(),
+        game_session_public_id=uuid4(),
         user_id=user_id,
     )
 
     assert record is not None
     assert record.participant_id == participant.id
     assert record.display_name == "참가자"
+    assert missing is None
+
+
+async def test_game_repository_saves_game_session_token_hash_for_user_participant() -> None:
+    user_id = uuid4()
+    game_session = SimpleNamespace(public_id=uuid4())
+    participant = SessionParticipant(
+        id=uuid4(),
+        session_id=uuid4(),
+        user_id=user_id,
+        participant_type="user",
+        display_name="참가자",
+        original_nickname="참가자",
+        seat_number=1,
+        is_uninvited_guest=False,
+    )
+    expires_at = datetime(2026, 6, 12, 1, tzinfo=UTC)
+    db_session = FakeDbSession([FakeResult(row=(game_session, participant))])
+    repository = GameRepository(db_session)
+
+    await repository.save_game_session_token(
+        game_session_public_id=game_session.public_id,
+        user_id=user_id,
+        token_hash="hashed-token",
+        expires_at=expires_at,
+    )
+
+    assert participant.resume_token_hash == "hashed-token"
+    assert participant.resume_token_expires_at == expires_at
+    assert db_session.flush_count == 1
+
+
+async def test_game_repository_resolves_participant_by_active_game_session_token() -> None:
+    user_id = uuid4()
+    game_session = SimpleNamespace(public_id=uuid4())
+    participant = SessionParticipant(
+        id=uuid4(),
+        session_id=uuid4(),
+        user_id=user_id,
+        participant_type="user",
+        display_name="참가자",
+        original_nickname="참가자",
+        seat_number=1,
+        is_uninvited_guest=False,
+        resume_token_hash="hashed-token",
+        resume_token_expires_at=datetime(2026, 6, 12, 1, tzinfo=UTC),
+    )
+    db_session = FakeDbSession(
+        [
+            FakeResult(row=(game_session, participant)),
+            FakeResult(row=None),
+        ]
+    )
+    repository = GameRepository(db_session)
+
+    record = await repository.get_participant_for_game_session_token(
+        token_hash="hashed-token",
+        now=datetime(2026, 6, 12, tzinfo=UTC),
+    )
+    missing = await repository.get_participant_for_game_session_token(
+        token_hash="missing",
+        now=datetime(2026, 6, 12, tzinfo=UTC),
+    )
+
+    assert record is not None
+    assert record.game_session_public_id == game_session.public_id
+    assert record.participant_id == participant.id
     assert missing is None

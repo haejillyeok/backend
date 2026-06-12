@@ -9,7 +9,7 @@ BE 서버의 WebSocket 명세 문서입니다. HTTP API 계약은 Swagger와 `do
 | --- | --- | --- | --- |
 | `/ws/lobby/rooms/{room_public_id}` | 사용 중 | `session_token` 쿠키, 활성 room member | 특정 객실 로비 연결, 객실 이벤트 수신 |
 | `/ws/realtime` | 사용 중 | 없음 | 연결 테스트용 ping/pong |
-| `/ws/match` | 예정 | `session_token` 쿠키 확인 후 참가자 identity 고정 | 게임 진행, 턴, 점수, 투표 |
+| `/ws/match` | 예정 | `session_token` + `game_session_public_id` 또는 `game_session_token`으로 참가자 identity 고정 | 게임 진행, 턴, 점수, 투표 |
 
 로비의 객실 목록 조회, 객실 생성, 객실 참여는 REST API가 담당합니다. WebSocket은 이미 참여가 허용된
 객실의 실시간 이벤트를 받기 위해 연결합니다. 영속 상태는 DB가 소유하고, WebSocket manager는 현재 열린
@@ -223,7 +223,9 @@ Payload:
 | 필드 | 타입 | 설명 |
 | --- | --- | --- |
 | `room_public_id` | uuid | 시작된 객실 public ID |
-| `session_public_id` | uuid | match 연결에 사용할 게임 세션 public ID |
+| `game_session_public_id` | uuid | match 연결에 사용할 게임 세션 public ID |
+| `game_session_token` | string | 사용자별 handoff payload에만 포함하는 match 복구 토큰. 방 전체 공통 broadcast payload에는 포함하지 않음 |
+| `game_session_token_expires_at` | datetime | match 복구 토큰 만료 시각 |
 | `game_type` | string | 게임 종류 |
 | `participants` | array | 시작 시 고정된 참가자 snapshot |
 
@@ -340,18 +342,18 @@ sequenceDiagram
     Owner->>REST: POST /api/v1/game/rooms/{room_public_id}/start
     REST->>DB: room lock 후 active session 조회
     alt active session exists
-        DB-->>REST: 기존 session_public_id
+        DB-->>REST: 기존 game_session_public_id
     else new session required
         REST->>DB: game_session 및 session_participants 생성
-        DB-->>REST: 새 session_public_id
+        DB-->>REST: 새 game_session_public_id
     end
     REST-->>Owner: 200 StartGameSessionResponse
     REST->>LobbyWS: game.started broadcast
     LobbyWS-->>Owner: 이벤트 game.started
     LobbyWS-->>Guest: 이벤트 game.started
-    Owner->>MatchWS: session_public_id와 session_token으로 연결
-    Guest->>MatchWS: session_public_id와 session_token으로 연결
-    MatchWS->>DB: user_id + session_public_id로 participant_id 확정
+    Owner->>MatchWS: game_session_public_id + session_token 또는 game_session_token으로 연결
+    Guest->>MatchWS: game_session_public_id + session_token 또는 game_session_token으로 연결
+    MatchWS->>DB: user_id + game_session_public_id 또는 game_session_token hash로 participant_id 확정
 ```
 
 ## 오류와 종료 코드

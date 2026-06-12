@@ -158,6 +158,11 @@ class SessionParticipant(Base):
     original_nickname: Mapped[str | None] = mapped_column(Text, nullable=True)
     seat_number: Mapped[int] = mapped_column(Integer, nullable=False)
     is_uninvited_guest: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    resume_token_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
+    resume_token_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     joined_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

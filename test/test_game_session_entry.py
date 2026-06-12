@@ -15,6 +15,8 @@ from app.be.services.game import (
     GameRoomNotJoinableError,
     GameRoomRecord,
     GameService,
+    GameSessionStartResult,
+    GameSessionCredential,
     GameSessionEntryForbiddenError,
     GameSessionParticipantRecord,
     RoomCreateResult,
@@ -82,6 +84,7 @@ class FakeGameRepository(GameRepositoryProtocol):
         self.created_members: list[RoomMemberRecord] = []
         self.left_members: list[RoomLeaveResult] = []
         self.room_summaries: list[GameRoomListItem] = []
+        self.issued_credentials: list[dict[str, object]] = []
         self.committed = False
         self.locked_room_public_ids: list[object] = []
 
@@ -178,15 +181,41 @@ class FakeGameRepository(GameRepositoryProtocol):
         self.created_sessions.append(kwargs)
         return kwargs["session"]
 
-    async def get_user_participant_for_session(self, *, session_public_id, user_id):
+    async def get_user_participant_for_session(self, *, game_session_public_id, user_id):
         if self.participant is None:
             return None
         if (
-            self.participant.session_public_id == session_public_id
+            self.participant.game_session_public_id == game_session_public_id
             and self.participant.user_id == user_id
         ):
             return self.participant
         return None
+
+    async def get_participant_for_game_session_token(self, *, token_hash, now):
+        _ = now
+        if self.participant is None:
+            return None
+        expected_hash = (
+            self.issued_credentials[0]["token_hash"] if self.issued_credentials else None
+        )
+        return self.participant if token_hash == expected_hash else None
+
+    async def save_game_session_token(
+        self,
+        *,
+        game_session_public_id,
+        user_id,
+        token_hash,
+        expires_at,
+    ):
+        self.issued_credentials.append(
+            {
+                "game_session_public_id": game_session_public_id,
+                "user_id": user_id,
+                "token_hash": token_hash,
+                "expires_at": expires_at,
+            }
+        )
 
     async def commit(self):
         self.committed = True
@@ -564,6 +593,13 @@ def test_game_service_starts_session_for_room_owner_and_freezes_allowed_members(
         "ai",
     ]
     assert [participant.seat_number for participant in result.participants] == [1, 2, 3]
+    assert result.game_session_token
+    assert result.game_session_token_expires_at == repository.issued_credentials[0]["expires_at"]
+    assert (
+        repository.issued_credentials[0]["game_session_public_id"] == result.game_session_public_id
+    )
+    assert repository.issued_credentials[0]["user_id"] == owner_id
+    assert repository.issued_credentials[0]["token_hash"] != result.game_session_token
     assert repository.locked_room_public_ids == [room_public_id]
     assert repository.committed is True
 
@@ -572,28 +608,24 @@ def test_game_service_returns_existing_session_for_repeated_start_request():
     owner_id = uuid4()
     room_id = uuid4()
     room_public_id = uuid4()
-    session_public_id = uuid4()
-    existing_session = type(
-        "ExistingSession",
-        (),
-        {
-            "session_public_id": session_public_id,
-            "room_public_id": room_public_id,
-            "game_type": "shiritori",
-            "status": "starting",
-            "participants": [
-                GameSessionParticipantRecord(
-                    participant_id=uuid4(),
-                    session_public_id=session_public_id,
-                    user_id=owner_id,
-                    participant_type="user",
-                    display_name="방장",
-                    seat_number=1,
-                    is_uninvited_guest=False,
-                )
-            ],
-        },
-    )()
+    game_session_public_id = uuid4()
+    existing_session = GameSessionStartResult(
+        game_session_public_id=game_session_public_id,
+        room_public_id=room_public_id,
+        game_type="shiritori",
+        status="starting",
+        participants=[
+            GameSessionParticipantRecord(
+                participant_id=uuid4(),
+                game_session_public_id=game_session_public_id,
+                user_id=owner_id,
+                participant_type="user",
+                display_name="방장",
+                seat_number=1,
+                is_uninvited_guest=False,
+            )
+        ],
+    )
     repository = FakeGameRepository(
         room=GameRoomRecord(
             id=room_id,
@@ -610,11 +642,16 @@ def test_game_service_returns_existing_session_for_repeated_start_request():
 
     result = asyncio.run(service.start_session(room_public_id=room_public_id, user_id=owner_id))
 
-    assert result.session_public_id == session_public_id
+    assert result.game_session_public_id == game_session_public_id
     assert result.room_public_id == room_public_id
+    assert result.game_session_token
+    assert result.game_session_token_expires_at == repository.issued_credentials[0]["expires_at"]
+    assert repository.issued_credentials[0]["game_session_public_id"] == game_session_public_id
+    assert repository.issued_credentials[0]["user_id"] == owner_id
+    assert repository.issued_credentials[0]["token_hash"] != result.game_session_token
     assert repository.created_sessions == []
     assert repository.locked_room_public_ids == [room_public_id]
-    assert repository.committed is False
+    assert repository.committed is True
 
 
 def test_game_service_rejects_entry_for_user_outside_session():
@@ -622,18 +659,18 @@ def test_game_service_rejects_entry_for_user_outside_session():
     service = GameService(repository)
 
     with pytest.raises(GameSessionEntryForbiddenError):
-        asyncio.run(service.authorize_entry(session_public_id=uuid4(), user_id=uuid4()))
+        asyncio.run(service.authorize_entry(game_session_public_id=uuid4(), user_id=uuid4()))
 
 
 def test_game_service_resolves_participant_identity_for_allowed_session_entry():
     user_id = uuid4()
     participant_id = uuid4()
-    session_public_id = uuid4()
+    game_session_public_id = uuid4()
     repository = FakeGameRepository(
         room=None,
         participant=GameSessionParticipantRecord(
             participant_id=participant_id,
-            session_public_id=session_public_id,
+            game_session_public_id=game_session_public_id,
             user_id=user_id,
             participant_type="user",
             display_name="참가자",
@@ -644,18 +681,57 @@ def test_game_service_resolves_participant_identity_for_allowed_session_entry():
     service = GameService(repository)
 
     result = asyncio.run(
-        service.authorize_entry(session_public_id=session_public_id, user_id=user_id)
+        service.authorize_entry(game_session_public_id=game_session_public_id, user_id=user_id)
     )
 
-    assert result.session_public_id == session_public_id
+    assert result.game_session_public_id == game_session_public_id
     assert result.participant.participant_id == participant_id
     assert result.participant.user_id == user_id
+    assert result.game_session_token
+    assert result.game_session_token_expires_at == repository.issued_credentials[0]["expires_at"]
+    assert repository.issued_credentials[0]["game_session_public_id"] == game_session_public_id
+    assert repository.issued_credentials[0]["user_id"] == user_id
+    assert repository.issued_credentials[0]["token_hash"] != result.game_session_token
+
+
+def test_game_service_resolves_participant_identity_from_game_session_token():
+    user_id = uuid4()
+    participant_id = uuid4()
+    game_session_public_id = uuid4()
+    participant = GameSessionParticipantRecord(
+        participant_id=participant_id,
+        game_session_public_id=game_session_public_id,
+        user_id=user_id,
+        participant_type="user",
+        display_name="참가자",
+        seat_number=1,
+        is_uninvited_guest=False,
+    )
+    repository = FakeGameRepository(room=None, participant=participant)
+    service = GameService(repository)
+    issued = asyncio.run(
+        service.authorize_entry(game_session_public_id=game_session_public_id, user_id=user_id)
+    )
+
+    result = asyncio.run(service.authorize_resume_token(issued.game_session_token))
+
+    assert result.game_session_public_id == game_session_public_id
+    assert result.participant.participant_id == participant_id
+    assert result.participant.user_id == user_id
+
+
+def test_game_service_rejects_invalid_game_session_token():
+    repository = FakeGameRepository(room=None, participant=None)
+    service = GameService(repository)
+
+    with pytest.raises(GameSessionEntryForbiddenError):
+        asyncio.run(service.authorize_resume_token("invalid-token"))
 
 
 def test_start_game_session_endpoint_returns_session_for_authenticated_owner():
     app = create_app()
     room_public_id = uuid4()
-    session_public_id = uuid4()
+    game_session_public_id = uuid4()
     current_user = CurrentUser(
         id=uuid4(),
         public_id=uuid4(),
@@ -670,10 +746,12 @@ def test_start_game_session_endpoint_returns_session_for_authenticated_owner():
                 "StartResult",
                 (),
                 {
-                    "session_public_id": session_public_id,
+                    "game_session_public_id": game_session_public_id,
                     "room_public_id": room_public_id,
                     "game_type": "shiritori",
                     "status": "starting",
+                    "game_session_token": "owner-resume-token",
+                    "game_session_token_expires_at": datetime(2026, 6, 12, 1, tzinfo=UTC),
                     "participants": [
                         type(
                             "Participant",
@@ -709,10 +787,12 @@ def test_start_game_session_endpoint_returns_session_for_authenticated_owner():
     assert response.json() == {
         "success": True,
         "data": {
-            "session_public_id": str(session_public_id),
+            "game_session_public_id": str(game_session_public_id),
             "room_public_id": str(room_public_id),
             "game_type": "shiritori",
             "status": "starting",
+            "game_session_token": "owner-resume-token",
+            "game_session_token_expires_at": "2026-06-12T01:00:00Z",
             "participants": [
                 {
                     "participant_type": "user",
@@ -741,7 +821,7 @@ def test_game_session_entry_endpoint_rejects_uninvited_user():
     )
 
     class FakeGameService:
-        async def authorize_entry(self, *, session_public_id, user_id):
+        async def authorize_entry(self, *, game_session_public_id, user_id):
             raise GameSessionEntryForbiddenError
 
     app.dependency_overrides[get_current_user] = lambda: current_user

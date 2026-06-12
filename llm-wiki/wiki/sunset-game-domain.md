@@ -1,7 +1,7 @@
 ---
 title: Sunset Game Domain
 type: domain-model
-updated: 2026-06-12
+updated: 2026-06-13
 audience: ai
 ---
 
@@ -77,15 +77,17 @@ Backend가 소유하는 게임 상태, WebSocket event, Agent 경계를 우선�
   - `session_token` 쿠키로 현재 유저를 인증한다.
   - 방장만 게임을 시작할 수 있다.
   - 시작 판단 전에 room row를 lock해 같은 room의 동시 start 요청을 직렬화한다.
-  - 아직 종료되지 않은 active session이 이미 있으면 새 session을 만들지 않고 기존 `session_public_id`와 참가자 snapshot을 반환한다.
+  - 아직 종료되지 않은 active session이 이미 있으면 새 session을 만들지 않고 기존 `game_session_public_id`와 참가자 snapshot을 반환한다.
+  - 응답에는 현재 요청 유저만 사용할 수 있는 `game_session_token`과 만료 시각을 포함한다.
   - room은 `waiting` 상태여야 하고, 방장은 활성 `game.room_members`에 포함되어야 한다.
   - 시작 시 활성 room member를 `game.session_participants`의 실제 유저 참가자로 고정한다.
   - 실제 유저 뒤에 AI 손님 1명을 `participant_type='ai'`, `is_uninvited_guest=true`로 추가한다.
-  - 응답은 `game_sessions.public_id`인 `session_public_id`를 반환한다.
-- `GET /api/v1/game/sessions/{session_public_id}/entry`
+  - 응답은 `game_sessions.public_id`인 `game_session_public_id`를 반환한다. 이 값은 한 게임판의 공개 식별자이며 라운드 ID가 아니다.
+- `GET /api/v1/game/sessions/{game_session_public_id}/entry`
   - `session_token` 쿠키로 현재 유저를 인증한다.
   - 현재 유저가 해당 session의 실제 유저 참가자로 고정되어 있을 때만 `allowed=true`를 반환한다.
   - 시작 시 확정된 참가자가 아닌 유저는 `GAME_SESSION_ENTRY_FORBIDDEN`으로 거부한다.
+  - 허용된 유저에게는 `game_session_token`을 새로 발급해 이후 match 재연결에 사용할 수 있게 한다.
 
 이 REST gate는 `/ws/realtime`과 무관하다. `/ws/realtime`은 계속 ping/pong 연결 테스트용이고,
 `/ws/lobby/rooms/{room_public_id}`는 연결 시점에 `session_token`으로 유저 세션을 확인한 뒤 path의
@@ -104,12 +106,20 @@ broadcast한다. 단일 서버에서는 `room_public_id -> websocket` registry�
 `game.started`를 보내고, 여러 서버 instance에서는 Redis Pub/Sub, PostgreSQL NOTIFY, outbox 같은
 event bus를 통해 각 instance가 자신이 가진 연결에 broadcast한다.
 
-`/ws/match` 연결은 연결 시점에만 `session_token`으로 user_id를 복원하고,
-`user_id + session_public_id`로 `game.session_participants`를 조회해 내부 connection identity를
+`/ws/match` 연결은 연결 시점에 유효한 `session_token + game_session_public_id` 조합 또는
+`game_session_token`으로 participant identity를 복원한다. 연결이 성립하면 내부 connection identity를
 `game_session_id + participant_id + user_id`로 고정한다. 연결이 성립한 뒤 match 진행 command는
 로그인 세션이 아니라 participant identity 기준으로 처리한다. 로그인 세션 만료는 진행 중 match를
-즉시 끊는 기준으로 쓰지 않고, 새 lobby 연결, 새 match 연결, 새 게임 시작 같은 새 권한 행위에서만
-다시 검증한다.
+즉시 끊는 기준으로 쓰지 않고, 새 lobby 연결, 새 게임 시작 같은 새 계정 권한 행위에서만 다시 검증한다.
+
+게임 시작과 게임 세션 진입 확인은 로그인 `session_token`과 별개로 현재 실제 유저 참가자에게만
+`game_session_token`을 발급한다. `game_session_public_id`는 `game.game_sessions.public_id` 공개 식별자이고
+비밀 토큰이 아니다. `game_session_token`은 `game.session_participants`의 실제 유저 참가자 row에
+hash와 만료 시각으로 저장하는 match 복구 credential이다. `/ws/match`는 초기 연결 시 유효한 로그인
+세션과 `game_session_public_id` 조합을 사용할 수 있고, 로그인 세션이 만료되었거나 재연결 중이면
+`game_session_token` hash로 participant identity를 복원할 수 있다. 방 전체에 같은 `game.started`
+payload를 broadcast할 때는 토큰을 넣지 말고, 토큰은 현재 유저에게만 돌아가는 REST response 또는
+사용자별 handoff payload에만 포함한다.
 
 ## Room and Session State
 

@@ -191,6 +191,9 @@ Response:
 게임 진행 WebSocket을 연결하기 전에 REST API로 게임 세션을 시작하고 진입 권한을 확인합니다.
 인증은 `session_token` HttpOnly 쿠키를 사용합니다. 게임 시작 시점의 활성 room member만
 `session_participants`로 고정되고, 이후 세션 진입 API는 로그인 유저가 해당 참가자인지 확인합니다.
+게임 시작과 진입 확인 응답은 로그인 세션과 별개인 `game_session_token`을 함께 반환합니다. 이 토큰은
+현재 로그인 유저에게 매핑된 `session_participants` 행에만 연결되는 match 복구 credential이며, 원문은
+응답으로 한 번 내려가고 DB에는 SHA-256 hash와 만료 시각만 저장합니다.
 `/ws/realtime`은 연결 테스트용으로 유지하며 이 API와 게임 상태를 공유하지 않습니다.
 
 로비의 영속 상태는 DB의 `game.rooms`, `game.room_members`로 관리합니다. 객실 목록 조회, 객실 생성,
@@ -219,12 +222,12 @@ API가 WebSocket 연결 객체를 클라이언트에 전달하는 것이 아니�
 여러 서버 instance로 확장하면 같은 event를 Redis Pub/Sub, PostgreSQL NOTIFY, outbox 같은
 서버 간 event bus로 발행한 뒤 각 instance가 자신이 가진 WebSocket 연결에 broadcast해야 합니다.
 
-`/ws/match` 연결 시점에는 `session_token`으로 user_id를 한 번 복원하고, 그 user_id와
-`session_public_id`로 `session_participants`를 조회해 서버 내부 connection identity를
-`game_session_id + participant_id + user_id`로 고정합니다. 연결 후 match 진행 메시지는 이
-participant identity를 기준으로 처리하고, 로그인 세션 만료가 진행 중 match를 즉시 끊는 기준이
-되지는 않습니다. 새 lobby 연결, 새 match 연결, 새 게임 시작 같은 새 권한 행위는 다시 유효한
-로그인 세션이 필요합니다.
+`/ws/match` 연결 시점에는 유효한 `session_token`과 `game_session_public_id` 조합으로 참가자를 확인하거나,
+이미 발급받은 `game_session_token`으로 참가자 identity를 복원합니다. 연결이 성립하면 서버 내부
+connection identity는 `game_session_id + participant_id + user_id`로 고정합니다. 연결 후 match 진행
+메시지는 이 participant identity를 기준으로 처리하고, 로그인 세션 만료가 진행 중 match를 즉시 끊는
+기준이 되지는 않습니다. 새 lobby 연결, 새 게임 시작 같은 새 계정 권한 행위는 다시 유효한 로그인
+세션이 필요합니다.
 
 ### GET `/api/v1/game/rooms`
 
@@ -331,13 +334,15 @@ Response:
 ### POST `/api/v1/game/rooms/{room_public_id}/start`
 
 방장이 대기 중인 객실의 활성 멤버를 게임 세션 참가자로 고정하고, 클라이언트가 이후 진입 확인에
-사용할 `session_public_id`를 반환합니다. 실제 유저 참가자 뒤에 AI 손님 1명이
-`is_uninvited_guest=true`로 추가됩니다.
+사용할 `game_session_public_id`를 반환합니다. 실제 유저 참가자 뒤에 AI 손님 1명이
+`is_uninvited_guest=true`로 추가됩니다. `game_session_public_id`는 한 게임판의 공개 식별자이며,
+라운드 ID가 아닙니다.
 
 이 endpoint는 방장의 반복 요청에 대해 멱등적으로 동작합니다. 같은 room에 `starting`, `playing`,
 `voting`처럼 아직 종료되지 않은 active session이 있으면 새 session을 만들지 않고 기존
-`session_public_id`와 참가자 snapshot을 반환합니다. 서버는 시작 판단 전에 room row를 lock해서
-동시 start 요청이 같은 room 안에서 직렬화되도록 처리합니다.
+`game_session_public_id`와 참가자 snapshot을 반환합니다. 이때 현재 요청 유저의 `game_session_token`은
+새로 발급해 응답합니다. 서버는 시작 판단 전에 room row를 lock해서 동시 start 요청이 같은 room 안에서
+직렬화되도록 처리합니다.
 
 Response:
 
@@ -345,10 +350,12 @@ Response:
 {
   "success": true,
   "data": {
-    "session_public_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7f",
+    "game_session_public_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7f",
     "room_public_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7e",
     "game_type": "shiritori",
     "status": "starting",
+    "game_session_token": "opaque-game-session-token",
+    "game_session_token_expires_at": "2026-06-12T03:00:00Z",
     "participants": [
       {
         "participant_type": "user",
@@ -376,7 +383,7 @@ Response:
 | `409` / `GAME_ROOM_NOT_STARTABLE` | 객실이 대기 상태가 아니거나 시작 조건 불충족 |
 | `422` / `VALIDATION_ERROR` | path UUID validation 실패 |
 
-### GET `/api/v1/game/sessions/{session_public_id}/entry`
+### GET `/api/v1/game/sessions/{game_session_public_id}/entry`
 
 로그인 유저가 게임 시작 시 `session_participants`에 고정된 실제 유저 참가자인지 확인합니다.
 허용된 멤버만 `allowed=true` 응답을 받으며, AI 참가자는 로그인 유저가 아니므로 이 API로 직접
@@ -388,8 +395,10 @@ Response:
 {
   "success": true,
   "data": {
-    "session_public_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7f",
+    "game_session_public_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7f",
     "allowed": true,
+    "game_session_token": "opaque-game-session-token",
+    "game_session_token_expires_at": "2026-06-12T03:00:00Z",
     "participant": {
       "participant_type": "user",
       "display_name": "초보자",

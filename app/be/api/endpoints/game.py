@@ -154,7 +154,7 @@ async def start_game_session(
 
 
 @router.get(
-    "/sessions/{session_public_id}/entry",
+    "/sessions/{game_session_public_id}/entry",
     response_model=SuccessResponse[GameSessionEntryResponse],
     status_code=status.HTTP_200_OK,
     summary="게임 세션 진입 권한 확인",
@@ -168,13 +168,13 @@ async def start_game_session(
     ),
 )
 async def get_game_session_entry(
-    session_public_id: UUID,
+    game_session_public_id: UUID,
     current_user: Annotated[CurrentUser, Depends(get_current_user)],
     game_service: Annotated[GameService, Depends(get_game_service)],
 ) -> SuccessResponse[GameSessionEntryResponse]:
     """로그인 유저가 게임 시작 시 확정된 참가자인지 확인합니다."""
     result = await game_service.authorize_entry(
-        session_public_id=session_public_id,
+        game_session_public_id=game_session_public_id,
         user_id=current_user.id,
     )
     return ok(map_entry_result(result))
@@ -208,10 +208,12 @@ def map_room_create_result(result: RoomCreateResult) -> CreateGameRoomResponse:
 def map_start_result(result: GameSessionStartResult) -> StartGameSessionResponse:
     """service의 시작 결과를 public API response로 변환합니다."""
     return StartGameSessionResponse(
-        session_public_id=result.session_public_id,
+        game_session_public_id=result.game_session_public_id,
         room_public_id=result.room_public_id,
         game_type=result.game_type,
         status=result.status,
+        game_session_token=result.game_session_token,
+        game_session_token_expires_at=result.game_session_token_expires_at,
         participants=[
             GameSessionParticipantResponse(
                 participant_type=participant.participant_type,
@@ -238,8 +240,10 @@ def map_room_join_result(result: RoomJoinResult) -> RoomJoinResponse:
 def map_entry_result(result: GameSessionEntryResult) -> GameSessionEntryResponse:
     """service의 입장 권한 결과를 public API response로 변환합니다."""
     return GameSessionEntryResponse(
-        session_public_id=result.session_public_id,
+        game_session_public_id=result.game_session_public_id,
         allowed=result.allowed,
+        game_session_token=result.game_session_token,
+        game_session_token_expires_at=result.game_session_token_expires_at,
         participant=GameSessionParticipantResponse(
             participant_type=result.participant.participant_type,
             display_name=result.participant.display_name,

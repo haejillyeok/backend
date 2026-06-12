@@ -4,6 +4,17 @@
 코드 변경 상세는 Git history, PR, issue에서 확인하고, 이 파일에는 위키 페이지의 지식, 계약, 정책,
 컨벤션이 어떻게 바뀌었는지만 남깁니다.
 
+## [2026-06-13] maintenance | Clarify game session public ID naming
+
+- `sunset-game-domain.md`와 API 문서 기준에서 게임 한 판의 공개 식별자는 `session_public_id`가 아니라 `game_session_public_id`로 부른다는 명명 기준을 반영했다.
+- `game_session_public_id`는 라운드 ID가 아니며, 라운드/턴은 같은 game session 안의 phase 또는 round number로 관리한다는 구분을 명확히 했다.
+
+## [2026-06-13] maintenance | Separate match resume token from login session
+
+- `sunset-game-domain.md`에 `game_session_public_id`는 게임 세션 공개 식별자이고, `game_session_token`은 현재 실제 유저 참가자에게만 발급되는 match 복구 credential이라는 기준을 추가했다.
+- `sunset-game-database-design.md`에 `game.session_participants.resume_token_hash`, `resume_token_expires_at` 컬럼과 partial index 기준을 추가했다.
+- 로그인 `session_token` 만료는 진행 중 match를 즉시 끊지 않고, `/ws/match` 재연결은 `game_session_token`으로 participant identity를 복원할 수 있다는 기준을 남겼다.
+
 ## [2026-06-13] maintenance | Add BE Postman generation policy
 
 - `openapi-swagger.md`에 Postman import용 JSON은 BE OpenAPI schema와 명시 WebSocket 정의에서 생성하고, Agent 서버와 BE `/api/v1/agent/*` proxy endpoint는 제외한다는 기준을 추가했다.
@@ -67,7 +78,7 @@
 - 로그인 `session_token`으로 현재 유저를 확인하고, 게임 시작 시 고정된 `session_participants`만 세션 진입을 허용하는 기준을 남겼다.
 - `/ws/realtime`은 계속 연결 테스트용이며 이후 `/ws/lobby`, `/ws/match`가 같은 참가자 권한 기준을 재사용해야 한다고 정리했다.
 - REST handler에서 lobby WebSocket 알림이 필요하면 connection manager 또는 서버 간 event bus로 이미 열린 연결에 broadcast하고, match 연결 후에는 `game_session_id + participant_id + user_id` identity를 기준으로 진행한다는 기준을 추가했다.
-- start API는 room row lock으로 같은 room의 동시 요청을 직렬화하고, active session이 이미 있으면 기존 `session_public_id`를 반환하는 멱등 기준을 추가했다.
+- start API는 room row lock으로 같은 room의 동시 요청을 직렬화하고, active session이 이미 있으면 기존 `game_session_public_id`를 반환하는 멱등 기준을 추가했다.
 
 ## [2026-06-11] maintenance | Add Sunset game DB design draft
 

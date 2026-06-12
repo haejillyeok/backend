@@ -165,7 +165,7 @@ class GameRepository:
         participants = [
             GameSessionParticipantRecord(
                 participant_id=participant.id,
-                session_public_id=game_session.public_id,
+                game_session_public_id=game_session.public_id,
                 user_id=participant.user_id,
                 participant_type=participant.participant_type,
                 display_name=participant.display_name,
@@ -175,7 +175,7 @@ class GameRepository:
             for participant in participant_result.scalars().all()
         ]
         return GameSessionStartResult(
-            session_public_id=game_session.public_id,
+            game_session_public_id=game_session.public_id,
             room_public_id=room.public_id,
             game_type=game_session.game_type,
             status=game_session.status,
@@ -344,7 +344,7 @@ class GameRepository:
         )
         room = room_result.scalar_one()
         game_session = GameSession(
-            public_id=session.session_public_id,
+            public_id=session.game_session_public_id,
             room_id=room.id,
             game_type=session.game_type,
             status=session.status,
@@ -376,12 +376,12 @@ class GameRepository:
     async def get_user_participant_for_session(
         self,
         *,
-        session_public_id: UUID,
+        game_session_public_id: UUID,
         user_id: UUID,
     ) -> GameSessionParticipantRecord | None:
         """로그인 유저가 해당 게임 세션 참가자로 고정되어 있는지 조회합니다."""
         return await self._get_user_participant_for_session(
-            session_public_id=session_public_id,
+            game_session_public_id=game_session_public_id,
             user_id=user_id,
         )
 
@@ -389,7 +389,7 @@ class GameRepository:
     async def _get_user_participant_for_session(
         self,
         *,
-        session_public_id: UUID,
+        game_session_public_id: UUID,
         user_id: UUID,
     ) -> GameSessionParticipantRecord | None:
         """세션 참가자 권한 조회 query 실행 시간을 trace span으로 기록합니다."""
@@ -397,7 +397,7 @@ class GameRepository:
             select(GameSession, SessionParticipant)
             .join(SessionParticipant, SessionParticipant.session_id == GameSession.id)
             .where(
-                GameSession.public_id == session_public_id,
+                GameSession.public_id == game_session_public_id,
                 SessionParticipant.user_id == user_id,
                 SessionParticipant.left_at.is_(None),
             )
@@ -409,13 +409,99 @@ class GameRepository:
         game_session, participant = row
         return GameSessionParticipantRecord(
             participant_id=participant.id,
-            session_public_id=game_session.public_id,
+            game_session_public_id=game_session.public_id,
+            user_id=participant.user_id,
+            participant_type=participant.participant_type,
+            display_name=participant.display_name,
+            seat_number=participant.seat_number,
+            is_uninvited_guest=participant.is_uninvited_guest,
+            resume_token_expires_at=participant.resume_token_expires_at,
+        )
+
+    async def get_participant_for_game_session_token(
+        self,
+        *,
+        token_hash: str,
+        now,
+    ) -> GameSessionParticipantRecord | None:
+        """유효한 게임 세션 토큰 해시로 match 참가자를 조회합니다."""
+        return await self._get_participant_for_game_session_token(token_hash=token_hash, now=now)
+
+    @traced_method("GameRepository.get_participant_for_game_session_token", layer="repository")
+    async def _get_participant_for_game_session_token(
+        self,
+        *,
+        token_hash: str,
+        now,
+    ) -> GameSessionParticipantRecord | None:
+        """게임 세션 토큰 기반 참가자 조회 query 실행 시간을 trace span으로 기록합니다."""
+        statement = (
+            select(GameSession, SessionParticipant)
+            .join(SessionParticipant, SessionParticipant.session_id == GameSession.id)
+            .where(
+                SessionParticipant.resume_token_hash == token_hash,
+                SessionParticipant.resume_token_expires_at > now,
+                SessionParticipant.left_at.is_(None),
+            )
+        )
+        result = await self.db_session.execute(statement)
+        row = result.one_or_none()
+        if row is None:
+            return None
+        game_session, participant = row
+        return GameSessionParticipantRecord(
+            participant_id=participant.id,
+            game_session_public_id=game_session.public_id,
             user_id=participant.user_id,
             participant_type=participant.participant_type,
             display_name=participant.display_name,
             seat_number=participant.seat_number,
             is_uninvited_guest=participant.is_uninvited_guest,
         )
+
+    async def save_game_session_token(
+        self,
+        *,
+        game_session_public_id: UUID,
+        user_id: UUID,
+        token_hash: str,
+        expires_at,
+    ) -> None:
+        """게임 참가자의 match 복구 토큰 해시와 만료 시각을 저장합니다."""
+        await self._save_game_session_token(
+            game_session_public_id=game_session_public_id,
+            user_id=user_id,
+            token_hash=token_hash,
+            expires_at=expires_at,
+        )
+
+    @traced_method("GameRepository.save_game_session_token", layer="repository")
+    async def _save_game_session_token(
+        self,
+        *,
+        game_session_public_id: UUID,
+        user_id: UUID,
+        token_hash: str,
+        expires_at,
+    ) -> None:
+        """게임 세션 토큰 저장 update 실행 시간을 trace span으로 기록합니다."""
+        statement = (
+            select(GameSession, SessionParticipant)
+            .join(SessionParticipant, SessionParticipant.session_id == GameSession.id)
+            .where(
+                GameSession.public_id == game_session_public_id,
+                SessionParticipant.user_id == user_id,
+                SessionParticipant.left_at.is_(None),
+            )
+        )
+        result = await self.db_session.execute(statement)
+        row = result.one_or_none()
+        if row is None:
+            return
+        _, participant = row
+        participant.resume_token_hash = token_hash
+        participant.resume_token_expires_at = expires_at
+        await self.db_session.flush()
 
     async def commit(self) -> None:
         """게임 시작 transaction을 확정합니다."""

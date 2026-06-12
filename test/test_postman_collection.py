@@ -70,6 +70,23 @@ def test_create_be_collection_adds_useful_sample_bodies():
     )
 
 
+def test_create_be_collection_stores_auth_session_cookie_in_environment():
+    schema = create_app().openapi()
+
+    collection = create_be_collection(schema)
+    items = _flatten_items(collection["item"])
+    login = next(item for item in items if item["name"] == "로그인")
+    signup = next(item for item in items if item["name"] == "회원가입")
+
+    for item in (login, signup):
+        auth_event = item["event"][0]
+        script = "\n".join(auth_event["script"]["exec"])
+
+        assert auth_event["listen"] == "test"
+        assert 'pm.environment.set("sessionToken", sessionToken);' in script
+        assert 'setCookie.match(/session_token=([^;]+)/);' in script
+
+
 def test_create_local_environment_contains_editable_postman_variables():
     environment = create_local_environment()
     values = {value["key"]: value["value"] for value in environment["values"]}

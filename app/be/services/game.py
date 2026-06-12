@@ -1,8 +1,9 @@
-from dataclasses import dataclass
-from datetime import datetime
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime, timedelta
 from typing import Protocol
 from uuid import UUID
 
+from app.be.security.session import generate_game_session_token, hash_game_session_token
 from app.be.schemas.game_enum import GameSessionStatus, ParticipantType, RoomStatus
 from app.be.services.auth import CurrentUser
 from app.shared.core.identifiers import generate_uuid_v7
@@ -11,6 +12,7 @@ from app.shared.core.exceptions import AppException
 
 
 AI_DISPLAY_NAME = "수상한 손님"
+GAME_SESSION_TOKEN_TTL = timedelta(hours=3)
 STARTING_STATUS = GameSessionStatus.STARTING.value
 WAITING_ROOM_STATUS = RoomStatus.WAITING.value
 
@@ -81,28 +83,39 @@ class RoomLeaveResult:
 @dataclass(frozen=True)
 class GameSessionParticipantRecord:
     participant_id: UUID | None
-    session_public_id: UUID
+    game_session_public_id: UUID
     user_id: UUID | None
     participant_type: str
     display_name: str
     seat_number: int
     is_uninvited_guest: bool
+    resume_token_expires_at: datetime | None = None
 
 
 @dataclass(frozen=True)
 class GameSessionStartResult:
-    session_public_id: UUID
+    game_session_public_id: UUID
     room_public_id: UUID
     game_type: str
     status: str
     participants: list[GameSessionParticipantRecord]
+    game_session_token: str = ""
+    game_session_token_expires_at: datetime | None = None
 
 
 @dataclass(frozen=True)
 class GameSessionEntryResult:
-    session_public_id: UUID
+    game_session_public_id: UUID
     participant: GameSessionParticipantRecord
+    game_session_token: str
+    game_session_token_expires_at: datetime
     allowed: bool = True
+
+
+@dataclass(frozen=True)
+class GameSessionCredential:
+    game_session_token: str
+    expires_at: datetime
 
 
 class GameRepositoryProtocol(Protocol):
@@ -166,10 +179,28 @@ class GameRepositoryProtocol(Protocol):
     async def get_user_participant_for_session(
         self,
         *,
-        session_public_id: UUID,
+        game_session_public_id: UUID,
         user_id: UUID,
     ) -> GameSessionParticipantRecord | None:
         """로그인 유저가 해당 게임 세션 참가자인지 조회합니다."""
+
+    async def get_participant_for_game_session_token(
+        self,
+        *,
+        token_hash: str,
+        now: datetime,
+    ) -> GameSessionParticipantRecord | None:
+        """유효한 게임 세션 토큰 해시로 match 참가자를 조회합니다."""
+
+    async def save_game_session_token(
+        self,
+        *,
+        game_session_public_id: UUID,
+        user_id: UUID,
+        token_hash: str,
+        expires_at: datetime,
+    ) -> None:
+        """게임 참가자의 match 복구 토큰 해시와 만료 시각을 저장합니다."""
 
     async def commit(self) -> None:
         """게임 시작 transaction을 확정합니다."""
@@ -371,7 +402,16 @@ class GameService:
             raise GameRoomStartForbiddenError
         active_session = await self.repository.get_active_session_by_room_id(room.id)
         if active_session is not None:
-            return active_session
+            credential = await self._issue_game_session_credential(
+                game_session_public_id=active_session.game_session_public_id,
+                user_id=user_id,
+            )
+            await self.repository.commit()
+            return replace(
+                active_session,
+                game_session_token=credential.game_session_token,
+                game_session_token_expires_at=credential.expires_at,
+            )
         if room.status != WAITING_ROOM_STATUS:
             raise GameRoomNotStartableError
 
@@ -381,11 +421,11 @@ class GameService:
         if not members:
             raise GameRoomNotStartableError
 
-        session_public_id = generate_uuid_v7()
+        game_session_public_id = generate_uuid_v7()
         participants = [
             GameSessionParticipantRecord(
                 participant_id=None,
-                session_public_id=session_public_id,
+                game_session_public_id=game_session_public_id,
                 user_id=member.user_id,
                 participant_type=ParticipantType.USER.value,
                 display_name=member.nickname,
@@ -397,7 +437,7 @@ class GameService:
         participants.append(
             GameSessionParticipantRecord(
                 participant_id=None,
-                session_public_id=session_public_id,
+                game_session_public_id=game_session_public_id,
                 user_id=None,
                 participant_type=ParticipantType.AI.value,
                 display_name=AI_DISPLAY_NAME,
@@ -408,30 +448,80 @@ class GameService:
 
         result = await self.repository.create_game_session(
             session=GameSessionStartResult(
-                session_public_id=session_public_id,
+                game_session_public_id=game_session_public_id,
                 room_public_id=room.public_id,
                 game_type=room.game_type,
                 status=STARTING_STATUS,
                 participants=participants,
             )
         )
+        credential = await self._issue_game_session_credential(
+            game_session_public_id=game_session_public_id,
+            user_id=user_id,
+        )
         await self.repository.commit()
-        return result
+        return replace(
+            result,
+            game_session_token=credential.game_session_token,
+            game_session_token_expires_at=credential.expires_at,
+        )
 
     async def authorize_entry(
         self,
         *,
-        session_public_id: UUID,
+        game_session_public_id: UUID,
         user_id: UUID,
     ) -> GameSessionEntryResult:
         """로그인 유저가 게임 시작 시 고정된 참가자인지 확인하고 진입 정보를 반환합니다."""
         participant = await self.repository.get_user_participant_for_session(
-            session_public_id=session_public_id,
+            game_session_public_id=game_session_public_id,
             user_id=user_id,
         )
         if participant is None:
             raise GameSessionEntryForbiddenError
+        credential = await self._issue_game_session_credential(
+            game_session_public_id=game_session_public_id,
+            user_id=user_id,
+        )
+        await self.repository.commit()
         return GameSessionEntryResult(
-            session_public_id=session_public_id,
+            game_session_public_id=game_session_public_id,
             participant=participant,
+            game_session_token=credential.game_session_token,
+            game_session_token_expires_at=credential.expires_at,
+        )
+
+    async def authorize_resume_token(self, game_session_token: str) -> GameSessionEntryResult:
+        """로그인 세션 만료 후에도 유효한 게임 세션 토큰으로 match 참가자를 복원합니다."""
+        participant = await self.repository.get_participant_for_game_session_token(
+            token_hash=hash_game_session_token(game_session_token),
+            now=datetime.now(UTC),
+        )
+        if participant is None:
+            raise GameSessionEntryForbiddenError
+        return GameSessionEntryResult(
+            game_session_public_id=participant.game_session_public_id,
+            participant=participant,
+            game_session_token=game_session_token,
+            game_session_token_expires_at=participant.resume_token_expires_at or datetime.now(UTC),
+        )
+
+    async def _issue_game_session_credential(
+        self,
+        *,
+        game_session_public_id: UUID,
+        user_id: UUID,
+    ) -> GameSessionCredential:
+        """로그인 세션과 별개로 특정 match 참가자에게만 유효한 복구 토큰을 발급합니다."""
+        game_session_token = generate_game_session_token()
+        expires_at = datetime.now(UTC) + GAME_SESSION_TOKEN_TTL
+        await self.repository.save_game_session_token(
+            game_session_public_id=game_session_public_id,
+            user_id=user_id,
+            token_hash=hash_game_session_token(game_session_token),
+            expires_at=expires_at,
+        )
+        return GameSessionCredential(
+            game_session_token=game_session_token,
+            expires_at=expires_at,
         )

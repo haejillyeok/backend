@@ -1,7 +1,7 @@
 ---
 title: Sunset Game Database Design
 type: schema-design
-updated: 2026-06-11
+updated: 2026-06-13
 audience: ai
 ---
 
@@ -157,6 +157,8 @@ MVP가 단어 게임만 구현하더라도 공통 core는 플랫폼 기준으로
 | `original_nickname` | text nullable | 결과 공개용 원래 닉네임 snapshot |
 | `seat_number` | integer | 세션 안 좌석 또는 표시 순서 |
 | `is_uninvited_guest` | boolean | AI 정체 투표의 정답 여부 |
+| `resume_token_hash` | text nullable | 실제 유저 참가자에게 발급한 `game_session_token` SHA-256 hash. AI는 null |
+| `resume_token_expires_at` | timestamptz nullable | match 복구 토큰 만료 시각 |
 | `joined_at` | timestamptz | session 참가 확정 시각 |
 | `left_at` | timestamptz nullable | 중도 이탈 시각 |
 
@@ -164,6 +166,7 @@ MVP가 단어 게임만 구현하더라도 공통 core는 플랫폼 기준으로
 
 - `(session_id, seat_number)` unique
 - 실제 유저는 `(session_id, user_id)` unique
+- `resume_token_hash IS NOT NULL` partial index
 - `participant_type = 'user'`이면 `user_id` not null
 - `participant_type = 'ai'`이면 `user_id` null
 - `seat_number >= 1`
