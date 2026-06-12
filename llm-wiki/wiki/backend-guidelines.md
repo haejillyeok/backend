@@ -37,7 +37,7 @@ audience: ai
 
 BE REST API는 public router와 protected router를 분리한다.
 
-- Public: `GET /health`, `GET /api/v1/health`, `GET /api/v1/agent/health`, `POST /api/v1/auth/login`
+- Public: `GET /health`, `GET /api/v1/health`, `GET /api/v1/agent/health`, `POST /api/v1/auth/login`, `POST /api/v1/auth/signup`
 - Protected: 게임 세션처럼 로그인 유저 권한이 필요한 `/api/v1/*` API
 
 Protected router는 `dependencies=[Depends(get_current_user)]`로 `session_token` cookie를 공통 검증한다.

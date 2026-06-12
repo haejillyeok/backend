@@ -2,13 +2,14 @@ from datetime import datetime
 from uuid import UUID
 
 from app.be.schemas.base import SchemaModel
+from app.be.schemas.game_enum import GameSessionStatus, GameType, ParticipantType, RoomStatus
 
 
 class GameRoomSummaryResponse(SchemaModel):
     room_public_id: UUID
     name: str
-    game_type: str
-    status: str
+    game_type: GameType
+    status: RoomStatus
     max_players: int
     member_count: int
 
@@ -20,8 +21,8 @@ class GameRoomListResponse(SchemaModel):
 class CreateGameRoomResponse(SchemaModel):
     room_public_id: UUID
     name: str
-    game_type: str
-    status: str
+    game_type: GameType
+    status: RoomStatus
     max_players: int
     member_count: int
     created_at: datetime
@@ -36,7 +37,7 @@ class RoomJoinResponse(SchemaModel):
 
 
 class GameSessionParticipantResponse(SchemaModel):
-    participant_type: str
+    participant_type: ParticipantType
     display_name: str
     seat_number: int
     is_uninvited_guest: bool
@@ -45,8 +46,8 @@ class GameSessionParticipantResponse(SchemaModel):
 class StartGameSessionResponse(SchemaModel):
     session_public_id: UUID
     room_public_id: UUID
-    game_type: str
-    status: str
+    game_type: GameType
+    status: GameSessionStatus
     participants: list[GameSessionParticipantResponse]
 
 

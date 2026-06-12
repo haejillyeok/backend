@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Protocol
 from uuid import UUID
 
+from app.be.schemas.game_enum import GameSessionStatus, ParticipantType, RoomStatus
 from app.be.services.auth import CurrentUser
 from app.shared.core.identifiers import generate_uuid_v7
 from app.shared.core.error_codes import ErrorCode
@@ -10,8 +11,8 @@ from app.shared.core.exceptions import AppException
 
 
 AI_DISPLAY_NAME = "수상한 손님"
-STARTING_STATUS = "starting"
-WAITING_ROOM_STATUS = "waiting"
+STARTING_STATUS = GameSessionStatus.STARTING.value
+WAITING_ROOM_STATUS = RoomStatus.WAITING.value
 
 
 @dataclass(frozen=True)
@@ -386,7 +387,7 @@ class GameService:
                 participant_id=None,
                 session_public_id=session_public_id,
                 user_id=member.user_id,
-                participant_type="user",
+                participant_type=ParticipantType.USER.value,
                 display_name=member.nickname,
                 seat_number=index,
                 is_uninvited_guest=False,
@@ -398,7 +399,7 @@ class GameService:
                 participant_id=None,
                 session_public_id=session_public_id,
                 user_id=None,
-                participant_type="ai",
+                participant_type=ParticipantType.AI.value,
                 display_name=AI_DISPLAY_NAME,
                 seat_number=len(participants) + 1,
                 is_uninvited_guest=True,

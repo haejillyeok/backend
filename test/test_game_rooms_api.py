@@ -104,3 +104,26 @@ def test_create_game_room_creates_owner_membership() -> None:
         "member_count": 1,
         "created_at": "2026-06-12T00:00:00Z",
     }
+
+
+def test_create_game_room_rejects_unknown_game_type() -> None:
+    app = create_app()
+    app.dependency_overrides[get_current_user] = lambda: current_user()
+
+    class FakeGameService:
+        async def create_room(self, **kwargs):
+            raise AssertionError("enum validation 실패 요청은 service까지 도달하지 않아야 합니다.")
+
+    app.dependency_overrides[get_game_service] = lambda: FakeGameService()
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/v1/game/rooms",
+        json={"name": "첫 객실", "game_type": "unknown", "max_players": 4},
+    )
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["success"] is False
+    assert body["error"]["code"] == "VALIDATION_ERROR"
+    assert body["error"]["details"][0]["field"] == "body.game_type"

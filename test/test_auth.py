@@ -11,7 +11,7 @@ from app.be.main import create_app
 from app.be.models.user import User
 from app.be.security.password import hash_password
 from app.be.services.auth import AuthService
-from app.shared.core.exceptions import InvalidCredentialsError
+from app.shared.core.exceptions import AppException, InvalidCredentialsError
 
 
 class FakeAuthRepository:
@@ -68,12 +68,12 @@ class FakeAuthRepository:
         self.committed = True
 
 
-def test_auth_service_registers_unknown_nickname_and_creates_session():
+def test_auth_service_signup_creates_user_and_session():
     repository = FakeAuthRepository()
     service = AuthService(repository)
 
     result = asyncio.run(
-        service.login_or_register(
+        service.signup(
             account_id="player_001",
             nickname="초보자",
             password="secret-password",
@@ -82,7 +82,6 @@ def test_auth_service_registers_unknown_nickname_and_creates_session():
         )
     )
 
-    assert result.is_new_user is True
     assert result.user.account_id == "player_001"
     assert result.user.nickname == "초보자"
     assert result.session_token
@@ -91,7 +90,7 @@ def test_auth_service_registers_unknown_nickname_and_creates_session():
     assert len(repository.sessions) == 1
 
 
-def test_auth_service_checks_password_for_existing_account_id():
+def test_auth_service_login_checks_password_for_existing_account_id():
     repository = FakeAuthRepository()
     user = User(
         id=uuid4(),
@@ -106,9 +105,8 @@ def test_auth_service_checks_password_for_existing_account_id():
 
     with pytest.raises(InvalidCredentialsError):
         asyncio.run(
-            service.login_or_register(
+            service.login(
                 account_id="player_001",
-                nickname="초보자",
                 password="wrong-password",
                 last_access_ip=None,
                 user_agent=None,
@@ -116,7 +114,26 @@ def test_auth_service_checks_password_for_existing_account_id():
         )
 
 
-def test_auth_service_rejects_duplicate_nickname_for_new_account_id():
+def test_auth_service_login_does_not_register_unknown_account_id():
+    repository = FakeAuthRepository()
+    service = AuthService(repository)
+
+    with pytest.raises(InvalidCredentialsError):
+        asyncio.run(
+            service.login(
+                account_id="player_001",
+                password="secret-password",
+                last_access_ip=None,
+                user_agent=None,
+            )
+        )
+
+    assert repository.users == {}
+    assert repository.sessions == []
+    assert repository.committed is False
+
+
+def test_auth_service_signup_rejects_duplicate_account_id():
     repository = FakeAuthRepository()
     repository.users["player_001"] = User(
         id=uuid4(),
@@ -128,9 +145,36 @@ def test_auth_service_rejects_duplicate_nickname_for_new_account_id():
     )
     service = AuthService(repository)
 
-    with pytest.raises(InvalidCredentialsError):
+    with pytest.raises(AppException) as exc_info:
         asyncio.run(
-            service.login_or_register(
+            service.signup(
+                account_id="player_001",
+                nickname="새유저",
+                password="right-password",
+                last_access_ip=None,
+                user_agent=None,
+            )
+        )
+
+    assert exc_info.value.code == "AUTH_USER_CONFLICT"
+    assert exc_info.value.http_status_code == 409
+
+
+def test_auth_service_signup_rejects_duplicate_nickname():
+    repository = FakeAuthRepository()
+    repository.users["player_001"] = User(
+        id=uuid4(),
+        public_id=uuid4(),
+        account_id="player_001",
+        nickname="초보자",
+        password_hash=hash_password("right-password"),
+        last_access_ip=None,
+    )
+    service = AuthService(repository)
+
+    with pytest.raises(AppException) as exc_info:
+        asyncio.run(
+            service.signup(
                 account_id="player_002",
                 nickname="초보자",
                 password="right-password",
@@ -139,12 +183,162 @@ def test_auth_service_rejects_duplicate_nickname_for_new_account_id():
             )
         )
 
+    assert exc_info.value.code == "AUTH_USER_CONFLICT"
+    assert exc_info.value.http_status_code == 409
+
 
 def test_login_endpoint_sets_session_cookie_for_auth_success():
     app = create_app()
 
     class FakeAuthService:
-        async def login_or_register(
+        async def login(
+            self,
+            *,
+            account_id: str,
+            password: str,
+            last_access_ip: str | None,
+            user_agent: str | None,
+        ):
+            assert account_id == "player_001"
+            assert password == "secret-password"
+            assert last_access_ip is not None
+            return type(
+                "AuthResult",
+                (),
+                {
+                    "user": type(
+                        "AuthUser",
+                        (),
+                        {"public_id": uuid4(), "account_id": account_id, "nickname": "초보자"},
+                    )(),
+                    "session_token": "plain-session-token",
+                    "expires_at": datetime.now(UTC) + timedelta(days=1),
+                },
+            )()
+
+    async def override_get_auth_service(request: Request) -> FakeAuthService:
+        return FakeAuthService()
+
+    app.dependency_overrides[get_auth_service] = override_get_auth_service
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/v1/auth/login",
+        json={
+            "account_id": "player_001",
+            "password": "secret-password",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success"] is True
+    assert body["data"]["user"]["account_id"] == "player_001"
+    assert "is_new_user" not in body["data"]
+    assert "error" not in body
+    assert response.cookies.get("session_token") == "plain-session-token"
+    assert "httponly" in response.headers["set-cookie"].lower()
+
+
+def test_login_endpoint_returns_401_for_wrong_password():
+    app = create_app()
+
+    class FakeAuthService:
+        async def login(self, **kwargs):
+            raise InvalidCredentialsError
+
+    async def override_get_auth_service(request: Request) -> FakeAuthService:
+        return FakeAuthService()
+
+    app.dependency_overrides[get_auth_service] = override_get_auth_service
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/v1/auth/login",
+        json={"account_id": "player_001", "password": "wrong-password"},
+    )
+
+    assert response.status_code == 401
+    assert response.json() == {
+        "success": False,
+        "data": None,
+        "error": {
+            "code": "INVALID_CREDENTIALS",
+            "message": "계정 ID 또는 비밀번호가 올바르지 않습니다.",
+            "details": None,
+        },
+    }
+    assert response.cookies.get("session_token") is None
+
+
+def test_login_endpoint_returns_common_validation_error_response():
+    app = create_app()
+
+    class FakeAuthService:
+        async def login(self, **kwargs):
+            raise AssertionError("validation 실패 요청은 service까지 도달하지 않아야 합니다.")
+
+    async def override_get_auth_service(request: Request) -> FakeAuthService:
+        return FakeAuthService()
+
+    app.dependency_overrides[get_auth_service] = override_get_auth_service
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/v1/auth/login",
+        json={"account_id": "player_001"},
+    )
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["success"] is False
+    assert body["data"] is None
+    assert body["error"]["code"] == "VALIDATION_ERROR"
+    assert body["error"]["message"] == "요청 값이 올바르지 않습니다."
+    assert body["error"]["details"][0]["field"] == "body.password"
+
+
+@pytest.mark.parametrize(
+    ("payload", "field"),
+    [
+        ({"account_id": "ab", "password": "secret12"}, "body.account_id"),
+        (
+            {"account_id": "한글id", "password": "secret12"},
+            "body.account_id",
+        ),
+        (
+            {"account_id": "player_001", "password": "short"},
+            "body.password",
+        ),
+    ],
+)
+def test_login_endpoint_validates_account_id_and_password_rules(payload, field):
+    app = create_app()
+
+    class FakeAuthService:
+        async def login(self, **kwargs):
+            raise AssertionError("validation 실패 요청은 service까지 도달하지 않아야 합니다.")
+
+    async def override_get_auth_service(request: Request) -> FakeAuthService:
+        return FakeAuthService()
+
+    app.dependency_overrides[get_auth_service] = override_get_auth_service
+    client = TestClient(app)
+
+    response = client.post("/api/v1/auth/login", json=payload)
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["success"] is False
+    assert body["error"]["code"] == "VALIDATION_ERROR"
+    assert body["error"]["details"][0]["field"] == field
+
+
+def test_signup_endpoint_sets_session_cookie_for_auth_success():
+    app = create_app()
+
+    class FakeAuthService:
+        async def signup(
             self,
             *,
             account_id: str,
@@ -167,7 +361,6 @@ def test_login_endpoint_sets_session_cookie_for_auth_success():
                         {"public_id": uuid4(), "account_id": account_id, "nickname": nickname},
                     )(),
                     "session_token": "plain-session-token",
-                    "is_new_user": True,
                     "expires_at": datetime.now(UTC) + timedelta(days=1),
                 },
             )()
@@ -179,7 +372,7 @@ def test_login_endpoint_sets_session_cookie_for_auth_success():
     client = TestClient(app)
 
     response = client.post(
-        "/api/v1/auth/login",
+        "/api/v1/auth/signup",
         json={
             "account_id": "player_001",
             "nickname": "초보자",
@@ -187,22 +380,27 @@ def test_login_endpoint_sets_session_cookie_for_auth_success():
         },
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 201
     body = response.json()
     assert body["success"] is True
     assert body["data"]["user"]["account_id"] == "player_001"
-    assert body["data"]["is_new_user"] is True
+    assert body["data"]["user"]["nickname"] == "초보자"
+    assert "is_new_user" not in body["data"]
     assert "error" not in body
     assert response.cookies.get("session_token") == "plain-session-token"
     assert "httponly" in response.headers["set-cookie"].lower()
 
 
-def test_login_endpoint_returns_401_for_wrong_password():
+def test_signup_endpoint_returns_409_for_duplicate_user():
     app = create_app()
 
     class FakeAuthService:
-        async def login_or_register(self, **kwargs):
-            raise InvalidCredentialsError
+        async def signup(self, **kwargs):
+            raise AppException(
+                code="AUTH_USER_CONFLICT",
+                message="이미 사용 중인 계정 ID 또는 닉네임입니다.",
+                http_status_code=409,
+            )
 
     async def override_get_auth_service(request: Request) -> FakeAuthService:
         return FakeAuthService()
@@ -211,89 +409,21 @@ def test_login_endpoint_returns_401_for_wrong_password():
     client = TestClient(app)
 
     response = client.post(
-        "/api/v1/auth/login",
-        json={"account_id": "player_001", "nickname": "초보자", "password": "wrong-password"},
+        "/api/v1/auth/signup",
+        json={
+            "account_id": "player_001",
+            "nickname": "초보자",
+            "password": "secret-password",
+        },
     )
 
-    assert response.status_code == 401
+    assert response.status_code == 409
     assert response.json() == {
         "success": False,
         "data": None,
         "error": {
-            "code": "INVALID_CREDENTIALS",
-            "message": "계정 ID 또는 비밀번호가 올바르지 않습니다.",
+            "code": "AUTH_USER_CONFLICT",
+            "message": "이미 사용 중인 계정 ID 또는 닉네임입니다.",
             "details": None,
         },
     }
-    assert response.cookies.get("session_token") is None
-
-
-def test_login_endpoint_returns_common_validation_error_response():
-    app = create_app()
-
-    class FakeAuthService:
-        async def login_or_register(self, **kwargs):
-            raise AssertionError("validation 실패 요청은 service까지 도달하지 않아야 합니다.")
-
-    async def override_get_auth_service(request: Request) -> FakeAuthService:
-        return FakeAuthService()
-
-    app.dependency_overrides[get_auth_service] = override_get_auth_service
-    client = TestClient(app)
-
-    response = client.post(
-        "/api/v1/auth/login",
-        json={"account_id": "player_001", "nickname": "초보자"},
-    )
-
-    assert response.status_code == 422
-    body = response.json()
-    assert body["success"] is False
-    assert body["data"] is None
-    assert body["error"]["code"] == "VALIDATION_ERROR"
-    assert body["error"]["message"] == "요청 값이 올바르지 않습니다."
-    assert body["error"]["details"][0]["field"] == "body.password"
-
-
-@pytest.mark.parametrize(
-    ("payload", "field"),
-    [
-        ({"account_id": "ab", "nickname": "초보자", "password": "secret12"}, "body.account_id"),
-        (
-            {"account_id": "한글id", "nickname": "초보자", "password": "secret12"},
-            "body.account_id",
-        ),
-        (
-            {"account_id": "player_001", "nickname": "ab", "password": "secret12"},
-            "body.nickname",
-        ),
-        (
-            {"account_id": "player_001", "nickname": "초보자!", "password": "secret12"},
-            "body.nickname",
-        ),
-        (
-            {"account_id": "player_001", "nickname": "초보자", "password": "short"},
-            "body.password",
-        ),
-    ],
-)
-def test_login_endpoint_validates_account_id_nickname_and_password_rules(payload, field):
-    app = create_app()
-
-    class FakeAuthService:
-        async def login_or_register(self, **kwargs):
-            raise AssertionError("validation 실패 요청은 service까지 도달하지 않아야 합니다.")
-
-    async def override_get_auth_service(request: Request) -> FakeAuthService:
-        return FakeAuthService()
-
-    app.dependency_overrides[get_auth_service] = override_get_auth_service
-    client = TestClient(app)
-
-    response = client.post("/api/v1/auth/login", json=payload)
-
-    assert response.status_code == 422
-    body = response.json()
-    assert body["success"] is False
-    assert body["error"]["code"] == "VALIDATION_ERROR"
-    assert body["error"]["details"][0]["field"] == field

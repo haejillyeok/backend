@@ -40,7 +40,7 @@ Swagger 실패 응답은 `ErrorResponse` schema를 참조하고, endpoint별 예
 
 BE REST API는 public router와 protected router를 분리합니다.
 
-- Public: `GET /health`, `GET /api/v1/health`, `GET /api/v1/agent/health`, `POST /api/v1/auth/login`
+- Public: `GET /health`, `GET /api/v1/health`, `GET /api/v1/agent/health`, `POST /api/v1/auth/login`, `POST /api/v1/auth/signup`
 - Protected: 게임 세션 등 로그인 유저 권한이 필요한 `/api/v1/*` API
 
 Protected router는 `session_token` HttpOnly 쿠키를 공통 dependency에서 검증합니다. 세션 토큰 원문은
@@ -56,7 +56,8 @@ router에 등록합니다. endpoint 본문에서 유저 ID가 필요하면 같�
 
 | Code | Type | HTTP | WebSocket | Meaning |
 | --- | --- | --- | --- | --- |
-| `INVALID_CREDENTIALS` | `AUTHENTICATION` | `401` | `1008` | 기존 계정 ID의 비밀번호가 일치하지 않음 |
+| `INVALID_CREDENTIALS` | `AUTHENTICATION` | `401` | `1008` | 계정 ID가 없거나 비밀번호가 일치하지 않음 |
+| `AUTH_USER_CONFLICT` | `CONFLICT` | `409` | `1008` | 회원가입 계정 ID 또는 닉네임 중복 |
 | `SESSION_EXPIRED` | `AUTHENTICATION` | `401` | `1008` | 세션 만료 |
 | `VALIDATION_ERROR` | `VALIDATION` | `422` | `1008` | 요청 body validation 실패 |
 | `HTTP_ERROR` | `INTERNAL` | `500` | `1011` | FastAPI `HTTPException` fallback |
@@ -104,14 +105,51 @@ Response:
 
 ## BE Auth
 
-계정 ID와 비밀번호로 가입 겸 로그인을 처리합니다. 계정 ID가 없으면 새 유저를 만들고,
-이미 있으면 비밀번호를 검증합니다. 새 유저 생성 시 닉네임은 타 유저와 중복될 수 없습니다.
+회원가입과 로그인을 별도 API로 처리합니다. 로그인은 기존 계정의 `account_id`, `password`만 검증하고
+신규 유저를 만들지 않습니다. 회원가입은 `account_id`, `nickname`, `password`를 받아 새 유저를 만들고,
+계정 ID와 닉네임은 타 유저와 중복될 수 없습니다.
 
 - 계정 ID: 영어 문자, 숫자, `_`만 허용, 3~20자
 - 비밀번호: 한글, 영어, 숫자, 특수자 입력 가능, 8~20자
 - 닉네임: 한글, 영어, 숫자, `_`만 허용, 3~20자
 
 ### POST `/api/v1/auth/login`
+
+Request:
+
+```json
+{
+  "account_id": "player_001",
+  "password": "secret-password"
+}
+```
+
+Response:
+
+```json
+{
+  "success": true,
+  "data": {
+    "user": {
+      "public_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7f",
+      "account_id": "player_001",
+      "nickname": "초보자"
+    },
+    "expires_at": "2026-06-12T00:00:00Z"
+  }
+}
+```
+
+성공하면 `session_token` 쿠키를 설정합니다. 쿠키는 `HttpOnly`, `SameSite=Lax`로 발급하고,
+`prod` 환경에서는 `Secure`를 함께 사용합니다.
+
+| Status | Meaning |
+| --- | --- |
+| `200` | 로그인 성공 |
+| `401` / `INVALID_CREDENTIALS` | 계정 ID가 없거나 비밀번호가 일치하지 않음 |
+| `422` / `VALIDATION_ERROR` | 요청 body validation 실패 |
+
+### POST `/api/v1/auth/signup`
 
 Request:
 
@@ -134,7 +172,6 @@ Response:
       "account_id": "player_001",
       "nickname": "초보자"
     },
-    "is_new_user": true,
     "expires_at": "2026-06-12T00:00:00Z"
   }
 }
@@ -145,8 +182,8 @@ Response:
 
 | Status | Meaning |
 | --- | --- |
-| `200` | 가입 또는 로그인 성공 |
-| `401` / `INVALID_CREDENTIALS` | 기존 계정 ID의 비밀번호가 일치하지 않음 |
+| `201` | 회원가입 성공 |
+| `409` / `AUTH_USER_CONFLICT` | 계정 ID 또는 닉네임 중복 |
 | `422` / `VALIDATION_ERROR` | 요청 body validation 실패 |
 
 ## BE Game Session
@@ -160,6 +197,15 @@ Response:
 객실 참여는 REST API가 담당하고, `/ws/lobby/rooms/{room_public_id}`는 로그인 세션과 활성 room member
 여부를 연결 시점에 확인한 뒤 현재 연결만 process memory에 보관합니다. REST API가 DB 변경을 commit한
 뒤 필요한 event를 같은 객실 연결에 broadcast합니다.
+
+Swagger에는 게임 API의 닫힌 문자열 값을 enum으로 노출합니다.
+
+| Field | Values |
+| --- | --- |
+| `game_type` | `shiritori`, `chosung`, `contains` |
+| room `status` | `waiting`, `starting`, `playing`, `closed` |
+| game session `status` | `starting`, `playing`, `voting`, `result`, `aborted` |
+| `participant_type` | `user`, `ai` |
 
 로비 WebSocket 클라이언트는 주기적으로 `ping`을 보내야 합니다. 서버는 마지막 메시지 이후 45초 동안
 새 메시지를 받지 못하면 연결을 닫고, 90초 grace time 안에 같은 유저가 같은 방으로 재연결하지 않으면

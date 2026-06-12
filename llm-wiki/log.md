@@ -4,6 +4,15 @@
 코드 변경 상세는 Git history, PR, issue에서 확인하고, 이 파일에는 위키 페이지의 지식, 계약, 정책,
 컨벤션이 어떻게 바뀌었는지만 남깁니다.
 
+## [2026-06-12] maintenance | Add game API enum contract
+
+- `sunset-game-domain.md`와 `openapi-swagger.md`에 `game_type`, room/session `status`, `participant_type` 같은 공개 API의 닫힌 문자열 값은 enum으로 관리하고 Swagger에 enum 목록을 노출한다는 기준을 추가했다.
+
+## [2026-06-12] maintenance | Split signup and login auth contract
+
+- `backend-guidelines.md`와 `2026-06-05-auth-session-login.md`에 `POST /api/v1/auth/signup`은 신규 계정 생성, `POST /api/v1/auth/login`은 기존 계정 인증만 담당한다는 기준을 반영했다.
+- 로그인 request는 `account_id`, `password`만 받고, 회원가입 중복 계정/닉네임은 `409 AUTH_USER_CONFLICT`로 처리한다는 계약을 남겼다.
+
 ## [2026-06-12] maintenance | Clarify Grafana dashboard link policy
 
 - `observability-stack.md`에 Grafana dashboard 간 이동은 `type: link`와 `/d/<dashboard_uid>` URL을 사용하고, `type: dashboards`는 tag 기반 목록 확장용이라 빈 tag와 함께 쓰지 않는다는 기준을 추가했다.

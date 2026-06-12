@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.be.models.game import GameSession, Room, RoomMember, SessionParticipant
 from app.be.models.user import User, utc_now
+from app.be.schemas.game_enum import GameSessionStatus
 from app.be.services.game import (
     GameRoomListItem,
     GameRoomRecord,
@@ -17,7 +18,10 @@ from app.shared.core.identifiers import generate_uuid_v7
 from app.shared.core.observability import traced_method
 
 
-TERMINAL_SESSION_STATUSES = ("result", "aborted")
+TERMINAL_SESSION_STATUSES = (
+    GameSessionStatus.RESULT.value,
+    GameSessionStatus.ABORTED.value,
+)
 
 
 class GameRepository:

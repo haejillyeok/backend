@@ -8,7 +8,7 @@ from app.be.models.user_session import SESSION_TTL
 from app.be.security.password import hash_password, verify_password
 from app.be.security.session import generate_session_token, hash_session_token
 from app.shared.core.error_codes import ErrorCode
-from app.shared.core.exceptions import AppException, InvalidCredentialsError
+from app.shared.core.exceptions import AppException, AuthUserConflictError, InvalidCredentialsError
 from app.shared.core.observability import traced_method
 
 
@@ -74,7 +74,6 @@ class CurrentUser:
 class AuthLoginResult:
     user: AuthenticatedUser
     session_token: str
-    is_new_user: bool
     expires_at: datetime
 
 
@@ -86,12 +85,12 @@ class SessionExpiredError(AppException):
 
 
 class AuthService:
-    """계정 ID/비밀번호 기반 가입 겸 로그인을 처리하는 service입니다."""
+    """계정 ID/비밀번호 기반 회원가입, 로그인, 세션 인증을 처리하는 service입니다."""
 
     def __init__(self, repository: AuthRepositoryProtocol) -> None:
         self.repository = repository
 
-    async def login_or_register(
+    async def signup(
         self,
         *,
         account_id: str,
@@ -100,10 +99,26 @@ class AuthService:
         last_access_ip: str | None,
         user_agent: str | None,
     ) -> AuthLoginResult:
-        """계정 ID가 없으면 가입하고, 있으면 비밀번호를 검증한 뒤 세션을 발급합니다."""
-        return await self._login_or_register(
+        """신규 계정을 생성하고 로그인 세션을 발급합니다."""
+        return await self._signup(
             account_id=account_id,
             nickname=nickname,
+            password=password,
+            last_access_ip=last_access_ip,
+            user_agent=user_agent,
+        )
+
+    async def login(
+        self,
+        *,
+        account_id: str,
+        password: str,
+        last_access_ip: str | None,
+        user_agent: str | None,
+    ) -> AuthLoginResult:
+        """기존 계정 ID와 비밀번호를 검증한 뒤 로그인 세션을 발급합니다."""
+        return await self._login(
+            account_id=account_id,
             password=password,
             last_access_ip=last_access_ip,
             user_agent=user_agent,
@@ -136,8 +151,8 @@ class AuthService:
             nickname=user.nickname,
         )
 
-    @traced_method("AuthService.login_or_register", layer="service")
-    async def _login_or_register(
+    @traced_method("AuthService.signup", layer="service")
+    async def _signup(
         self,
         *,
         account_id: str,
@@ -146,24 +161,52 @@ class AuthService:
         last_access_ip: str | None,
         user_agent: str | None,
     ) -> AuthLoginResult:
-        """가입 겸 로그인 유스케이스 전체 실행 시간을 trace span으로 기록합니다."""
+        """회원가입과 최초 세션 발급 실행 시간을 trace span으로 기록합니다."""
+        if await self.repository.get_user_by_account_id(account_id) is not None:
+            raise AuthUserConflictError
+        if await self.repository.get_user_by_nickname(nickname) is not None:
+            raise AuthUserConflictError
+
+        user = await self.repository.create_user(
+            account_id=account_id,
+            nickname=nickname,
+            password_hash=hash_password(password),
+            last_access_ip=last_access_ip,
+        )
+        return await self._create_session_result(
+            user=user,
+            last_access_ip=last_access_ip,
+            user_agent=user_agent,
+        )
+
+    @traced_method("AuthService.login", layer="service")
+    async def _login(
+        self,
+        *,
+        account_id: str,
+        password: str,
+        last_access_ip: str | None,
+        user_agent: str | None,
+    ) -> AuthLoginResult:
+        """로그인 검증과 세션 발급 실행 시간을 trace span으로 기록합니다."""
         user = await self.repository.get_user_by_account_id(account_id)
-        is_new_user = user is None
-
-        if user is None:
-            if await self.repository.get_user_by_nickname(nickname) is not None:
-                raise InvalidCredentialsError
-            user = await self.repository.create_user(
-                account_id=account_id,
-                nickname=nickname,
-                password_hash=hash_password(password),
-                last_access_ip=last_access_ip,
-            )
-        elif not verify_password(password, user.password_hash):
+        if user is None or not verify_password(password, user.password_hash):
             raise InvalidCredentialsError
-        else:
-            user.last_access_ip = last_access_ip
+        user.last_access_ip = last_access_ip
+        return await self._create_session_result(
+            user=user,
+            last_access_ip=last_access_ip,
+            user_agent=user_agent,
+        )
 
+    async def _create_session_result(
+        self,
+        *,
+        user: User,
+        last_access_ip: str | None,
+        user_agent: str | None,
+    ) -> AuthLoginResult:
+        """검증된 유저에 대한 세션 토큰을 생성하고 DB transaction을 확정합니다."""
         session_token = generate_session_token()
         expires_at = datetime.now(UTC) + SESSION_TTL
         await self.repository.create_user_session(
@@ -182,6 +225,5 @@ class AuthService:
                 nickname=user.nickname,
             ),
             session_token=session_token,
-            is_new_user=is_new_user,
             expires_at=expires_at,
         )

@@ -33,6 +33,7 @@ audience: ai
 - 성공 응답 문서는 `SuccessResponse[T]`, 실패 응답 문서는 `ErrorResponse`를 사용해 ReDoc sample이 성공 응답에는 `error`를 표시하지 않고 실패 응답에만 error object를 보여주게 한다.
 - FastAPI가 OpenAPI example의 `None` 값을 제거하는 경우 `install_openapi_schema(app)` 후처리로 error example의 `data: null`, `details: null`을 복원한다.
 - request/response field 설명이 필요한 경우 Pydantic `Field(description=..., examples=[...])`를 사용한다.
+- `game_type`, `status`, `participant_type`처럼 공개 API에서 허용 값이 닫힌 문자열은 `str`이 아니라 Pydantic이 인식하는 enum type으로 선언해 Swagger에 enum 목록이 보이게 한다.
 - 내부 ORM model을 response model로 직접 노출하지 않는다.
 
 ## Current Exposure

@@ -4,13 +4,17 @@ from uuid import UUID
 from app.be.schemas.base import SchemaModel
 
 
-class LoginUserResponse(SchemaModel):
+class AuthUserResponse(SchemaModel):
     public_id: UUID
     account_id: str
     nickname: str
 
 
 class LoginResponse(SchemaModel):
-    user: LoginUserResponse
-    is_new_user: bool
+    user: AuthUserResponse
+    expires_at: datetime
+
+
+class SignupResponse(SchemaModel):
+    user: AuthUserResponse
     expires_at: datetime

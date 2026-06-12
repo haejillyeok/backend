@@ -52,6 +52,13 @@ Backend가 소유하는 게임 상태, WebSocket event, Agent 경계를 우선�
 
 게임 진행 WebSocket을 붙이기 전에는 REST API로 게임 시작과 세션 진입 권한을 먼저 고정한다.
 
+게임 API의 공개 계약에서 닫힌 문자열 값은 Pydantic enum으로 관리해 Swagger에 enum으로 노출한다.
+
+- `game_type`: `shiritori`, `chosung`, `contains`
+- room `status`: `waiting`, `starting`, `playing`, `closed`
+- game session `status`: `starting`, `playing`, `voting`, `result`, `aborted`
+- `participant_type`: `user`, `ai`
+
 - `GET /api/v1/game/rooms`
   - `session_token` 쿠키로 현재 유저를 인증한다.
   - 닫히지 않은 room 목록과 활성 room member 수를 반환한다.

@@ -1,6 +1,7 @@
 from pydantic import Field
 
 from app.be.schemas.base import SchemaModel
+from app.be.schemas.game_enum import GameType
 
 
 class CreateGameRoomRequest(SchemaModel):
@@ -10,9 +11,7 @@ class CreateGameRoomRequest(SchemaModel):
         description="로비 목록과 객실 화면에 표시할 객실 이름입니다.",
         examples=["첫 객실"],
     )
-    game_type: str = Field(
-        min_length=1,
-        max_length=40,
+    game_type: GameType = Field(
         description="객실에서 시작할 게임 종류입니다.",
         examples=["shiritori"],
     )

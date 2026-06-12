@@ -58,3 +58,12 @@ class InvalidCredentialsError(AppException):
         super().__init__(
             code=ErrorCode.INVALID_CREDENTIALS,
         )
+
+
+class AuthUserConflictError(AppException):
+    """회원가입 요청의 계정 ID 또는 닉네임이 이미 사용 중일 때 발생합니다."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            code=ErrorCode.AUTH_USER_CONFLICT,
+        )
