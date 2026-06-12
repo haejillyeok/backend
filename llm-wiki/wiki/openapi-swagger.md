@@ -1,7 +1,7 @@
 ---
 title: OpenAPI and Swagger
 type: guide
-updated: 2026-06-09
+updated: 2026-06-13
 audience: ai
 ---
 
@@ -53,6 +53,23 @@ audience: ai
 FastAPI WebSocket route는 OpenAPI path operation으로 자동 문서화되지 않는다. BE 서버는
 `app/be/main.py`의 `FastAPI(description=...)`에 `[WebSocket API 문서](/ws-docs)` 링크를 넣어
 Swagger 상단 설명에서 WebSocket API 문서 페이지로 이동할 수 있게 한다.
+
+## Postman Collection
+
+로컬 Postman import용 JSON은 `mise run generate-postman`으로 생성한다. 이 task는
+`scripts/generate_postman.py`를 실행한다.
+
+- 산출물은 `postman/haejillyeok-be.postman_collection.json`과
+  `postman/haejillyeok-local.postman_environment.json`이다.
+- HTTP 요청은 BE `create_app().openapi()` schema에서 생성한다.
+- Agent 서버 OpenAPI는 생성 대상이 아니며, BE의 `/api/v1/agent/*` proxy endpoint도 Postman
+  collection에서는 제외한다.
+- FastAPI WebSocket route는 OpenAPI에 포함되지 않으므로 `/ws/realtime`과
+  `/ws/lobby/rooms/{{roomPublicId}}`는 생성기에서 명시적으로 관리한다.
+- Postman environment에는 `baseUrl`, `baseWs`, `sessionToken`, `accountId`, `password`,
+  `nickname`, `roomName`, `gameType`, `maxPlayers`, `roomPublicId`, `sessionPublicId`를 둔다.
+- 로그인과 회원가입 요청은 Postman test script에서 응답 `Set-Cookie`의 `session_token`을 읽어
+  environment `sessionToken` 변수에 저장한다.
 
 ## OpenAPI Generator Readiness
 

@@ -4,6 +4,11 @@
 코드 변경 상세는 Git history, PR, issue에서 확인하고, 이 파일에는 위키 페이지의 지식, 계약, 정책,
 컨벤션이 어떻게 바뀌었는지만 남깁니다.
 
+## [2026-06-13] maintenance | Add BE Postman generation policy
+
+- `openapi-swagger.md`에 Postman import용 JSON은 BE OpenAPI schema와 명시 WebSocket 정의에서 생성하고, Agent 서버와 BE `/api/v1/agent/*` proxy endpoint는 제외한다는 기준을 추가했다.
+- Postman environment에서 `baseUrl`, `baseWs`, 인증/session, room/session 예시 변수를 관리하고, 로그인/회원가입 응답의 `session_token` 쿠키를 `sessionToken` 변수에 저장한다는 기준을 남겼다.
+
 ## [2026-06-12] maintenance | Add game API enum contract
 
 - `sunset-game-domain.md`와 `openapi-swagger.md`에 `game_type`, room/session `status`, `participant_type` 같은 공개 API의 닫힌 문자열 값은 enum으로 관리하고 Swagger에 enum 목록을 노출한다는 기준을 추가했다.
