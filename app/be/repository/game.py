@@ -237,7 +237,7 @@ class GameRepository:
         row = result.one_or_none()
         if row is None:
             return None
-        member, user = row
+        member, user, _room = row
         return RoomMemberRecord(
             room_id=member.room_id,
             user_id=member.user_id,
@@ -302,8 +302,9 @@ class GameRepository:
     ) -> RoomLeaveResult | None:
         """room member 퇴장 update 실행 시간을 trace span으로 기록합니다."""
         statement = (
-            select(RoomMember, User)
+            select(RoomMember, User, Room)
             .join(User, RoomMember.user_id == User.id)
+            .join(Room, RoomMember.room_id == Room.id)
             .where(
                 RoomMember.room_id == room_id,
                 RoomMember.user_id == user_id,

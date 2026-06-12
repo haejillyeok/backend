@@ -282,6 +282,8 @@ async def test_game_repository_lists_room_members_in_repository_records() -> Non
 async def test_game_repository_gets_active_room_member_record() -> None:
     room_id = uuid4()
     user = build_user(nickname="손님1")
+    room = build_room(owner_user_id=uuid4())
+    room.id = room_id
     member = RoomMember(
         id=uuid4(),
         room_id=room_id,
@@ -291,7 +293,7 @@ async def test_game_repository_gets_active_room_member_record() -> None:
     repository = GameRepository(
         FakeDbSession(
             [
-                FakeResult(row=(member, user)),
+                FakeResult(row=(member, user, room)),
                 FakeResult(row=None),
             ]
         )
