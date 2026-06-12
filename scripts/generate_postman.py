@@ -42,7 +42,7 @@ AUTH_SESSION_OPERATION_IDS = {"be_auth_login", "be_auth_signup"}
 
 
 def create_be_collection(openapi_schema: dict[str, Any]) -> dict[str, Any]:
-    """BE OpenAPI schema와 WebSocket 계약으로 Postman collection JSON을 만듭니다."""
+    """BE OpenAPI schema로 HTTP Postman collection JSON을 만듭니다."""
     folders: dict[str, list[dict[str, Any]]] = {}
 
     for path, path_spec in openapi_schema.get("paths", {}).items():
@@ -55,8 +55,6 @@ def create_be_collection(openapi_schema: dict[str, Any]) -> dict[str, Any]:
 
             folder_name = _resolve_folder_name(operation)
             folders.setdefault(folder_name, []).append(_create_http_item(path, method, operation))
-
-    folders.setdefault("websocket", []).extend(_create_websocket_items())
 
     return {
         "info": {
@@ -85,6 +83,7 @@ def create_local_environment() -> dict[str, Any]:
             _environment_value("gameType", "shiritori"),
             _environment_value("maxPlayers", "4"),
             _environment_value("roomPublicId", "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7e"),
+            _environment_value("gameSessionPublicId", "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b80"),
             _environment_value("sessionPublicId", "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b80"),
         ],
         "_postman_variable_scope": "environment",
@@ -96,7 +95,7 @@ def write_postman_files(
     collection_path: Path = DEFAULT_COLLECTION_PATH,
     environment_path: Path = DEFAULT_ENVIRONMENT_PATH,
 ) -> None:
-    """현재 BE 앱 계약을 읽어 Postman collection과 environment JSON 파일을 저장합니다."""
+    """현재 BE 앱 계약을 읽어 Postman HTTP collection과 environment JSON 파일을 저장합니다."""
     schema = create_app().openapi()
     _write_json(collection_path, create_be_collection(schema))
     _write_json(environment_path, create_local_environment())
@@ -128,29 +127,6 @@ def _create_http_item(path: str, method: str, operation: dict[str, Any]) -> dict
     return item
 
 
-def _create_websocket_items() -> list[dict[str, Any]]:
-    return [
-        _create_websocket_item(
-            name="Realtime WebSocket",
-            path="/ws/realtime",
-            description=(
-                "연결 테스트용 WebSocket입니다. 연결 후 메시지 탭에서 "
-                '`{"type":"ping","payload":{"client_time":"2026-06-12T00:00:00Z"}}`를 보냅니다.'
-            ),
-            requires_session=False,
-        ),
-        _create_websocket_item(
-            name="Lobby Room WebSocket",
-            path="/ws/lobby/rooms/{{roomPublicId}}",
-            description=(
-                "객실 로비 WebSocket입니다. 연결 전에 REST API로 로그인하고 room에 참여해야 합니다. "
-                '`{"type":"ping","payload":{"client_time":"2026-06-12T00:00:00Z"}}`를 보냅니다.'
-            ),
-            requires_session=True,
-        ),
-    ]
-
-
 def _create_session_token_test_event() -> dict[str, Any]:
     return {
         "listen": "test",
@@ -167,24 +143,6 @@ def _create_session_token_test_event() -> dict[str, Any]:
                 "  }",
                 "}",
             ],
-        },
-    }
-
-
-def _create_websocket_item(
-    *,
-    name: str,
-    path: str,
-    description: str,
-    requires_session: bool,
-) -> dict[str, Any]:
-    return {
-        "name": name,
-        "request": {
-            "method": "GET",
-            "header": _session_cookie_header() if requires_session else [],
-            "url": _create_url("{{baseWs}}", path),
-            "description": description,
         },
     }
 
@@ -286,7 +244,10 @@ def main() -> None:
     parser.add_argument("--environment", type=Path, default=DEFAULT_ENVIRONMENT_PATH)
     args = parser.parse_args()
 
-    write_postman_files(collection_path=args.collection, environment_path=args.environment)
+    write_postman_files(
+        collection_path=args.collection,
+        environment_path=args.environment,
+    )
     print(f"generated collection: {args.collection}")
     print(f"generated environment: {args.environment}")
 

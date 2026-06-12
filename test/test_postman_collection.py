@@ -1,5 +1,8 @@
 from app.be.main import create_app
-from scripts.generate_postman import create_be_collection, create_local_environment
+from scripts.generate_postman import (
+    create_be_collection,
+    create_local_environment,
+)
 
 
 def _flatten_items(items):
@@ -7,12 +10,14 @@ def _flatten_items(items):
     for item in items:
         if "item" in item:
             flattened.extend(_flatten_items(item["item"]))
+        elif item.get("children"):
+            flattened.extend(_flatten_items(item["children"]))
         else:
             flattened.append(item)
     return flattened
 
 
-def test_create_be_collection_uses_base_variables_for_http_and_websocket_requests():
+def test_create_be_collection_uses_base_url_for_http_requests_only():
     schema = create_app().openapi()
 
     collection = create_be_collection(schema)
@@ -24,8 +29,7 @@ def test_create_be_collection_uses_base_variables_for_http_and_websocket_request
         "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
     )
     assert "{{baseUrl}}/api/v1/health" in raw_urls
-    assert "{{baseWs}}/ws/realtime" in raw_urls
-    assert "{{baseWs}}/ws/lobby/rooms/{{roomPublicId}}" in raw_urls
+    assert all("{{baseWs}}" not in raw_url for raw_url in raw_urls)
 
 
 def test_create_be_collection_excludes_agent_proxy_endpoints():
@@ -94,8 +98,11 @@ def test_create_local_environment_contains_editable_postman_variables():
     assert environment["name"] == "Haejillyeok Local"
     assert values["baseUrl"] == "http://127.0.0.1:8000"
     assert values["baseWs"] == "ws://127.0.0.1:8000"
+    assert "baseWsHost" not in values
+    assert "baseWsPort" not in values
     assert values["sessionToken"] == ""
     assert values["roomPublicId"] == "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7e"
+    assert values["gameSessionPublicId"] == "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b80"
     assert values["accountId"] == "player_001"
     assert values["password"] == "secret-password"
     assert values["nickname"] == "초보자"

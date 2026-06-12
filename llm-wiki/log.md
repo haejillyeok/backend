@@ -4,6 +4,17 @@
 코드 변경 상세는 Git history, PR, issue에서 확인하고, 이 파일에는 위키 페이지의 지식, 계약, 정책,
 컨벤션이 어떻게 바뀌었는지만 남깁니다.
 
+## [2026-06-13] maintenance | Clarify Postman WebSocket collection format
+
+- `openapi-swagger.md`에 Postman file import의 collection v2.1 JSON은 `ws://` URL도 HTTP
+  request로 import하고, 내부 `ws-raw-request` JSON은 일반 import 포맷으로 인식되지 않는다는
+  기준을 추가했다.
+- 이 스크립트는 WebSocket 전용 Postman collection JSON을 생성하지 않고, WebSocket 요청은
+  Postman UI에서 직접 만들며 `sessionToken` environment 변수를 `Cookie` header로 재사용한다는
+  기준을 정리했다.
+- 로컬과 운영 WebSocket URL을 같은 변수로 전환할 수 있도록 WebSocket base URL은 host/port로 쪼개지
+  않고 `baseWs` 하나로 관리한다는 기준을 반영했다.
+
 ## [2026-06-13] maintenance | Clarify game session public ID naming
 
 - `sunset-game-domain.md`와 API 문서 기준에서 게임 한 판의 공개 식별자는 `session_public_id`가 아니라 `game_session_public_id`로 부른다는 명명 기준을 반영했다.
@@ -17,7 +28,7 @@
 
 ## [2026-06-13] maintenance | Add BE Postman generation policy
 
-- `openapi-swagger.md`에 Postman import용 JSON은 BE OpenAPI schema와 명시 WebSocket 정의에서 생성하고, Agent 서버와 BE `/api/v1/agent/*` proxy endpoint는 제외한다는 기준을 추가했다.
+- `openapi-swagger.md`에 Postman import용 JSON은 BE OpenAPI schema와 명시 WebSocket 정의에서 생성하고, HTTP API collection과 WebSocket collection을 별도 파일로 관리하며, Agent 서버와 BE `/api/v1/agent/*` proxy endpoint는 제외한다는 기준을 추가했다.
 - Postman environment에서 `baseUrl`, `baseWs`, 인증/session, room/session 예시 변수를 관리하고, 로그인/회원가입 응답의 `session_token` 쿠키를 `sessionToken` 변수에 저장한다는 기준을 남겼다.
 
 ## [2026-06-12] maintenance | Add game API enum contract

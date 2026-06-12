@@ -309,7 +309,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/game/sessions/{{sessionPublicId}}/entry",
+              "raw": "{{baseUrl}}/api/v1/game/sessions/{{gameSessionPublicId}}/entry",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -318,59 +318,11 @@
                 "v1",
                 "game",
                 "sessions",
-                "{{sessionPublicId}}",
+                "{{gameSessionPublicId}}",
                 "entry"
               ]
             },
             "description": "로그인 유저가 게임 시작 시 확정된 참가자인지 확인합니다."
-          }
-        }
-      ]
-    },
-    {
-      "name": "websocket",
-      "item": [
-        {
-          "name": "Realtime WebSocket",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseWs}}/ws/realtime",
-              "host": [
-                "{{baseWs}}"
-              ],
-              "path": [
-                "ws",
-                "realtime"
-              ]
-            },
-            "description": "연결 테스트용 WebSocket입니다. 연결 후 메시지 탭에서 `{\"type\":\"ping\",\"payload\":{\"client_time\":\"2026-06-12T00:00:00Z\"}}`를 보냅니다."
-          }
-        },
-        {
-          "name": "Lobby Room WebSocket",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Cookie",
-                "value": "session_token={{sessionToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseWs}}/ws/lobby/rooms/{{roomPublicId}}",
-              "host": [
-                "{{baseWs}}"
-              ],
-              "path": [
-                "ws",
-                "lobby",
-                "rooms",
-                "{{roomPublicId}}"
-              ]
-            },
-            "description": "객실 로비 WebSocket입니다. 연결 전에 REST API로 로그인하고 room에 참여해야 합니다. `{\"type\":\"ping\",\"payload\":{\"client_time\":\"2026-06-12T00:00:00Z\"}}`를 보냅니다."
           }
         }
       ]
