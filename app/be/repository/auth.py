@@ -111,6 +111,49 @@ class AuthRepository:
         await self.db_session.flush()
         return user_session
 
+    async def get_active_session_user(
+        self,
+        *,
+        token_hash: str,
+        now: datetime,
+    ) -> tuple[User, UserSession] | None:
+        """활성 세션 토큰 해시로 유저와 세션을 조회합니다."""
+        return await self._get_active_session_user(token_hash=token_hash, now=now)
+
+    @traced_method("AuthRepository.get_active_session_user", layer="repository")
+    async def _get_active_session_user(
+        self,
+        *,
+        token_hash: str,
+        now: datetime,
+    ) -> tuple[User, UserSession] | None:
+        """세션 인증 query 실행 시간을 trace span으로 기록합니다."""
+        statement = (
+            select(User, UserSession)
+            .join(UserSession, UserSession.user_id == User.id)
+            .where(
+                UserSession.token_hash == token_hash,
+                UserSession.revoked_at.is_(None),
+                UserSession.expires_at > now,
+            )
+        )
+        result = await self.db_session.execute(statement)
+        row = result.one_or_none()
+        if row is None:
+            return None
+        user, user_session = row
+        return user, user_session
+
+    async def touch_user_session(self, session: UserSession, *, now: datetime) -> None:
+        """인증에 성공한 세션의 마지막 접근 시각을 갱신합니다."""
+        await self._touch_user_session(session, now=now)
+
+    @traced_method("AuthRepository.touch_user_session", layer="repository")
+    async def _touch_user_session(self, session: UserSession, *, now: datetime) -> None:
+        """세션 last_seen_at 갱신 실행 시간을 trace span으로 기록합니다."""
+        session.last_seen_at = now
+        await self.db_session.flush()
+
     async def commit(self) -> None:
         """가입/로그인에 따른 변경 사항을 하나의 transaction으로 확정합니다."""
         await self._commit()

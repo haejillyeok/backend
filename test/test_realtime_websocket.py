@@ -72,7 +72,21 @@ def test_ws_docs_renders_websocket_api_page():
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
     assert "content-disposition" not in response.headers
-    assert "<h1>WebSocket API</h1>" in response.text
+    assert '<h1 id="websocket-api">WebSocket API</h1>' in response.text
     assert "wss://&lt;host&gt;/ws/realtime" in response.text
     assert "&quot;type&quot;: &quot;ping&quot;" in response.text
     assert "&quot;type&quot;: &quot;realtime.pong&quot;" in response.text
+
+
+def test_ws_docs_renders_toc_and_mermaid_user_flow():
+    client = TestClient(create_app())
+
+    response = client.get("/ws-docs")
+
+    assert response.status_code == 200
+    assert '<nav class="toc" aria-label="문서 목차">' in response.text
+    assert '<a href="#realtime">' in response.text
+    assert 'id="game-start-user-flow"' in response.text
+    assert '<pre class="mermaid">' in response.text
+    assert "sequenceDiagram" in response.text
+    assert "mermaid.initialize" in response.text

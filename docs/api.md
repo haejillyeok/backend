@@ -46,6 +46,10 @@ Swagger 실패 응답은 `ErrorResponse` schema를 참조하고, endpoint별 예
 | `HTTP_ERROR` | `INTERNAL` | `500` | `1011` | FastAPI `HTTPException` fallback |
 | `AGENT_CLIENT_NOT_CONFIGURED` | `INTERNAL` | `503` | `1011` | BE의 Agent client 설정 누락 |
 | `AGENT_HEALTH_UNAVAILABLE` | `INTERNAL` | `502` | `1011` | BE에서 Agent health API 호출 실패 |
+| `GAME_ROOM_NOT_FOUND` | `NOT_FOUND` | `404` | `1008` | 게임을 시작할 객실을 찾을 수 없음 |
+| `GAME_ROOM_START_FORBIDDEN` | `AUTHORIZATION` | `403` | `1008` | 방장 또는 허용된 멤버가 아닌 유저의 게임 시작 요청 |
+| `GAME_ROOM_NOT_STARTABLE` | `CONFLICT` | `409` | `1008` | 현재 객실 상태나 멤버 조건에서 게임 시작 불가 |
+| `GAME_SESSION_ENTRY_FORBIDDEN` | `AUTHORIZATION` | `403` | `1008` | 게임 시작 시 확정된 참가자가 아닌 유저의 세션 진입 요청 |
 
 ## BE Health
 
@@ -126,6 +130,106 @@ Response:
 | `200` | 가입 또는 로그인 성공 |
 | `401` / `INVALID_CREDENTIALS` | 기존 계정 ID의 비밀번호가 일치하지 않음 |
 | `422` / `VALIDATION_ERROR` | 요청 body validation 실패 |
+
+## BE Game Session
+
+게임 진행 WebSocket을 연결하기 전에 REST API로 게임 세션을 시작하고 진입 권한을 확인합니다.
+인증은 `session_token` HttpOnly 쿠키를 사용합니다. 게임 시작 시점의 활성 room member만
+`session_participants`로 고정되고, 이후 세션 진입 API는 로그인 유저가 해당 참가자인지 확인합니다.
+`/ws/realtime`은 연결 테스트용으로 유지하며 이 API와 게임 상태를 공유하지 않습니다.
+
+이후 `/ws/lobby`를 붙일 때는 게임 시작 API handler가 DB commit 이후 lobby connection manager를
+호출해 이미 열려 있는 room 연결에 `game.started` event를 broadcast합니다. API가 WebSocket
+연결 객체를 클라이언트에 전달하는 것이 아니라, 서버 process 안의 connection registry에서
+`room_public_id -> user_id -> websocket` 형태로 잡고 있는 연결들에 event를 송신하는 방식입니다.
+여러 서버 instance로 확장하면 같은 event를 Redis Pub/Sub, PostgreSQL NOTIFY, outbox 같은
+서버 간 event bus로 발행한 뒤 각 instance가 자신이 가진 WebSocket 연결에 broadcast해야 합니다.
+
+`/ws/match` 연결 시점에는 `session_token`으로 user_id를 한 번 복원하고, 그 user_id와
+`session_public_id`로 `session_participants`를 조회해 서버 내부 connection identity를
+`game_session_id + participant_id + user_id`로 고정합니다. 연결 후 match 진행 메시지는 이
+participant identity를 기준으로 처리하고, 로그인 세션 만료가 진행 중 match를 즉시 끊는 기준이
+되지는 않습니다. 새 lobby 연결, 새 match 연결, 새 게임 시작 같은 새 권한 행위는 다시 유효한
+로그인 세션이 필요합니다.
+
+### POST `/api/v1/game/rooms/{room_public_id}/start`
+
+방장이 대기 중인 객실의 활성 멤버를 게임 세션 참가자로 고정하고, 클라이언트가 이후 진입 확인에
+사용할 `session_public_id`를 반환합니다. 실제 유저 참가자 뒤에 AI 손님 1명이
+`is_uninvited_guest=true`로 추가됩니다.
+
+이 endpoint는 방장의 반복 요청에 대해 멱등적으로 동작합니다. 같은 room에 `starting`, `playing`,
+`voting`처럼 아직 종료되지 않은 active session이 있으면 새 session을 만들지 않고 기존
+`session_public_id`와 참가자 snapshot을 반환합니다. 서버는 시작 판단 전에 room row를 lock해서
+동시 start 요청이 같은 room 안에서 직렬화되도록 처리합니다.
+
+Response:
+
+```json
+{
+  "success": true,
+  "data": {
+    "session_public_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7f",
+    "room_public_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7e",
+    "game_type": "shiritori",
+    "status": "starting",
+    "participants": [
+      {
+        "participant_type": "user",
+        "display_name": "초보자",
+        "seat_number": 1,
+        "is_uninvited_guest": false
+      },
+      {
+        "participant_type": "ai",
+        "display_name": "수상한 손님",
+        "seat_number": 2,
+        "is_uninvited_guest": true
+      }
+    ]
+  }
+}
+```
+
+| Status | Meaning |
+| --- | --- |
+| `200` | 게임 세션 시작 성공 |
+| `401` / `SESSION_EXPIRED` | 로그인 세션 없음, 만료, 폐기 |
+| `403` / `GAME_ROOM_START_FORBIDDEN` | 방장 또는 활성 room member가 아닌 유저 |
+| `404` / `GAME_ROOM_NOT_FOUND` | 객실 없음 |
+| `409` / `GAME_ROOM_NOT_STARTABLE` | 객실이 대기 상태가 아니거나 시작 조건 불충족 |
+| `422` / `VALIDATION_ERROR` | path UUID validation 실패 |
+
+### GET `/api/v1/game/sessions/{session_public_id}/entry`
+
+로그인 유저가 게임 시작 시 `session_participants`에 고정된 실제 유저 참가자인지 확인합니다.
+허용된 멤버만 `allowed=true` 응답을 받으며, AI 참가자는 로그인 유저가 아니므로 이 API로 직접
+진입하지 않습니다.
+
+Response:
+
+```json
+{
+  "success": true,
+  "data": {
+    "session_public_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7f",
+    "allowed": true,
+    "participant": {
+      "participant_type": "user",
+      "display_name": "초보자",
+      "seat_number": 1,
+      "is_uninvited_guest": false
+    }
+  }
+}
+```
+
+| Status | Meaning |
+| --- | --- |
+| `200` | 게임 세션 진입 허용 |
+| `401` / `SESSION_EXPIRED` | 로그인 세션 없음, 만료, 폐기 |
+| `403` / `GAME_SESSION_ENTRY_FORBIDDEN` | 해당 게임 세션에 고정된 참가자가 아님 |
+| `422` / `VALIDATION_ERROR` | path UUID validation 실패 |
 
 ## BE Realtime WebSocket
 

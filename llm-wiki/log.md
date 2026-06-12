@@ -4,6 +4,19 @@
 코드 변경 상세는 Git history, PR, issue에서 확인하고, 이 파일에는 위키 페이지의 지식, 계약, 정책,
 컨벤션이 어떻게 바뀌었는지만 남깁니다.
 
+## [2026-06-12] maintenance | Add WebSocket docs TOC and Mermaid flow
+
+- `realtime-websocket.md`에 `/ws-docs` 렌더러가 heading 기반 자동 목차와 Mermaid code block 렌더링을 지원한다는 문서 운영 기준을 추가했다.
+- `ws-api.md`에는 게임 시작 REST gate, lobby broadcast, match 연결 권한 확인 흐름을 Mermaid sequence diagram으로 유지한다는 기준을 남겼다.
+
+## [2026-06-11] maintenance | Add game session REST gate contract
+
+- `sunset-game-domain.md`에 게임 진행 WebSocket 전 단계로 REST 기반 게임 시작과 세션 진입 권한 확인 기준을 추가했다.
+- 로그인 `session_token`으로 현재 유저를 확인하고, 게임 시작 시 고정된 `session_participants`만 세션 진입을 허용하는 기준을 남겼다.
+- `/ws/realtime`은 계속 연결 테스트용이며 이후 `/ws/lobby`, `/ws/match`가 같은 참가자 권한 기준을 재사용해야 한다고 정리했다.
+- REST handler에서 lobby WebSocket 알림이 필요하면 connection manager 또는 서버 간 event bus로 이미 열린 연결에 broadcast하고, match 연결 후에는 `game_session_id + participant_id + user_id` identity를 기준으로 진행한다는 기준을 추가했다.
+- start API는 room row lock으로 같은 room의 동시 요청을 직렬화하고, active session이 이미 있으면 기존 `session_public_id`를 반환하는 멱등 기준을 추가했다.
+
 ## [2026-06-11] maintenance | Add Sunset game DB design draft
 
 - `sunset-game-database-design.md`에 해질녘 게임 플랫폼의 결과/복구 중심 DB 저장 범위와 table 초안을 정리했다.

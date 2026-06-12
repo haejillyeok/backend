@@ -1,7 +1,7 @@
 ---
 title: Realtime WebSocket
 type: api-contract
-updated: 2026-06-11
+updated: 2026-06-12
 audience: ai
 ---
 
@@ -30,6 +30,16 @@ BE 서버는 WebSocket API 전용 문서 페이지를 `GET /ws-docs`에서 `text
 문서 원본은 `app/be/api/docs/ws-api.md`이며, Docker image에 포함되도록 `docs/`가 아니라 `app/` 아래에서
 관리한다. 라우터는 이 Markdown 원본을 HTML 페이지로 렌더링한다. WebSocket message contract가 늘어나면
 이 파일을 먼저 갱신한다.
+
+`/ws-docs` 렌더러는 `##`, `###` heading을 anchor id로 변환하고 페이지 상단에 자동 목차를 만든다.
+사용자 흐름이나 API/WebSocket 상호작용은 Markdown의 `mermaid` code block으로 작성할 수 있으며,
+HTML 렌더러는 이를 Mermaid diagram으로 표시할 수 있게 `<pre class="mermaid">`와 초기화 스크립트를
+포함한다.
+
+현재 `ws-api.md`에는 게임 시작 REST gate와 이후 lobby/match WebSocket 연결 흐름을 보여주는
+`Game Start User Flow` Mermaid sequence diagram을 둔다. 이 diagram은 구현된 start API의 멱등성,
+lobby broadcast 지점, match 연결 시 `session_token`에서 user_id를 복원한 뒤
+`session_public_id`로 `participant_id`를 확정하는 흐름을 설명한다.
 
 ## Message Contract
 

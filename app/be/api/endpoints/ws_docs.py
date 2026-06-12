@@ -1,5 +1,6 @@
 from html import escape
 from pathlib import Path
+import re
 
 from fastapi import APIRouter, HTTPException, status
 from starlette.responses import HTMLResponse
@@ -98,7 +99,28 @@ def render_websocket_api_docs(markdown: str) -> str:
     th, td {{ border: 1px solid var(--line); padding: 9px 11px; text-align: left; }}
     th {{ background: #f0f3f8; }}
     .meta {{ color: var(--muted); margin-bottom: 24px; }}
+    .toc {{
+      background: #f8fafc;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      margin: 0 0 28px;
+      padding: 18px 20px;
+    }}
+    .toc strong {{ display: block; margin-bottom: 8px; }}
+    .toc ol {{ margin: 0; padding-left: 20px; }}
+    .toc a {{ color: #1d4ed8; text-decoration: none; }}
+    .toc a:hover {{ text-decoration: underline; }}
+    .mermaid {{
+      background: #ffffff;
+      color: var(--text);
+      border: 1px solid var(--line);
+      text-align: center;
+    }}
   </style>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({{ startOnLoad: true, securityLevel: "strict" }});
+  </script>
 </head>
 <body>
   <main>
@@ -115,10 +137,13 @@ def render_websocket_api_docs(markdown: str) -> str:
 def _render_markdown_body(markdown: str) -> str:
     """현재 WebSocket API 문서에서 쓰는 Markdown subset을 HTML body로 렌더링합니다."""
     html_parts: list[str] = []
+    toc_items: list[tuple[int, str, str]] = []
     paragraph_lines: list[str] = []
     table_lines: list[str] = []
     code_lines: list[str] = []
     in_code_block = False
+    code_language = ""
+    used_heading_ids: set[str] = set()
 
     def flush_paragraph() -> None:
         if paragraph_lines:
@@ -149,13 +174,19 @@ def _render_markdown_body(markdown: str) -> str:
         stripped = line.strip()
         if stripped.startswith("```"):
             if in_code_block:
-                html_parts.append(f"<pre><code>{escape(chr(10).join(code_lines))}</code></pre>")
+                code = escape(chr(10).join(code_lines))
+                if code_language == "mermaid":
+                    html_parts.append(f'<pre class="mermaid">{code}</pre>')
+                else:
+                    html_parts.append(f"<pre><code>{code}</code></pre>")
                 code_lines.clear()
                 in_code_block = False
+                code_language = ""
             else:
                 flush_paragraph()
                 flush_table()
                 in_code_block = True
+                code_language = stripped.removeprefix("```").strip()
             continue
 
         if in_code_block:
@@ -176,22 +207,61 @@ def _render_markdown_body(markdown: str) -> str:
 
         if stripped.startswith("### "):
             flush_paragraph()
-            html_parts.append(f"<h3>{_render_inline(stripped[4:])}</h3>")
+            heading = stripped[4:]
+            heading_id = _heading_id(heading, used_heading_ids)
+            toc_items.append((3, heading_id, heading))
+            html_parts.append(f'<h3 id="{heading_id}">{_render_inline(heading)}</h3>')
         elif stripped.startswith("## "):
             flush_paragraph()
-            html_parts.append(f"<h2>{_render_inline(stripped[3:])}</h2>")
+            heading = stripped[3:]
+            heading_id = _heading_id(heading, used_heading_ids)
+            toc_items.append((2, heading_id, heading))
+            html_parts.append(f'<h2 id="{heading_id}">{_render_inline(heading)}</h2>')
         elif stripped.startswith("# "):
             flush_paragraph()
-            html_parts.append(f"<h1>{_render_inline(stripped[2:])}</h1>")
+            heading = stripped[2:]
+            heading_id = _heading_id(heading, used_heading_ids)
+            html_parts.append(f'<h1 id="{heading_id}">{_render_inline(heading)}</h1>')
         else:
             paragraph_lines.append(stripped)
 
     flush_paragraph()
     flush_table()
     if in_code_block:
-        html_parts.append(f"<pre><code>{escape(chr(10).join(code_lines))}</code></pre>")
+        code = escape(chr(10).join(code_lines))
+        if code_language == "mermaid":
+            html_parts.append(f'<pre class="mermaid">{code}</pre>')
+        else:
+            html_parts.append(f"<pre><code>{code}</code></pre>")
 
-    return "\n".join(html_parts)
+    return "\n".join([_render_toc(toc_items), *html_parts])
+
+
+def _heading_id(text: str, used_heading_ids: set[str]) -> str:
+    """heading text를 문서 안에서 유일한 anchor id로 변환합니다."""
+    normalized = re.sub(r"[^0-9A-Za-z가-힣]+", "-", text.lower()).strip("-")
+    heading_id = normalized or "section"
+    if heading_id not in used_heading_ids:
+        used_heading_ids.add(heading_id)
+        return heading_id
+
+    suffix = 2
+    while f"{heading_id}-{suffix}" in used_heading_ids:
+        suffix += 1
+    unique_heading_id = f"{heading_id}-{suffix}"
+    used_heading_ids.add(unique_heading_id)
+    return unique_heading_id
+
+
+def _render_toc(items: list[tuple[int, str, str]]) -> str:
+    """문서 heading 목록을 anchor 기반 목차로 렌더링합니다."""
+    if not items:
+        return ""
+    links = "".join(
+        f'<li class="level-{level}"><a href="#{heading_id}">{_render_inline(title)}</a></li>'
+        for level, heading_id, title in items
+    )
+    return f'<nav class="toc" aria-label="문서 목차"><strong>목차</strong><ol>{links}</ol></nav>'
 
 
 def _render_inline(text: str) -> str:

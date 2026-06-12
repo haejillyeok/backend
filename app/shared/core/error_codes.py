@@ -11,6 +11,10 @@ class ErrorCode(StrEnum):
     HTTP_ERROR = "HTTP_ERROR"
     AGENT_CLIENT_NOT_CONFIGURED = "AGENT_CLIENT_NOT_CONFIGURED"
     AGENT_HEALTH_UNAVAILABLE = "AGENT_HEALTH_UNAVAILABLE"
+    GAME_ROOM_NOT_FOUND = "GAME_ROOM_NOT_FOUND"
+    GAME_ROOM_START_FORBIDDEN = "GAME_ROOM_START_FORBIDDEN"
+    GAME_ROOM_NOT_STARTABLE = "GAME_ROOM_NOT_STARTABLE"
+    GAME_SESSION_ENTRY_FORBIDDEN = "GAME_SESSION_ENTRY_FORBIDDEN"
 
 
 class ErrorType(StrEnum):
@@ -97,6 +101,34 @@ ERROR_DEFINITIONS: dict[ErrorCode, ErrorDefinition] = {
         message="Agent health check failed.",
         http_status_code=502,
         websocket_close_code=1011,
+    ),
+    ErrorCode.GAME_ROOM_NOT_FOUND: ErrorDefinition(
+        code=ErrorCode.GAME_ROOM_NOT_FOUND,
+        type=ErrorType.NOT_FOUND,
+        message="객실을 찾을 수 없습니다.",
+        http_status_code=404,
+        websocket_close_code=1008,
+    ),
+    ErrorCode.GAME_ROOM_START_FORBIDDEN: ErrorDefinition(
+        code=ErrorCode.GAME_ROOM_START_FORBIDDEN,
+        type=ErrorType.AUTHORIZATION,
+        message="게임을 시작할 권한이 없습니다.",
+        http_status_code=403,
+        websocket_close_code=1008,
+    ),
+    ErrorCode.GAME_ROOM_NOT_STARTABLE: ErrorDefinition(
+        code=ErrorCode.GAME_ROOM_NOT_STARTABLE,
+        type=ErrorType.CONFLICT,
+        message="현재 객실 상태에서는 게임을 시작할 수 없습니다.",
+        http_status_code=409,
+        websocket_close_code=1008,
+    ),
+    ErrorCode.GAME_SESSION_ENTRY_FORBIDDEN: ErrorDefinition(
+        code=ErrorCode.GAME_SESSION_ENTRY_FORBIDDEN,
+        type=ErrorType.AUTHORIZATION,
+        message="이 게임 세션에 진입할 수 없습니다.",
+        http_status_code=403,
+        websocket_close_code=1008,
     ),
 }
 

@@ -48,6 +48,40 @@ Backend가 소유하는 게임 상태, WebSocket event, Agent 경계를 우선�
 7. 모든 라운드 종료 후 AI 지목 투표
 8. 총점 계산과 우승자 발표
 
+## REST Session Gate
+
+게임 진행 WebSocket을 붙이기 전에는 REST API로 게임 시작과 세션 진입 권한을 먼저 고정한다.
+
+- `POST /api/v1/game/rooms/{room_public_id}/start`
+  - `session_token` 쿠키로 현재 유저를 인증한다.
+  - 방장만 게임을 시작할 수 있다.
+  - 시작 판단 전에 room row를 lock해 같은 room의 동시 start 요청을 직렬화한다.
+  - 아직 종료되지 않은 active session이 이미 있으면 새 session을 만들지 않고 기존 `session_public_id`와 참가자 snapshot을 반환한다.
+  - room은 `waiting` 상태여야 하고, 방장은 활성 `game.room_members`에 포함되어야 한다.
+  - 시작 시 활성 room member를 `game.session_participants`의 실제 유저 참가자로 고정한다.
+  - 실제 유저 뒤에 AI 손님 1명을 `participant_type='ai'`, `is_uninvited_guest=true`로 추가한다.
+  - 응답은 `game_sessions.public_id`인 `session_public_id`를 반환한다.
+- `GET /api/v1/game/sessions/{session_public_id}/entry`
+  - `session_token` 쿠키로 현재 유저를 인증한다.
+  - 현재 유저가 해당 session의 실제 유저 참가자로 고정되어 있을 때만 `allowed=true`를 반환한다.
+  - 시작 시 확정된 참가자가 아닌 유저는 `GAME_SESSION_ENTRY_FORBIDDEN`으로 거부한다.
+
+이 REST gate는 `/ws/realtime`과 무관하다. `/ws/realtime`은 계속 ping/pong 연결 테스트용이고,
+이후 `/ws/lobby`, `/ws/match`는 같은 세션 참가자 권한 기준을 재사용해야 한다.
+
+REST handler 안에서 WebSocket 알림이 필요하면 API response에 WebSocket 객체를 담는 방식이
+아니라, 서버 process 안의 lobby connection manager를 호출해 이미 열린 room 연결에 event를
+broadcast한다. 단일 서버에서는 `room_public_id -> user_id -> websocket` registry에 직접
+`game.started`를 보내고, 여러 서버 instance에서는 Redis Pub/Sub, PostgreSQL NOTIFY, outbox 같은
+event bus를 통해 각 instance가 자신이 가진 연결에 broadcast한다.
+
+`/ws/match` 연결은 연결 시점에만 `session_token`으로 user_id를 복원하고,
+`user_id + session_public_id`로 `game.session_participants`를 조회해 내부 connection identity를
+`game_session_id + participant_id + user_id`로 고정한다. 연결이 성립한 뒤 match 진행 command는
+로그인 세션이 아니라 participant identity 기준으로 처리한다. 로그인 세션 만료는 진행 중 match를
+즉시 끊는 기준으로 쓰지 않고, 새 lobby 연결, 새 match 연결, 새 게임 시작 같은 새 권한 행위에서만
+다시 검증한다.
+
 ## Room and Session State
 
 권장 상태 흐름은 다음과 같다.

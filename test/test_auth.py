@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 import asyncio
 from uuid import uuid4
 
@@ -168,7 +168,7 @@ def test_login_endpoint_sets_session_cookie_for_auth_success():
                     )(),
                     "session_token": "plain-session-token",
                     "is_new_user": True,
-                    "expires_at": datetime(2026, 6, 12, tzinfo=UTC),
+                    "expires_at": datetime.now(UTC) + timedelta(days=1),
                 },
             )()
 
