@@ -1,6 +1,38 @@
+from datetime import datetime
 from uuid import UUID
 
 from app.be.schemas.base import SchemaModel
+
+
+class GameRoomSummaryResponse(SchemaModel):
+    room_public_id: UUID
+    name: str
+    game_type: str
+    status: str
+    max_players: int
+    member_count: int
+
+
+class GameRoomListResponse(SchemaModel):
+    rooms: list[GameRoomSummaryResponse]
+
+
+class CreateGameRoomResponse(SchemaModel):
+    room_public_id: UUID
+    name: str
+    game_type: str
+    status: str
+    max_players: int
+    member_count: int
+    created_at: datetime
+
+
+class RoomJoinResponse(SchemaModel):
+    room_public_id: UUID
+    user_public_id: UUID
+    nickname: str
+    joined_at: datetime
+    already_member: bool
 
 
 class GameSessionParticipantResponse(SchemaModel):

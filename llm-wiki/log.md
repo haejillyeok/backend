@@ -4,6 +4,26 @@
 코드 변경 상세는 Git history, PR, issue에서 확인하고, 이 파일에는 위키 페이지의 지식, 계약, 정책,
 컨벤션이 어떻게 바뀌었는지만 남깁니다.
 
+## [2026-06-12] maintenance | Add room lobby heartbeat and grace leave policy
+
+- `realtime-websocket.md`에 room 로비 WebSocket은 client `ping`을 heartbeat로 보고, 45초 timeout 후 연결을 닫으며, 90초 grace time 안에 재연결하지 않으면 DB 퇴장 처리한다는 기준을 추가했다.
+- `sunset-game-domain.md`에 grace 퇴장 확정 시 `game.room_members.left_at`을 기록하고 같은 room 연결에 `lobby.room.left`를 broadcast한다는 기준을 남겼다.
+
+## [2026-06-12] maintenance | Add REST room APIs and path-based lobby WebSocket
+
+- `realtime-websocket.md`에 객실 목록 조회, 객실 생성, 객실 참여는 REST API가 담당하고 `/ws/lobby/rooms/{room_public_id}`는 활성 room member만 연결하는 path 기반 room 로비 WebSocket이라는 기준을 반영했다.
+- `sunset-game-domain.md`에 room 생성 시 방장을 첫 room member로 등록하고, join 성공 후 같은 room WebSocket 연결에 `lobby.room.joined`를 broadcast한다는 현재 계약을 정리했다.
+
+## [2026-06-12] maintenance | Restructure websocket docs format
+
+- `realtime-websocket.md`에 `/ws-docs`는 한국어 사용자가 읽는 endpoint matrix, 공통 envelope, message direction, endpoint별 contract, error/close code 중심의 WebSocket reference 형식으로 관리한다는 기준을 추가했다.
+- WebSocket message heading은 `요청(Request)`, `응답(Response)`, `이벤트(Event)`처럼 한국어를 우선하고, 목차는 큰 섹션만 보여주며, 유저 플로우는 작은 Mermaid sequence diagram 여러 개로 나누어 관리한다는 기준을 남겼다.
+
+## [2026-06-12] maintenance | Add lobby websocket and room join contract
+
+- `realtime-websocket.md`에 `/ws/lobby`의 세션 쿠키 인증, room 구독 메시지, `lobby.room.joined` broadcast 기준을 추가했다.
+- `sunset-game-domain.md`에 room 참여는 REST API가 DB `game.room_members`에 저장하고, lobby WebSocket은 연결과 구독 상태만 process memory에 보관한다는 기준을 추가했다.
+
 ## [2026-06-12] maintenance | Add test coverage threshold
 
 - `code-conventions.md`에 `pytest`가 전체 `app` package coverage를 측정하고 총 coverage 90% 이상을 유지한다는 테스트 기준을 추가했다.

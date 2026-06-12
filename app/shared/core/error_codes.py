@@ -14,6 +14,8 @@ class ErrorCode(StrEnum):
     GAME_ROOM_NOT_FOUND = "GAME_ROOM_NOT_FOUND"
     GAME_ROOM_START_FORBIDDEN = "GAME_ROOM_START_FORBIDDEN"
     GAME_ROOM_NOT_STARTABLE = "GAME_ROOM_NOT_STARTABLE"
+    GAME_ROOM_NOT_JOINABLE = "GAME_ROOM_NOT_JOINABLE"
+    GAME_ROOM_ENTRY_FORBIDDEN = "GAME_ROOM_ENTRY_FORBIDDEN"
     GAME_SESSION_ENTRY_FORBIDDEN = "GAME_SESSION_ENTRY_FORBIDDEN"
 
 
@@ -121,6 +123,20 @@ ERROR_DEFINITIONS: dict[ErrorCode, ErrorDefinition] = {
         type=ErrorType.CONFLICT,
         message="현재 객실 상태에서는 게임을 시작할 수 없습니다.",
         http_status_code=409,
+        websocket_close_code=1008,
+    ),
+    ErrorCode.GAME_ROOM_NOT_JOINABLE: ErrorDefinition(
+        code=ErrorCode.GAME_ROOM_NOT_JOINABLE,
+        type=ErrorType.CONFLICT,
+        message="현재 객실 상태에서는 참여할 수 없습니다.",
+        http_status_code=409,
+        websocket_close_code=1008,
+    ),
+    ErrorCode.GAME_ROOM_ENTRY_FORBIDDEN: ErrorDefinition(
+        code=ErrorCode.GAME_ROOM_ENTRY_FORBIDDEN,
+        type=ErrorType.AUTHORIZATION,
+        message="이 객실에 진입할 수 없습니다.",
+        http_status_code=403,
         websocket_close_code=1008,
     ),
     ErrorCode.GAME_SESSION_ENTRY_FORBIDDEN: ErrorDefinition(

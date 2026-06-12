@@ -49,4 +49,5 @@ pool 크기와 timeout 같은 값은 코드에서 관리합니다.
 
 BE 서버의 `/ws/realtime` WebSocket 엔드포인트는 연결 테스트용 ping/pong 채널입니다.
 운영 HTTPS/TLS 앞단에서는 같은 path를 `wss://<host>/ws/realtime`로 노출합니다.
-해질녘 게임의 실제 실시간 통신은 `/ws/lobby`, `/ws/match`처럼 목적별 WebSocket endpoint로 분리합니다.
+해질녘 게임의 실제 실시간 통신은 `/ws/lobby/rooms/{room_public_id}`, `/ws/match`처럼
+목적별 WebSocket endpoint로 분리합니다.

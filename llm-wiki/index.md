@@ -46,7 +46,7 @@
 | [wiki/decisions/2026-06-05-request-audit-logging.md](wiki/decisions/2026-06-05-request-audit-logging.md) | HTTP 요청 시작, 완료, 실패를 shared 감사 로그 포맷으로 기록하는 AOP 관측 결정. gRPC 감사 기준은 2026-06-09 결정으로 대체됨 |
 | [wiki/decisions/2026-06-09-remove-application-grpc.md](wiki/decisions/2026-06-09-remove-application-grpc.md) | 애플리케이션 gRPC를 제거하고 FastAPI HTTP와 OTLP HTTP만 사용하기로 한 결정 |
 | [wiki/decisions/2026-06-11-agent-qdrant-mvp.md](wiki/decisions/2026-06-11-agent-qdrant-mvp.md) | Qdrant 후보 검색 기반 Agent MVP와 k3s/Azure reverse tunnel 운영 경계 결정 |
-| [wiki/decisions/2026-06-11-split-lobby-match-websockets.md](wiki/decisions/2026-06-11-split-lobby-match-websockets.md) | `/ws/realtime`은 연결 테스트용으로 두고 실제 게임 통신은 `/ws/lobby`, `/ws/match`로 분리하는 결정 |
+| [wiki/decisions/2026-06-11-split-lobby-match-websockets.md](wiki/decisions/2026-06-11-split-lobby-match-websockets.md) | `/ws/realtime`은 연결 테스트용으로 두고 실제 게임 통신은 room 로비 WebSocket과 `/ws/match`로 분리하는 결정 |
 
 ## Sources
 

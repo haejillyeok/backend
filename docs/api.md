@@ -65,6 +65,8 @@ router에 등록합니다. endpoint 본문에서 유저 ID가 필요하면 같�
 | `GAME_ROOM_NOT_FOUND` | `NOT_FOUND` | `404` | `1008` | 게임을 시작할 객실을 찾을 수 없음 |
 | `GAME_ROOM_START_FORBIDDEN` | `AUTHORIZATION` | `403` | `1008` | 방장 또는 허용된 멤버가 아닌 유저의 게임 시작 요청 |
 | `GAME_ROOM_NOT_STARTABLE` | `CONFLICT` | `409` | `1008` | 현재 객실 상태나 멤버 조건에서 게임 시작 불가 |
+| `GAME_ROOM_NOT_JOINABLE` | `CONFLICT` | `409` | `1008` | 현재 객실 상태나 정원 조건에서 객실 참여 불가 |
+| `GAME_ROOM_ENTRY_FORBIDDEN` | `AUTHORIZATION` | `403` | `1008` | 활성 room member가 아닌 유저의 객실 로비 WebSocket 연결 요청 |
 | `GAME_SESSION_ENTRY_FORBIDDEN` | `AUTHORIZATION` | `403` | `1008` | 게임 시작 시 확정된 참가자가 아닌 유저의 세션 진입 요청 |
 
 ## BE Health
@@ -154,10 +156,20 @@ Response:
 `session_participants`로 고정되고, 이후 세션 진입 API는 로그인 유저가 해당 참가자인지 확인합니다.
 `/ws/realtime`은 연결 테스트용으로 유지하며 이 API와 게임 상태를 공유하지 않습니다.
 
-이후 `/ws/lobby`를 붙일 때는 게임 시작 API handler가 DB commit 이후 lobby connection manager를
-호출해 이미 열려 있는 room 연결에 `game.started` event를 broadcast합니다. API가 WebSocket
-연결 객체를 클라이언트에 전달하는 것이 아니라, 서버 process 안의 connection registry에서
-`room_public_id -> user_id -> websocket` 형태로 잡고 있는 연결들에 event를 송신하는 방식입니다.
+로비의 영속 상태는 DB의 `game.rooms`, `game.room_members`로 관리합니다. 객실 목록 조회, 객실 생성,
+객실 참여는 REST API가 담당하고, `/ws/lobby/rooms/{room_public_id}`는 로그인 세션과 활성 room member
+여부를 연결 시점에 확인한 뒤 현재 연결만 process memory에 보관합니다. REST API가 DB 변경을 commit한
+뒤 필요한 event를 같은 객실 연결에 broadcast합니다.
+
+로비 WebSocket 클라이언트는 주기적으로 `ping`을 보내야 합니다. 서버는 마지막 메시지 이후 45초 동안
+새 메시지를 받지 못하면 연결을 닫고, 90초 grace time 안에 같은 유저가 같은 방으로 재연결하지 않으면
+`room_members.left_at`을 기록해 퇴장 처리합니다. 퇴장 확정 후 같은 방 연결에는 `lobby.room.left`
+event를 broadcast합니다.
+
+이후 `/ws/lobby/rooms/{room_public_id}`를 붙일 때는 게임 시작 API handler가 DB commit 이후
+lobby connection manager를 호출해 이미 열려 있는 room 연결에 `game.started` event를 broadcast합니다.
+API가 WebSocket 연결 객체를 클라이언트에 전달하는 것이 아니라, 서버 process 안의 connection registry에서
+`room_public_id -> websocket` 형태로 잡고 있는 연결들에 event를 송신하는 방식입니다.
 여러 서버 instance로 확장하면 같은 event를 Redis Pub/Sub, PostgreSQL NOTIFY, outbox 같은
 서버 간 event bus로 발행한 뒤 각 instance가 자신이 가진 WebSocket 연결에 broadcast해야 합니다.
 
@@ -167,6 +179,108 @@ Response:
 participant identity를 기준으로 처리하고, 로그인 세션 만료가 진행 중 match를 즉시 끊는 기준이
 되지는 않습니다. 새 lobby 연결, 새 match 연결, 새 게임 시작 같은 새 권한 행위는 다시 유효한
 로그인 세션이 필요합니다.
+
+### GET `/api/v1/game/rooms`
+
+로그인 유저가 로비에서 선택할 수 있는 닫히지 않은 객실 목록을 조회합니다. 이 API는 목록 snapshot만
+반환합니다. 특정 객실의 실시간 이벤트는 참여가 허용된 뒤
+`/ws/lobby/rooms/{room_public_id}`로 연결해 수신합니다.
+
+Response:
+
+```json
+{
+  "success": true,
+  "data": {
+    "rooms": [
+      {
+        "room_public_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7e",
+        "name": "첫 객실",
+        "game_type": "shiritori",
+        "status": "waiting",
+        "max_players": 4,
+        "member_count": 1
+      }
+    ]
+  }
+}
+```
+
+| Status | Meaning |
+| --- | --- |
+| `200` | 객실 목록 조회 성공 |
+| `401` / `SESSION_EXPIRED` | 로그인 세션 없음, 만료, 폐기 |
+
+### POST `/api/v1/game/rooms`
+
+로그인 유저를 방장으로 하는 대기 객실을 만들고, 같은 transaction에서 방장을 첫 활성
+`room_members`로 등록합니다. 성공 후 클라이언트는 응답의 `room_public_id`로
+`/ws/lobby/rooms/{room_public_id}`에 연결할 수 있습니다.
+
+Request:
+
+```json
+{
+  "name": "첫 객실",
+  "game_type": "shiritori",
+  "max_players": 4
+}
+```
+
+Response:
+
+```json
+{
+  "success": true,
+  "data": {
+    "room_public_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7e",
+    "name": "첫 객실",
+    "game_type": "shiritori",
+    "status": "waiting",
+    "max_players": 4,
+    "member_count": 1,
+    "created_at": "2026-06-12T00:00:00Z"
+  }
+}
+```
+
+| Status | Meaning |
+| --- | --- |
+| `201` | 객실 생성 성공 |
+| `401` / `SESSION_EXPIRED` | 로그인 세션 없음, 만료, 폐기 |
+| `422` / `VALIDATION_ERROR` | 요청 body validation 실패 |
+
+### POST `/api/v1/game/rooms/{room_public_id}/join`
+
+로그인 유저를 대기 중인 객실의 활성 `room_members`로 참여시킵니다. 이미 같은 room에 활성 멤버로
+참여 중이면 새 row를 만들지 않고 기존 참여 정보를 반환하므로 반복 요청에 멱등적으로 동작합니다.
+객실이 대기 상태가 아니거나 정원이 가득 찬 경우에는 참여할 수 없습니다.
+
+성공 후 서버는 같은 room의 `/ws/lobby/rooms/{room_public_id}` 연결에 `lobby.room.joined` event를
+broadcast합니다.
+
+Response:
+
+```json
+{
+  "success": true,
+  "data": {
+    "room_public_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7e",
+    "user_public_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7f",
+    "nickname": "초보자",
+    "joined_at": "2026-06-12T00:00:00Z",
+    "already_member": false
+  }
+}
+```
+
+| Status | Meaning |
+| --- | --- |
+| `200` | 객실 참여 성공 또는 이미 참여 중 |
+| `401` / `SESSION_EXPIRED` | 로그인 세션 없음, 만료, 폐기 |
+| `404` / `GAME_ROOM_NOT_FOUND` | 객실 없음 |
+| `409` / `GAME_ROOM_NOT_JOINABLE` | 객실이 대기 상태가 아니거나 정원 초과 |
+| `422` / `VALIDATION_ERROR` | path UUID validation 실패 |
 
 ### POST `/api/v1/game/rooms/{room_public_id}/start`
 
@@ -254,8 +368,8 @@ BE 서버의 WebSocket 연결 테스트용 엔드포인트입니다. 운영 환�
 로컬 개발에서는 `ws://127.0.0.1:8000/ws/realtime`를 사용할 수 있습니다.
 BE 서버에서 `GET /ws-docs`를 호출하면 WebSocket API 전용 문서 페이지를 조회할 수 있습니다.
 
-해질녘 게임의 실제 실시간 통신은 `/ws/realtime`을 확장하지 않고, 별도 `/ws/lobby`, `/ws/match`
-계약으로 분리합니다.
+해질녘 게임의 실제 실시간 통신은 `/ws/realtime`을 확장하지 않고, 별도
+`/ws/lobby/rooms/{room_public_id}`, `/ws/match` 계약으로 분리합니다.
 
 WebSocket 메시지는 JSON envelope를 사용합니다.
 

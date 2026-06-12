@@ -73,20 +73,31 @@ def test_ws_docs_renders_websocket_api_page():
     assert response.headers["content-type"].startswith("text/html")
     assert "content-disposition" not in response.headers
     assert '<h1 id="websocket-api">WebSocket API</h1>' in response.text
+    assert 'id="공통-메시지-규칙"' in response.text
+    assert 'id="메시지-방향"' in response.text
+    assert 'id="로비-websocket"' in response.text
     assert "wss://&lt;host&gt;/ws/realtime" in response.text
+    assert "wss://&lt;host&gt;/ws/lobby/rooms/{room_public_id}" in response.text
     assert "&quot;type&quot;: &quot;ping&quot;" in response.text
     assert "&quot;type&quot;: &quot;realtime.pong&quot;" in response.text
+    assert "요청(Request)" in response.text
+    assert "응답(Response)" in response.text
+    assert "이벤트(Event)" in response.text
 
 
-def test_ws_docs_renders_toc_and_mermaid_user_flow():
+def test_ws_docs_renders_toc_and_split_mermaid_user_flows():
     client = TestClient(create_app())
 
     response = client.get("/ws-docs")
 
     assert response.status_code == 200
     assert '<nav class="toc" aria-label="문서 목차">' in response.text
-    assert '<a href="#realtime">' in response.text
-    assert 'id="game-start-user-flow"' in response.text
-    assert '<pre class="mermaid">' in response.text
-    assert "sequenceDiagram" in response.text
+    assert '<a href="#로비-websocket">' in response.text
+    assert '<a href="#사용자-흐름">' in response.text
+    assert '<a href="#요청-request-ping">' not in response.text
+    assert 'id="로비-연결"' in response.text
+    assert 'id="객실-생성과-참여"' in response.text
+    assert 'id="게임-시작과-매치-연결"' in response.text
+    assert response.text.count('<pre class="mermaid">') == 3
+    assert response.text.count("sequenceDiagram") == 3
     assert "mermaid.initialize" in response.text

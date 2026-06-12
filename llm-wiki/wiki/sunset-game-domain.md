@@ -1,7 +1,7 @@
 ---
 title: Sunset Game Domain
 type: domain-model
-updated: 2026-06-11
+updated: 2026-06-12
 audience: ai
 ---
 
@@ -17,7 +17,7 @@ Backend가 소유하는 게임 상태, WebSocket event, Agent 경계를 우선�
 ## Product Contract
 
 - `/ws/realtime`은 연결 테스트용 ping/pong endpoint로만 사용한다.
-- 실제 게임 실시간 통신은 처음부터 BE `/ws/lobby`, `/ws/match` WebSocket으로 분리한다.
+- 실제 게임 실시간 통신은 처음부터 BE `/ws/lobby/rooms/{room_public_id}`, `/ws/match` WebSocket으로 분리한다.
 - 클라이언트는 서버 snapshot/event를 렌더링하고, 게임 상태의 최종 사실은 Backend가 가진다.
 - Agent는 AI 손님의 단어 후보를 제공한다. 방, 턴, 라운드, 점수, 투표, 승패 계산은 Backend 책임이다.
 - 게임 시작 시 AI 플레이어가 `Uninvited Guest`로 추가된다. 대기방에서 AI를 미리 포함시킬 필요는 없다.
@@ -52,6 +52,20 @@ Backend가 소유하는 게임 상태, WebSocket event, Agent 경계를 우선�
 
 게임 진행 WebSocket을 붙이기 전에는 REST API로 게임 시작과 세션 진입 권한을 먼저 고정한다.
 
+- `GET /api/v1/game/rooms`
+  - `session_token` 쿠키로 현재 유저를 인증한다.
+  - 닫히지 않은 room 목록과 활성 room member 수를 반환한다.
+  - 목록 조회는 snapshot이고, 특정 room의 실시간 이벤트는 room 참여 후 WebSocket으로 받는다.
+- `POST /api/v1/game/rooms`
+  - `session_token` 쿠키로 현재 유저를 인증한다.
+  - `waiting` 상태 room을 생성하고 방장을 첫 활성 `game.room_members`로 등록한다.
+  - 성공 응답의 `room_public_id`로 `/ws/lobby/rooms/{room_public_id}`에 연결할 수 있다.
+- `POST /api/v1/game/rooms/{room_public_id}/join`
+  - `session_token` 쿠키로 현재 유저를 인증한다.
+  - room row를 lock한 뒤 `waiting` 상태와 정원을 확인한다.
+  - 참여 정보는 DB의 `game.room_members`에 저장한다.
+  - 이미 활성 room member인 유저의 반복 요청은 새 row를 만들지 않고 기존 참여 정보를 반환한다.
+  - 성공 후 `/ws/lobby/rooms/{room_public_id}`의 같은 room 연결에 `lobby.room.joined`를 broadcast한다.
 - `POST /api/v1/game/rooms/{room_public_id}/start`
   - `session_token` 쿠키로 현재 유저를 인증한다.
   - 방장만 게임을 시작할 수 있다.
@@ -67,11 +81,19 @@ Backend가 소유하는 게임 상태, WebSocket event, Agent 경계를 우선�
   - 시작 시 확정된 참가자가 아닌 유저는 `GAME_SESSION_ENTRY_FORBIDDEN`으로 거부한다.
 
 이 REST gate는 `/ws/realtime`과 무관하다. `/ws/realtime`은 계속 ping/pong 연결 테스트용이고,
-이후 `/ws/lobby`, `/ws/match`는 같은 세션 참가자 권한 기준을 재사용해야 한다.
+`/ws/lobby/rooms/{room_public_id}`는 연결 시점에 `session_token`으로 유저 세션을 확인한 뒤 path의
+room에 대한 활성 member 여부를 DB로 확인한다. 별도 subscribe message는 사용하지 않고, path의
+room public_id가 연결의 이벤트 범위가 된다. room과 room member의 최종 사실은 DB이며, `/ws/match`는
+같은 세션 참가자 권한 기준을 재사용해야 한다.
+
+room 로비 연결은 heartbeat와 grace 퇴장 정책을 가진다. client가 주기적으로 `ping`을 보내고 서버는
+마지막 메시지 이후 45초 동안 새 메시지가 없으면 연결을 닫는다. 연결 종료 후 90초 안에 같은 유저가
+같은 room으로 재연결하면 퇴장 처리를 취소한다. 복귀하지 않으면 `game.room_members.left_at`을 기록하고
+같은 room 연결에 `lobby.room.left`를 broadcast한다.
 
 REST handler 안에서 WebSocket 알림이 필요하면 API response에 WebSocket 객체를 담는 방식이
 아니라, 서버 process 안의 lobby connection manager를 호출해 이미 열린 room 연결에 event를
-broadcast한다. 단일 서버에서는 `room_public_id -> user_id -> websocket` registry에 직접
+broadcast한다. 단일 서버에서는 `room_public_id -> websocket` registry에 직접
 `game.started`를 보내고, 여러 서버 instance에서는 Redis Pub/Sub, PostgreSQL NOTIFY, outbox 같은
 event bus를 통해 각 instance가 자신이 가진 연결에 broadcast한다.
 
@@ -149,18 +171,17 @@ lobby
 
 ## WebSocket Message Areas
 
-구현 시 구체적인 message type은 `/ws/lobby`, `/ws/match` 계약 문서와 함께 확정한다.
+구현 시 구체적인 message type은 `/ws/lobby/rooms/{room_public_id}`, `/ws/match` 계약 문서와 함께 확정한다.
 
 실시간 관심사는 처음부터 물리 endpoint를 분리해 설계한다.
 
-- `/ws/lobby`: 로비, 방 목록, 빠른 시작, 방 생성/입장/퇴장, 대기방, 준비 상태, 로비/방 채팅
+- `/ws/lobby/rooms/{room_public_id}`: 참여가 허용된 객실의 대기방, 준비 상태, 방 채팅, 시작 handoff
 - `/ws/match`: 실제 게임 세션, 라운드, 턴, 입력, 점수, 투표, 결과
 - `/ws/realtime`: ping/pong 연결 테스트용. 게임 상태를 다루지 않는다.
 
 Client command 후보:
 
-- lobby 구독/해제
-- room 생성, 입장, 나가기
+- room 나가기
 - room 준비 상태 변경
 - room 채팅 전송
 - quick start 요청/취소
@@ -247,7 +268,7 @@ Source: [`kkutu-analysis.md`](https://github.com/haejillyeok/frontend/blob/dev/d
 - 결과 공개 시점에 AI 정체와 원래 닉네임을 언제 공개할지
 - room/session/result를 메모리로만 관리할지 DB에 영속화할지
 - 로그인 전 게스트 플레이를 허용할지, 로그인 필수 게임으로 유지할지
-- 매치 중에도 `/ws/lobby` 연결을 유지할지, `/ws/match`만 유지하고 종료 후 재연결할지
+- 매치 중에도 `/ws/lobby/rooms/{room_public_id}` 연결을 유지할지, `/ws/match`만 유지하고 종료 후 재연결할지
 - AI Guest도 최종 우승자가 될 수 있는지, 플레이어가 AI를 찾지 못했을 때 AI에게 보상을 줄지
 - 5초 내 입력 점수와 10초 내 입력 점수가 배타적 구간인지 누적 보너스인지
 - 최대 8라운드의 라운드가 전체 참가자 1회전인지, 개별 턴 수인지

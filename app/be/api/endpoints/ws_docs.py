@@ -209,7 +209,6 @@ def _render_markdown_body(markdown: str) -> str:
             flush_paragraph()
             heading = stripped[4:]
             heading_id = _heading_id(heading, used_heading_ids)
-            toc_items.append((3, heading_id, heading))
             html_parts.append(f'<h3 id="{heading_id}">{_render_inline(heading)}</h3>')
         elif stripped.startswith("## "):
             flush_paragraph()

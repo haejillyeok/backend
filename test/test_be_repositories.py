@@ -177,6 +177,50 @@ async def test_game_repository_maps_locked_room_to_service_record() -> None:
     assert missing is None
 
 
+async def test_game_repository_lists_rooms_with_active_member_counts() -> None:
+    room = build_room(owner_user_id=uuid4())
+    repository = GameRepository(FakeDbSession([FakeResult(rows=[(room, 2)])]))
+
+    rooms = await repository.list_rooms()
+
+    assert len(rooms) == 1
+    assert rooms[0].room_public_id == room.public_id
+    assert rooms[0].name == "첫 객실"
+    assert rooms[0].member_count == 2
+
+
+async def test_game_repository_creates_waiting_room_record() -> None:
+    owner_user_id = uuid4()
+    db_session = FakeDbSession()
+    repository = GameRepository(db_session)
+
+    room = await repository.create_room(
+        owner_user_id=owner_user_id,
+        name="첫 객실",
+        game_type="shiritori",
+        status="waiting",
+        max_players=4,
+    )
+
+    assert room.owner_user_id == owner_user_id
+    assert room.name == "첫 객실"
+    assert room.status == "waiting"
+    assert isinstance(db_session.added[0], Room)
+    assert db_session.flush_count == 1
+
+
+async def test_game_repository_gets_room_without_lock_for_lobby_connection() -> None:
+    room = build_room(owner_user_id=uuid4())
+    repository = GameRepository(FakeDbSession([FakeResult(scalar=room), FakeResult(scalar=None)]))
+
+    found = await repository.get_room_by_public_id(room.public_id)
+    missing = await repository.get_room_by_public_id(uuid4())
+
+    assert found is not None
+    assert found.public_id == room.public_id
+    assert missing is None
+
+
 async def test_game_repository_returns_active_session_with_participant_snapshot() -> None:
     owner_id = uuid4()
     room = build_room(owner_user_id=owner_id)
@@ -233,6 +277,95 @@ async def test_game_repository_lists_room_members_in_repository_records() -> Non
     assert len(members) == 1
     assert members[0].user_id == user.id
     assert members[0].nickname == "손님1"
+
+
+async def test_game_repository_gets_active_room_member_record() -> None:
+    room_id = uuid4()
+    user = build_user(nickname="손님1")
+    member = RoomMember(
+        id=uuid4(),
+        room_id=room_id,
+        user_id=user.id,
+        joined_at=datetime(2026, 6, 12, tzinfo=UTC),
+    )
+    repository = GameRepository(
+        FakeDbSession(
+            [
+                FakeResult(row=(member, user)),
+                FakeResult(row=None),
+            ]
+        )
+    )
+
+    active_member = await repository.get_active_room_member(room_id=room_id, user_id=user.id)
+    missing_member = await repository.get_active_room_member(room_id=room_id, user_id=uuid4())
+
+    assert active_member is not None
+    assert active_member.user_id == user.id
+    assert active_member.nickname == "손님1"
+    assert missing_member is None
+
+
+async def test_game_repository_creates_room_member_record() -> None:
+    room_id = uuid4()
+    user_id = uuid4()
+    db_session = FakeDbSession()
+    repository = GameRepository(db_session)
+
+    member = await repository.create_room_member(
+        room_id=room_id,
+        user_id=user_id,
+        nickname="초보자",
+    )
+
+    assert member.room_id == room_id
+    assert member.user_id == user_id
+    assert member.nickname == "초보자"
+    assert isinstance(member.joined_at, datetime)
+    assert isinstance(db_session.added[0], RoomMember)
+    assert db_session.flush_count == 1
+
+
+async def test_game_repository_marks_active_room_member_left() -> None:
+    room_id = uuid4()
+    user = build_user(nickname="손님1")
+    room = build_room(owner_user_id=uuid4())
+    room.id = room_id
+    left_at = datetime(2026, 6, 12, tzinfo=UTC)
+    member = RoomMember(
+        id=uuid4(),
+        room_id=room_id,
+        user_id=user.id,
+        joined_at=datetime(2026, 6, 12, tzinfo=UTC),
+    )
+    db_session = FakeDbSession([FakeResult(row=(member, user, room))])
+    repository = GameRepository(db_session)
+
+    result = await repository.mark_room_member_left(
+        room_id=room_id,
+        user_id=user.id,
+        left_at=left_at,
+    )
+
+    assert result is not None
+    assert result.nickname == "손님1"
+    assert result.left_at == left_at
+    assert member.left_at == left_at
+    assert db_session.flush_count == 1
+
+
+async def test_game_repository_skips_leave_when_no_active_room_member() -> None:
+    db_session = FakeDbSession([FakeResult(row=None)])
+    repository = GameRepository(db_session)
+
+    result = await repository.mark_room_member_left(
+        room_id=uuid4(),
+        user_id=uuid4(),
+        left_at=datetime(2026, 6, 12, tzinfo=UTC),
+    )
+
+    assert result is None
+    assert db_session.flush_count == 0
 
 
 async def test_game_repository_creates_game_session_and_participant_snapshot() -> None:
