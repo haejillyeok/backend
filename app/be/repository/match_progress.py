@@ -12,7 +12,7 @@ from app.be.models.game import (
     ScoreLedger,
     SessionParticipant,
 )
-from app.be.models.game import SessionPhase, UsedWord, WordSubmission, WordTurn
+from app.be.models.game import SessionPhase, UsedWord, ValidWord, WordSubmission, WordTurn
 from app.be.schemas.game_enum import GameSessionStatus
 from app.be.services.match_progress import (
     AI_ANSWER_FAILED_EVENT_TYPE,
@@ -58,8 +58,7 @@ class MatchProgressRepository:
             session_id=game_session.id,
             participant_id=participant_id,
         )
-        turn, _ = await self._get_turn_actor(session_id=game_session.id, phase_id=phase.id)
-        participants = await self._list_participants(game_session.id)
+        await self._get_turn_actor(session_id=game_session.id, phase_id=phase.id)
 
         now = kst_now()
         action_number = await self._next_action_number(game_session.id)
@@ -84,21 +83,6 @@ class MatchProgressRepository:
         self.db_session.add(action)
         await self.db_session.flush()
 
-        # AI가 단어를 확정하지 못한 턴은 서버 판정으로 종료합니다.
-        phase.finished_at = now
-        phase.result_status = "failed"
-
-        next_items, transition_payload, next_turn_record, next_status, voting_deadline_at = (
-            self._build_round_end_transition(
-                game_session=game_session,
-                phase=phase,
-                turn=turn,
-                participant=participant,
-                participants=participants,
-                now=now,
-            )
-        )
-
         event_sequence = await self._next_event_sequence(game_session.id)
         event_payload = {
             "phase_id": str(phase.id),
@@ -110,7 +94,6 @@ class MatchProgressRepository:
             "details": details or {},
             "result_status": "failed",
         }
-        event_payload.update(transition_payload)
         event = GameEvent(
             session_id=game_session.id,
             phase_id=phase.id,
@@ -121,8 +104,6 @@ class MatchProgressRepository:
             payload=event_payload,
             created_at=now,
         )
-        for item in next_items:
-            self.db_session.add(item)
         self.db_session.add(event)
         await self.db_session.flush()
 
@@ -138,9 +119,6 @@ class MatchProgressRepository:
             reason=reason,
             details=details or {},
             created_at=now,
-            next_turn=next_turn_record,
-            next_status=next_status,
-            voting_deadline_at=voting_deadline_at,
         )
 
     async def commit(self) -> None:
@@ -282,6 +260,10 @@ class MatchProgressRepository:
                     "required_start_char": required_start_char,
                 },
             )
+        await self._ensure_word_is_valid(
+            game_type=game_session.game_type,
+            normalized_word=normalized_word,
+        )
         await self._ensure_word_not_used(
             session_id=game_session.id,
             normalized_word=normalized_word,
@@ -595,6 +577,20 @@ class MatchProgressRepository:
                 details={"reason": "word_already_used"},
             )
 
+    async def _ensure_word_is_valid(self, *, game_type: str, normalized_word: str) -> None:
+        result = await self.db_session.execute(
+            select(ValidWord).where(
+                ValidWord.game_type == game_type,
+                ValidWord.normalized_word == normalized_word,
+                ValidWord.is_active.is_(True),
+            )
+        )
+        if result.scalar_one_or_none() is None:
+            raise AppException(
+                code=ErrorCode.VALIDATION_ERROR,
+                details={"reason": "word_not_in_dictionary"},
+            )
+
     async def _list_participants(self, session_id: UUID) -> list[SessionParticipant]:
         result = await self.db_session.execute(
             select(SessionParticipant)
@@ -749,6 +745,8 @@ class MatchProgressRepository:
     def _word_rejection_score_delta(self, reason: str) -> int:
         """거절 사유별 단어 제출 페널티를 반환합니다."""
         if reason == "word_start_char_mismatch":
+            return -5
+        if reason == "word_not_in_dictionary":
             return -5
         if reason == "word_already_used":
             return -1

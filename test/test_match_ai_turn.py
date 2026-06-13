@@ -68,14 +68,20 @@ class FakeProgressService:
         self.submitted_words.append(kwargs)
         return MatchBroadcastEvent(
             game_session_public_id=kwargs["game_session_public_id"],
-            message={"type": "match.word.accepted", "payload": {"word": kwargs["word"]}},
+            message={
+                "type": "match.turn.resolved",
+                "payload": {"result": "accepted", "word": kwargs["word"]},
+            },
         )
 
     async def fail_ai_answer(self, **kwargs):
         self.failures.append(kwargs)
         return MatchBroadcastEvent(
             game_session_public_id=kwargs["game_session_public_id"],
-            message={"type": "match.turn.failed", "payload": {"reason": kwargs["reason"]}},
+            message={
+                "type": "match.turn.resolved",
+                "payload": {"result": "failed", "reason": kwargs["reason"]},
+            },
         )
 
 
@@ -149,7 +155,8 @@ async def test_match_ai_turn_service_requests_agent_with_used_words_and_submits_
         }
     ]
     assert event is not None
-    assert event.message["type"] == "match.word.accepted"
+    assert event.message["type"] == "match.turn.resolved"
+    assert event.message["payload"]["result"] == "accepted"
 
 
 async def test_match_ai_turn_service_records_failure_when_agent_has_no_candidate() -> None:
@@ -196,7 +203,8 @@ async def test_match_ai_turn_service_records_failure_when_agent_has_no_candidate
         }
     ]
     assert event is not None
-    assert event.message["type"] == "match.turn.failed"
+    assert event.message["type"] == "match.turn.resolved"
+    assert event.message["payload"]["result"] == "failed"
 
 
 async def test_match_ai_turn_service_records_failure_when_agent_request_fails() -> None:
@@ -232,7 +240,8 @@ async def test_match_ai_turn_service_records_failure_when_agent_request_fails() 
         "status_code": None,
     }
     assert event is not None
-    assert event.message["type"] == "match.turn.failed"
+    assert event.message["type"] == "match.turn.resolved"
+    assert event.message["payload"]["result"] == "failed"
 
 
 async def test_match_ai_turn_service_ignores_answer_when_phase_already_finished() -> None:
@@ -311,8 +320,8 @@ async def test_match_ai_turn_service_converts_late_answer_to_turn_timeout() -> N
             return MatchBroadcastEvent(
                 game_session_public_id=kwargs["game_session_public_id"],
                 message={
-                    "type": "match.turn.timeout",
-                    "payload": {"phase_id": kwargs["phase_id"]},
+                    "type": "match.turn.resolved",
+                    "payload": {"phase_id": kwargs["phase_id"], "result": "timeout"},
                 },
             )
 
@@ -336,7 +345,8 @@ async def test_match_ai_turn_service_converts_late_answer_to_turn_timeout() -> N
     )
 
     assert event is not None
-    assert event.message["type"] == "match.turn.timeout"
+    assert event.message["type"] == "match.turn.resolved"
+    assert event.message["payload"]["result"] == "timeout"
     assert progress_service.timeout_calls == [
         {
             "game_session_public_id": game_session_public_id,

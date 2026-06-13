@@ -65,7 +65,7 @@ def render_websocket_api_docs(markdown: str) -> str:
       line-height: 1.65;
     }}
     main {{
-      width: min(920px, calc(100% - 32px));
+      width: calc(100% - 32px);
       margin: 0 auto;
       padding: 44px 0 72px;
     }}
@@ -73,11 +73,11 @@ def render_websocket_api_docs(markdown: str) -> str:
       background: var(--panel);
       border: 1px solid var(--line);
       border-radius: 8px;
-      padding: 32px;
+      padding: 28px;
     }}
     h1, h2, h3 {{ line-height: 1.25; margin: 28px 0 12px; }}
     h1 {{ margin-top: 0; font-size: 32px; }}
-    h2 {{ border-top: 1px solid var(--line); padding-top: 24px; font-size: 24px; }}
+    h2 {{ font-size: 24px; }}
     h3 {{ font-size: 19px; }}
     p {{ margin: 10px 0; }}
     code {{
@@ -110,16 +110,75 @@ def render_websocket_api_docs(markdown: str) -> str:
     .toc ol {{ margin: 0; padding-left: 20px; }}
     .toc a {{ color: #1d4ed8; text-decoration: none; }}
     .toc a:hover {{ text-decoration: underline; }}
+    .doc-toolbar {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 0 0 18px;
+    }}
+    .doc-toolbar button {{
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #ffffff;
+      color: var(--text);
+      cursor: pointer;
+      font: inherit;
+      padding: 6px 10px;
+    }}
+    .doc-toolbar button:hover {{ background: #f0f3f8; }}
+    .doc-section {{
+      border-top: 1px solid var(--line);
+      padding: 18px 0 0;
+    }}
+    .doc-section + .doc-section {{ margin-top: 10px; }}
+    .doc-section > summary {{
+      align-items: center;
+      cursor: pointer;
+      display: flex;
+      gap: 10px;
+      list-style: none;
+      padding: 6px 0 12px;
+    }}
+    .doc-section > summary::-webkit-details-marker {{ display: none; }}
+    .doc-section > summary::before {{
+      border: solid var(--muted);
+      border-width: 0 2px 2px 0;
+      content: "";
+      display: inline-block;
+      height: 8px;
+      transform: rotate(-45deg);
+      transition: transform 0.15s ease;
+      width: 8px;
+    }}
+    .doc-section[open] > summary::before {{ transform: rotate(45deg); }}
+    .section-title {{
+      font-size: 24px;
+      font-weight: 700;
+      line-height: 1.25;
+    }}
     .mermaid {{
       background: #ffffff;
       color: var(--text);
       border: 1px solid var(--line);
       text-align: center;
     }}
+    @media (max-width: 720px) {{
+      main {{ width: calc(100% - 20px); padding: 20px 0 48px; }}
+      article {{ padding: 18px; }}
+      h1 {{ font-size: 26px; }}
+      .section-title {{ font-size: 21px; }}
+    }}
   </style>
   <script type="module">
     import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
     mermaid.initialize({{ startOnLoad: true, securityLevel: "strict" }});
+  </script>
+  <script>
+    function setDocSections(open) {{
+      document.querySelectorAll(".doc-section").forEach((section) => {{
+        section.open = open;
+      }});
+    }}
   </script>
 </head>
 <body>
@@ -144,6 +203,7 @@ def _render_markdown_body(markdown: str) -> str:
     in_code_block = False
     code_language = ""
     used_heading_ids: set[str] = set()
+    section_is_open = False
 
     def flush_paragraph() -> None:
         if paragraph_lines:
@@ -169,6 +229,12 @@ def _render_markdown_body(markdown: str) -> str:
                 f"<table><thead><tr>{header}</tr></thead><tbody>{body}</tbody></table>"
             )
         table_lines.clear()
+
+    def close_section() -> None:
+        nonlocal section_is_open
+        if section_is_open:
+            html_parts.append("</details>")
+            section_is_open = False
 
     for line in markdown.splitlines():
         stripped = line.strip()
@@ -212,12 +278,19 @@ def _render_markdown_body(markdown: str) -> str:
             html_parts.append(f'<h3 id="{heading_id}">{_render_inline(heading)}</h3>')
         elif stripped.startswith("## "):
             flush_paragraph()
+            close_section()
             heading = stripped[3:]
             heading_id = _heading_id(heading, used_heading_ids)
             toc_items.append((2, heading_id, heading))
-            html_parts.append(f'<h2 id="{heading_id}">{_render_inline(heading)}</h2>')
+            html_parts.append(
+                '<details class="doc-section" open>'
+                f'<summary id="{heading_id}"><span class="section-title">'
+                f"{_render_inline(heading)}</span></summary>"
+            )
+            section_is_open = True
         elif stripped.startswith("# "):
             flush_paragraph()
+            close_section()
             heading = stripped[2:]
             heading_id = _heading_id(heading, used_heading_ids)
             html_parts.append(f'<h1 id="{heading_id}">{_render_inline(heading)}</h1>')
@@ -232,8 +305,9 @@ def _render_markdown_body(markdown: str) -> str:
             html_parts.append(f'<pre class="mermaid">{code}</pre>')
         else:
             html_parts.append(f"<pre><code>{code}</code></pre>")
+    close_section()
 
-    return "\n".join([_render_toc(toc_items), *html_parts])
+    return "\n".join([_render_toc(toc_items), _render_doc_toolbar(), *html_parts])
 
 
 def _heading_id(text: str, used_heading_ids: set[str]) -> str:
@@ -261,6 +335,16 @@ def _render_toc(items: list[tuple[int, str, str]]) -> str:
         for level, heading_id, title in items
     )
     return f'<nav class="toc" aria-label="문서 목차"><strong>목차</strong><ol>{links}</ol></nav>'
+
+
+def _render_doc_toolbar() -> str:
+    """문서 섹션을 한 번에 펼치거나 접는 버튼을 렌더링합니다."""
+    return (
+        '<div class="doc-toolbar">'
+        '<button type="button" onclick="setDocSections(true)">모두 펼치기</button>'
+        '<button type="button" onclick="setDocSections(false)">모두 접기</button>'
+        "</div>"
+    )
 
 
 def _render_inline(text: str) -> str:

@@ -1,7 +1,7 @@
 ---
 title: Sunset Game Database Design
 type: schema-design
-updated: 2026-06-13
+updated: 2026-06-14
 audience: ai
 ---
 
@@ -36,6 +36,30 @@ DB는 게임의 최종 사실과 복구 가능한 기록을 저장한다.
 
 초기 설계에서 상태와 game type은 PostgreSQL enum보다 `text` column과 service validation으로 관리한다.
 게임 규칙과 상태 이름이 아직 변할 수 있으므로 migration churn을 줄이기 위한 선택이다.
+
+## Index Strategy
+
+현재 Backend 조회 패턴 기준 인덱스 원칙은 다음과 같다.
+
+- 외부 식별자 lookup인 `rooms.public_id`, `game_sessions.public_id`, `users.public_id`, 로그인 `account_id`,
+  닉네임, 세션 token hash는 unique index 또는 unique constraint로 관리한다.
+- `session_participants.resume_token_hash`는 match 재접속 credential이므로 null이 아닌 값만 대상으로 하는
+  partial unique index를 둔다.
+- 로비 목록은 닫히지 않은 방만 `created_at DESC`로 조회하므로 `rooms(created_at DESC) WHERE closed_at IS
+  NULL` partial index를 둔다.
+- 활성 room member 목록은 `room_id`, `left_at IS NULL`, `joined_at ASC` 패턴이므로
+  `room_members(room_id, joined_at) WHERE left_at IS NULL` partial index를 둔다. 활성 멤버 단건 중복 방지는
+  `room_members(room_id, user_id) WHERE left_at IS NULL` partial unique index가 담당한다.
+- room의 active game session 조회는 `room_id`, `ended_at IS NULL`, non-terminal status,
+  `started_at DESC LIMIT 1` 패턴이므로 `game_sessions(room_id, started_at DESC)` partial index를 둔다.
+- 점수판과 결과 집계는 `score_ledger.session_id`로 모아 `participant_id`별 합산하므로
+  `score_ledger(session_id, participant_id)` index를 둔다.
+- 단어 유효성 판정은 `word_game.valid_words(game_type, normalized_word)` unique constraint가 만드는
+  unique lookup index를 기준으로 한다. 현재 서버 로직에 시작 글자별 후보 조회가 없으므로
+  `starts_with` 별도 index는 두지 않는다.
+- `(session_id, sequence)`, `(session_id, action_number)`, `(session_id, phase_number)`,
+  `(session_id, seat_number)`, `(session_id, participant_id)`, `(session_id, normalized_word)`처럼 unique
+  constraint가 이미 prefix 조회를 커버하는 경우 같은 첫 column만 가진 별도 단일 index는 두지 않는다.
 
 ## Layering Strategy
 
@@ -331,6 +355,31 @@ MVP가 단어 게임만 구현하더라도 공통 core는 플랫폼 기준으로
 단어 게임군은 공통 `game.session_phases`와 `game.participant_actions`만으로도 기록할 수 있다.
 하지만 사용 단어 중복, 정규화 단어 조회, 사전 payload, Agent 후보 분석처럼 단어 게임에 특화된 조회와 제약이 필요하면
 `word_game` schema에 별도 table을 추가한다.
+
+### `word_game.valid_words`
+
+사용자와 AI가 제출할 수 있는 유효 단어셋이다. Backend는 `word.submit`과 AI answer 모두 이 table의 active
+row에 있는 단어만 accepted로 처리한다.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | UUID v7 | 내부 join용 primary key |
+| `game_type` | text | `shiritori`, `chosung`, `contains` 등 적용 게임 |
+| `word` | text | 표시용 원문 단어 |
+| `normalized_word` | text | 제출 판정과 중복 판정용 정규화 단어 |
+| `starts_with` | text | 시작 글자 후보 검색용 값 |
+| `ends_with` | text | 끝말잇기 다음 시작 글자 계산용 값 |
+| `is_active` | boolean | 현재 판정에 사용할 단어 여부 |
+| `source` | text nullable | 사전 출처 또는 import batch |
+| `created_at` | timestamptz | 등록 시각 |
+| `updated_at` | timestamptz | 수정 시각 |
+
+권장 제약:
+
+- `(game_type, normalized_word)` unique
+- 현재 단어 검증 쿼리는 `(game_type, normalized_word, is_active)` exact lookup이므로 unique index로 조회하고
+  `is_active`는 row 확인 시 필터링한다.
+- 시작 글자별 후보 조회 API가 생기면 `(game_type, starts_with) WHERE is_active IS TRUE` index를 그때 추가한다.
 
 ### `word_game.turns`
 

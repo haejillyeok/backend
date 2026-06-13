@@ -2,6 +2,8 @@ from datetime import datetime
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
+import pytest
+
 from app.be.models.game import (
     GameEvent,
     GameSession,
@@ -12,6 +14,7 @@ from app.be.models.game import (
 from app.be.models.game import SessionPhase, UsedWord, WordSubmission, WordTurn
 from app.be.repository.match_progress import MatchProgressRepository
 from app.be.services.match_progress import MatchProgressService
+from app.shared.core.exceptions import AppException
 
 
 KST = ZoneInfo("Asia/Seoul")
@@ -129,7 +132,7 @@ async def test_match_progress_service_commits_ai_failure_and_returns_broadcast_e
     assert repository.committed is True
     assert event.game_session_public_id == game_session_public_id
     assert event.message == {
-        "type": "match.turn.failed",
+        "type": "match.turn.resolved",
         "payload": {
             "event_sequence": 7,
             "phase_id": phase_id,
@@ -137,15 +140,19 @@ async def test_match_progress_service_commits_ai_failure_and_returns_broadcast_e
                 "display_name": "2번 손님",
                 "seat_number": 2,
             },
+            "result": "failed",
+            "word": None,
+            "normalized_word": None,
             "reason": "agent_timeout",
             "details": {"timeout_seconds": 3},
+            "score_delta": 0,
             "created_at": datetime(2026, 6, 13, tzinfo=KST),
         },
     }
     assert "participant_type" not in str(event.message)
 
 
-async def test_match_progress_service_includes_next_status_when_ai_failure_ends_game() -> None:
+async def test_match_progress_service_keeps_ai_failure_without_transition_payload() -> None:
     game_session_public_id = uuid4()
     phase_id = uuid4()
     participant_id = uuid4()
@@ -170,7 +177,6 @@ async def test_match_progress_service_includes_next_status_when_ai_failure_ends_
                 reason="agent_timeout",
                 details={"timeout_seconds": 3},
                 created_at=created_at,
-                next_status="voting",
             )
 
         async def commit(self) -> None:
@@ -188,7 +194,10 @@ async def test_match_progress_service_includes_next_status_when_ai_failure_ends_
     )
 
     assert repository.committed is True
-    assert event.message["payload"]["next_status"] == "voting"
+    assert event.message["payload"]["result"] == "failed"
+    assert "next_turn" not in event.message["payload"]
+    assert "next_status" not in event.message["payload"]
+    assert "voting_deadline_at" not in event.message["payload"]
 
 
 async def test_match_progress_service_ignores_stale_ai_failure_after_turn_finished() -> None:
@@ -266,7 +275,7 @@ async def test_match_progress_service_commits_turn_timeout_and_returns_broadcast
     assert repository.committed is True
     assert event is not None
     assert event.message == {
-        "type": "match.turn.timeout",
+        "type": "match.turn.resolved",
         "payload": {
             "event_sequence": 4,
             "phase_id": phase_id,
@@ -274,7 +283,12 @@ async def test_match_progress_service_commits_turn_timeout_and_returns_broadcast
                 "display_name": "1번 손님",
                 "seat_number": 1,
             },
+            "result": "timeout",
+            "word": None,
+            "normalized_word": None,
             "reason": "deadline_exceeded",
+            "details": {},
+            "score_delta": 0,
             "deadline_at": datetime(2026, 6, 13, 0, 0, 10, tzinfo=KST),
             "created_at": now,
         },
@@ -338,13 +352,16 @@ async def test_match_progress_service_commits_word_submission_and_returns_broadc
     )
 
     assert repository.committed is True
-    assert event.message["type"] == "match.word.accepted"
+    assert event.message["type"] == "match.turn.resolved"
     assert event.message["payload"]["participant"] == {
         "display_name": "1번 손님",
         "seat_number": 1,
     }
+    assert event.message["payload"]["result"] == "accepted"
     assert event.message["payload"]["word"] == "사과"
     assert event.message["payload"]["normalized_word"] == "사과"
+    assert event.message["payload"]["reason"] is None
+    assert event.message["payload"]["details"] == {}
     assert event.message["payload"]["score_delta"] == 10
     assert event.message["payload"]["next_turn"]["actor_seat_number"] == 2
     assert event.message["payload"]["next_turn"]["required_start_char"] == "과"
@@ -405,7 +422,7 @@ async def test_match_progress_service_commits_word_rejection_and_returns_broadca
 
     assert repository.committed is True
     assert event.message == {
-        "type": "match.word.rejected",
+        "type": "match.turn.resolved",
         "payload": {
             "event_sequence": 12,
             "phase_id": phase_id,
@@ -413,6 +430,7 @@ async def test_match_progress_service_commits_word_rejection_and_returns_broadca
                 "display_name": "1번 손님",
                 "seat_number": 1,
             },
+            "result": "rejected",
             "word": "사과",
             "normalized_word": "사과",
             "reason": "word_start_char_mismatch",
@@ -463,7 +481,6 @@ async def test_match_progress_repository_records_ai_answer_failure() -> None:
             FakeResult(scalar=phase),
             FakeResult(scalar=participant),
             FakeResult(row=(turn, participant)),
-            FakeResult(scalars=[participant]),
             FakeResult(scalar=4),
             FakeResult(scalar=8),
         ]
@@ -481,8 +498,7 @@ async def test_match_progress_repository_records_ai_answer_failure() -> None:
     await repository.commit()
 
     action = db_session.added[0]
-    voting_phase = db_session.added[1]
-    event = db_session.added[2]
+    event = db_session.added[1]
     assert isinstance(action, ParticipantAction)
     assert action.action_type == "ai_answer_failed"
     assert action.action_number == 5
@@ -494,24 +510,24 @@ async def test_match_progress_repository_records_ai_answer_failure() -> None:
         "reason": "agent_timeout",
         "details": {"timeout_seconds": 3},
     }
-    assert isinstance(voting_phase, SessionPhase)
-    assert voting_phase.phase_type == "voting"
     assert isinstance(event, GameEvent)
     assert event.sequence == 9
     assert event.event_type == "ai_answer_failed"
     assert event.payload["participant"] == {"display_name": "2번 손님", "seat_number": 2}
-    assert event.payload["next_status"] == "voting"
-    assert event.payload["voting_deadline_at"] == voting_phase.deadline_at.isoformat()
-    assert phase.result_status == "failed"
-    assert phase.finished_at is not None
+    assert event.payload["result_status"] == "failed"
+    assert "next_status" not in event.payload
+    assert "voting_deadline_at" not in event.payload
+    assert phase.result_status is None
+    assert phase.finished_at is None
     assert record.event_sequence == 9
     assert record.display_name == "2번 손님"
-    assert record.next_status == "voting"
+    assert record.next_status is None
+    assert record.next_turn is None
     assert db_session.flush_count == 2
     assert db_session.committed is True
 
 
-async def test_match_progress_repository_moves_to_voting_after_ai_failure_at_max_rounds() -> None:
+async def test_match_progress_repository_keeps_turn_open_after_ai_failure_at_max_rounds() -> None:
     session_id = uuid4()
     game_session_public_id = uuid4()
     phase_id = uuid4()
@@ -552,7 +568,6 @@ async def test_match_progress_repository_moves_to_voting_after_ai_failure_at_max
             FakeResult(scalar=phase),
             FakeResult(scalar=participant),
             FakeResult(row=(turn, participant)),
-            FakeResult(scalars=[participant]),
             FakeResult(scalar=4),
             FakeResult(scalar=8),
         ]
@@ -568,18 +583,17 @@ async def test_match_progress_repository_moves_to_voting_after_ai_failure_at_max
         response_ms=3000,
     )
 
-    action, voting_phase, event = db_session.added
+    action, event = db_session.added
     assert action.action_type == "ai_answer_failed"
-    assert isinstance(voting_phase, SessionPhase)
-    assert voting_phase.phase_type == "voting"
-    assert voting_phase.time_limit_seconds == 20
-    assert voting_phase.deadline_at is not None
-    assert event.payload["next_status"] == "voting"
-    assert event.payload["voting_deadline_at"] == voting_phase.deadline_at.isoformat()
-    assert game_session.status == "voting"
-    assert game_session.current_phase_id == voting_phase.id
+    assert event.payload["result_status"] == "failed"
+    assert "next_status" not in event.payload
+    assert "voting_deadline_at" not in event.payload
+    assert game_session.status == "in_progress"
+    assert game_session.current_phase_id == phase_id
+    assert phase.finished_at is None
+    assert phase.result_status is None
     assert record.next_turn is None
-    assert record.next_status == "voting"
+    assert record.next_status is None
 
 
 async def test_match_progress_repository_ignores_stale_ai_failure_after_phase_finished() -> None:
@@ -939,6 +953,7 @@ async def test_match_progress_repository_accepts_word_submission_and_starts_next
             FakeResult(scalar=game_session),
             FakeResult(scalar=phase),
             FakeResult(row=(turn, participant)),
+            FakeResult(scalar=object()),
             FakeResult(scalar=None),
             FakeResult(scalars=[participant, next_participant]),
             FakeResult(scalar=2),
@@ -994,6 +1009,80 @@ async def test_match_progress_repository_accepts_word_submission_and_starts_next
     assert record.next_turn.required_start_char == "과"
     assert db_session.flush_count == 1
     assert db_session.committed is True
+
+
+async def test_match_progress_repository_rejects_word_missing_from_dictionary() -> None:
+    session_id = uuid4()
+    game_session_public_id = uuid4()
+    phase_id = uuid4()
+    participant_id = uuid4()
+    next_participant_id = uuid4()
+    now = datetime(2026, 6, 13, 0, 0, 5, tzinfo=KST)
+    game_session = build_session(session_id, game_session_public_id)
+    game_session.current_phase_id = phase_id
+    phase = SessionPhase(
+        id=phase_id,
+        session_id=session_id,
+        phase_type="turn",
+        phase_number=1,
+        actor_participant_id=participant_id,
+        condition_payload={"required_start_char": None},
+        time_limit_seconds=10,
+        started_at=datetime(2026, 6, 13, tzinfo=KST),
+        deadline_at=datetime(2026, 6, 13, 0, 0, 10, tzinfo=KST),
+    )
+    turn = WordTurn(
+        id=uuid4(),
+        phase_id=phase_id,
+        participant_id=participant_id,
+        round_number=1,
+        turn_number=1,
+        condition_payload={"required_start_char": None},
+    )
+    participant = SessionParticipant(
+        id=participant_id,
+        session_id=session_id,
+        user_id=uuid4(),
+        participant_type="user",
+        display_name="1번 손님",
+        seat_number=1,
+        is_uninvited_guest=False,
+    )
+    next_participant = SessionParticipant(
+        id=next_participant_id,
+        session_id=session_id,
+        user_id=None,
+        participant_type="ai",
+        display_name="2번 손님",
+        seat_number=2,
+        is_uninvited_guest=True,
+    )
+    db_session = FakeDbSession(
+        [
+            FakeResult(scalar=game_session),
+            FakeResult(scalar=phase),
+            FakeResult(row=(turn, participant)),
+            FakeResult(scalar=None),
+            FakeResult(scalars=[participant, next_participant]),
+            FakeResult(scalar=2),
+            FakeResult(scalar=5),
+        ]
+    )
+    repository = MatchProgressRepository(db_session)
+
+    with pytest.raises(AppException) as exc_info:
+        await repository.record_word_submission(
+            game_session_public_id=game_session_public_id,
+            phase_id=phase_id,
+            participant_id=participant_id,
+            word="없는단어",
+            now=now,
+        )
+
+    assert exc_info.value.details == {"reason": "word_not_in_dictionary"}
+    assert db_session.added == []
+    assert phase.finished_at is None
+    assert game_session.current_phase_id == phase_id
 
 
 async def test_match_progress_repository_records_word_rejection_without_advancing_turn() -> None:

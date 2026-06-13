@@ -18,7 +18,11 @@ from app.shared.core.timezone import kst_now, to_kst_isoformat
 
 
 MatchMessage = dict[str, Any]
-WORD_REJECTION_REASONS = {"word_start_char_mismatch", "word_already_used"}
+WORD_REJECTION_REASONS = {
+    "word_already_used",
+    "word_not_in_dictionary",
+    "word_start_char_mismatch",
+}
 
 
 @dataclass(frozen=True)

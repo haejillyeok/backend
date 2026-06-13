@@ -408,110 +408,71 @@ Payload:
 }
 ```
 
-### 이벤트(Event): `match.word.accepted`
+### 이벤트(Event): `match.turn.resolved`
 
 방향: Server -> 같은 게임 세션에 연결된 client
 
-발생 시점: `word.submit`이 현재 턴, 제한 시간, 시작 글자, 중복 단어 검증을 통과하고 서버가 다음 턴을 생성한 뒤.
+발생 시점: 현재 턴이 제출, 거절, timeout, AI 실패 중 하나로 판정된 뒤.
+사용자와 AI의 단어 제출은 정답/오답 여부와 무관하게 같은 게임 세션에 연결된 모든 client에게 공개합니다.
+클라이언트는 `payload.result`로 판정 상태를 구분하고, `payload.word`와 `payload.normalized_word`로 실제 제출
+내용을 표시합니다. timeout과 AI 실패처럼 제출 단어가 없는 판정은 `word`, `normalized_word`가 `null`입니다.
+
+`payload.result` 값:
+
+| 값 | 의미 |
+| --- | --- |
+| `accepted` | 제출 단어가 현재 턴, 제한 시간, 시작 글자, 사전 등재, 중복 단어 검증을 통과했고 다음 턴이 생성됨 |
+| `rejected` | 제출 단어가 시작 글자 불일치, 사전 미등재, 중복 단어 같은 게임 규칙 검증에 실패함 |
+| `timeout` | 서버 기준 `current_turn.deadline_at`이 지나 현재 턴이 시간 초과로 확정됨 |
+| `failed` | AI 손님 차례에서 Agent API timeout, 네트워크 오류, `no_candidate` 등이 발생함 |
+
 다음 턴 actor가 AI인 경우 Backend는 현재 phase, 사용된 단어 목록, 시작 글자를 Agent answer API에 넘겨
 AI 답변을 받아 같은 제출 확정 경로로 처리할 수 있습니다. Agent answer 설정이 활성화되어 있으면
-`match.word.accepted` 이후 AI 턴 결과 또는 실패 이벤트가 같은 WebSocket 연결에 이어서 broadcast됩니다.
+사용자 `accepted` 이벤트 이후 AI 턴의 `accepted`, `rejected`, `timeout`, `failed` 판정이 같은 WebSocket
+연결에 이어서 broadcast됩니다.
+
+서버는 게임 규칙상 거절도 WebSocket 연결 오류로 처리하지 않습니다. `participant_actions`, `score_ledger`,
+`game_events`에 판정 기록을 저장하고 transaction commit 이후 `match.turn.resolved`를 broadcast합니다.
+거절된 경우 현재 턴은 유지되며 `next_turn`은 생성하지 않습니다. 사전에 없는 단어는
+`reason="word_not_in_dictionary"`로 거절합니다.
+
+AI 답변 실패도 즉시 다음 턴이나 투표로 넘기지 않습니다. 서버는 실패 action/event를 저장하고
+`result="failed"`를 broadcast하지만, 현재 phase는 deadline까지 유지합니다. 실제 턴 종료와 다음 판/투표
+전환은 서버 deadline에 도달해 `timeout`이 확정될 때만 일어납니다.
+
+서버 timeout 판단은 클라이언트 타이머가 아니라 서버 시각과 DB의 phase deadline을 기준으로 합니다.
+`/ws/match` 서버 루프는 heartbeat 대기 시간과 현재 턴 deadline 중 더 이른 시점까지만 client frame을
+기다리고, deadline이 먼저 도달하면 `turn_timeout` 확정을 시도합니다. deadline 이후 도착한 `word.submit`도
+연결 오류로 닫지 않고 같은 timeout 확정 경로로 처리합니다.
+
+timeout으로 현재 끝말잇기 한판이 종료되면 payload에는 다음 판 정보인 `next_turn` 또는 투표 전환을 뜻하는
+`next_status="voting"`과 `voting_deadline_at`이 포함될 수 있습니다.
 
 Payload:
 
 | 필드 | 타입 | 설명 |
 | --- | --- | --- |
 | `event_sequence` | number | 세션 안 event 순서 |
-| `phase_id` | uuid | 단어가 제출된 phase ID |
-| `participant.display_name` | string | 제출 참가자의 익명 표시명 |
-| `participant.seat_number` | number | 제출 참가자의 순서 |
-| `word` | string | 서버가 정규화해 저장한 제출 단어 |
-| `normalized_word` | string | 중복 방지에 사용하는 정규화 단어 |
-| `score_delta` | number | 제출 성공으로 부여된 점수 변화 |
+| `phase_id` | uuid | 판정이 확정된 phase ID |
+| `participant.display_name` | string | 판정 대상 참가자의 익명 표시명 |
+| `participant.seat_number` | number | 판정 대상 참가자의 순서 |
+| `result` | string | `accepted`, `rejected`, `timeout`, `failed` 중 하나 |
+| `word` | string/null | 제출 단어. 제출이 없는 timeout/AI 실패는 `null` |
+| `normalized_word` | string/null | 중복 방지에 사용하는 정규화 단어. 제출이 없으면 `null` |
+| `reason` | string/null | 거절, timeout, 실패 사유. accepted는 `null` |
+| `details` | object | 필요한 시작 글자, timeout 초, agent status 등 비식별 세부 정보 |
+| `score_delta` | number | 판정으로 발생한 점수 변화. 점수 변화가 없으면 0 |
+| `deadline_at` | datetime/null | timeout일 때 서버가 확정한 제한 시각 |
+| `next_turn` | object 또는 null | 남은 판이 있을 때 새로 생성된 다음 판 첫 턴 정보 |
 | `next_turn.phase_id` | uuid | 새로 생성된 다음 턴 phase ID |
 | `next_turn.round_number` | number | 다음 턴의 끝말잇기 판 번호 |
 | `next_turn.turn_number` | number | 다음 턴 번호 |
 | `next_turn.actor_seat_number` | number | 다음 차례 참가자의 순서 |
 | `next_turn.deadline_at` | datetime | 다음 턴의 서버 기준 제한 시각 |
-| `next_turn.required_start_char` | string | 다음 단어가 시작해야 하는 글자 |
-| `created_at` | datetime | 서버가 제출을 확정한 시각 |
-
-### 이벤트(Event): `match.word.rejected`
-
-방향: Server -> 같은 게임 세션에 연결된 client
-
-발생 시점: `word.submit`이 시작 글자 불일치, 중복 단어처럼 게임 규칙 검증에 실패한 뒤.
-이 이벤트는 WebSocket 연결 오류가 아니라 게임 안의 공개 판정이므로 서버는 `participant_actions`,
-`score_ledger`, `game_events`에 거절 기록을 저장하고 transaction commit 이후 broadcast합니다.
-현재 턴은 유지되며 `next_turn`은 생성하지 않습니다.
-
-Payload:
-
-| 필드 | 타입 | 설명 |
-| --- | --- | --- |
-| `event_sequence` | number | 세션 안 event 순서 |
-| `phase_id` | uuid | 단어가 거절된 phase ID |
-| `participant.display_name` | string | 제출 참가자의 익명 표시명 |
-| `participant.seat_number` | number | 제출 참가자의 순서 |
-| `word` | string | 클라이언트가 제출한 단어 |
-| `normalized_word` | string | 중복 방지에 사용하는 정규화 단어 |
-| `reason` | string | `word_start_char_mismatch`, `word_already_used` 같은 거절 사유 |
-| `details` | object | 필요한 시작 글자 등 비식별 세부 정보 |
-| `score_delta` | number | 거절로 적용된 점수 변화 |
-| `created_at` | datetime | 서버가 거절을 확정한 시각 |
-
-### 이벤트(Event): `match.turn.failed`
-
-방향: Server -> 같은 게임 세션에 연결된 client
-
-발생 시점: 서버가 현재 턴 실패를 확정한 뒤. 예를 들어 AI 손님의 차례에서 Agent API timeout, 네트워크 오류,
-`no_candidate` 같은 결과가 발생하면 Backend가 `participant_actions`, `game_events`에 실패를 저장하고
-transaction commit 이후 broadcast합니다.
-AI 실패로 현재 끝말잇기 판이 종료되면 payload에는 다음 판 정보인 `next_turn` 또는 투표 전환을 뜻하는
-`next_status="voting"`과 `voting_deadline_at`이 포함될 수 있습니다.
-
-Payload:
-
-| 필드 | 타입 | 설명 |
-| --- | --- | --- |
-| `event_sequence` | number | 세션 안 event 순서 |
-| `phase_id` | uuid | 실패가 확정된 phase ID |
-| `participant.display_name` | string | 실패 참가자의 익명 표시명 |
-| `participant.seat_number` | number | 실패 참가자의 순서 |
-| `reason` | string | `agent_timeout`, `agent_error`, `no_candidate` 같은 실패 사유 |
-| `details` | object | timeout 초, agent status 등 디버깅 가능한 비식별 세부 정보 |
-| `next_turn` | object 또는 null | 남은 판이 있을 때 새로 생성된 다음 판 첫 턴 정보 |
+| `next_turn.required_start_char` | string/null | 다음 단어가 시작해야 하는 글자 |
 | `next_status` | string 또는 null | 모든 판이 끝난 경우 다음 세션 상태. 현재는 `voting` |
 | `voting_deadline_at` | datetime/null | 투표가 강제 종료될 서버 기준 시각 |
-| `created_at` | datetime | 서버가 실패를 확정한 시각 |
-
-### 이벤트(Event): `match.turn.timeout`
-
-방향: Server -> 같은 게임 세션에 연결된 client
-
-발생 시점: 서버가 `current_turn.deadline_at`을 지난 턴을 timeout으로 확정한 뒤. 클라이언트 타이머는 표시용이고,
-실제 시간 초과 판단은 서버 시각과 DB의 phase deadline을 기준으로 합니다.
-`/ws/match` 서버 루프는 heartbeat 대기 시간과 현재 턴 deadline 중 더 이른 시점까지만 client frame을
-기다리고, deadline이 먼저 도달하면 `turn_timeout` 확정을 시도합니다.
-deadline 이후 도착한 `word.submit`도 연결 오류로 닫지 않고 같은 timeout 확정 경로로 처리해
-`match.turn.timeout`을 broadcast합니다.
-Timeout으로 현재 끝말잇기 판이 종료되면 payload에는 다음 판 정보인 `next_turn` 또는 투표 전환을 뜻하는
-`next_status="voting"`과 `voting_deadline_at`이 포함될 수 있습니다.
-
-Payload:
-
-| 필드 | 타입 | 설명 |
-| --- | --- | --- |
-| `event_sequence` | number | 세션 안 event 순서 |
-| `phase_id` | uuid | timeout이 확정된 phase ID |
-| `participant.display_name` | string | timeout 참가자의 익명 표시명 |
-| `participant.seat_number` | number | timeout 참가자의 순서 |
-| `reason` | string | 고정값 `deadline_exceeded` |
-| `deadline_at` | datetime | 서버가 확정한 제한 시각 |
-| `next_turn` | object 또는 null | 남은 판이 있을 때 새로 생성된 다음 판 첫 턴 정보 |
-| `next_status` | string 또는 null | 모든 판이 끝난 경우 다음 세션 상태. 현재는 `voting` |
-| `voting_deadline_at` | datetime/null | 투표가 강제 종료될 서버 기준 시각 |
-| `created_at` | datetime | 서버가 timeout을 확정한 시각 |
+| `created_at` | datetime | 서버가 판정을 확정한 시각 |
 
 ### 요청(Request): `vote.submit`
 
@@ -709,6 +670,47 @@ sequenceDiagram
     MatchWS->>DB: user_id + game_session_public_id 또는 game_session_token hash로 participant_id 확정
 ```
 
+### 게임 진행과 판정 동기화
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant User as 현재 턴 Client
+    participant Watcher as 같은 세션 Client
+    participant MatchWS as /ws/match
+    participant Progress as MatchProgressService
+    participant Agent as Agent API
+    participant DB as PostgreSQL
+
+    MatchWS-->>User: 이벤트 match.snapshot(current_turn)
+    MatchWS-->>Watcher: 이벤트 match.snapshot(current_turn)
+    User->>MatchWS: 요청 word.submit(phase_id, word)
+    MatchWS->>Progress: submit_word 또는 reject_word
+    Progress->>DB: action, submission, event, score 저장
+    DB-->>Progress: 판정 record
+    Progress-->>MatchWS: match.turn.resolved(result, word, score_delta, next_turn)
+    MatchWS-->>User: 이벤트 match.turn.resolved
+    MatchWS-->>Watcher: 이벤트 match.turn.resolved
+    alt 다음 actor가 AI
+        MatchWS->>Agent: used_words + required_start_char로 답변 요청
+        Agent-->>MatchWS: answer 또는 no_candidate/error
+        MatchWS->>Progress: submit_word 또는 fail_ai_answer
+        Progress->>DB: AI 판정 저장
+        Progress-->>MatchWS: match.turn.resolved(result, word/null)
+        MatchWS-->>User: 이벤트 match.turn.resolved
+        MatchWS-->>Watcher: 이벤트 match.turn.resolved
+        Note over MatchWS,Progress: AI 실패는 deadline까지 현재 턴 유지
+    else 서버 deadline 도달
+        MatchWS->>Progress: timeout_turn_if_due
+        Progress->>DB: timeout 저장
+        Progress-->>MatchWS: match.turn.resolved(result=timeout)
+        MatchWS-->>User: 이벤트 match.turn.resolved
+        MatchWS-->>Watcher: 이벤트 match.turn.resolved
+    end
+    Watcher->>MatchWS: 재접속
+    MatchWS-->>Watcher: 이벤트 match.snapshot(현재 턴/사용 단어/점수/결과)
+```
+
 ## 오류와 종료 코드
 
 잘못된 JSON, envelope 형식 오류, 지원하지 않는 message type은 서버가 `error` envelope를 보낸 뒤
@@ -734,13 +736,14 @@ sequenceDiagram
 }
 ```
 
-| 에러 코드 | 종료 코드 | 의미 |
-| --- | --- | --- |
-| `SESSION_EXPIRED` | `1008` | 연결 시점의 세션 쿠키 없음, 만료, 폐기 |
-| `GAME_ROOM_NOT_FOUND` | `1008` | path의 객실 없음 |
-| `GAME_ROOM_ENTRY_FORBIDDEN` | `1008` | 현재 유저가 path 객실의 활성 멤버가 아님 |
-| `VALIDATION_ERROR` | `1008` | JSON 또는 envelope 계약 위반 |
-| `HTTP_ERROR` | `1011` | 서버 내부 오류 |
+| 에러 코드 | 종료 코드 | 적용 endpoint | 의미 |
+| --- | --- | --- | --- |
+| `SESSION_EXPIRED` | `1008` | `/ws/lobby/rooms/{room_public_id}`, `/ws/match` | 연결 시점의 세션 쿠키 없음, 만료, 폐기 |
+| `GAME_ROOM_NOT_FOUND` | `1008` | `/ws/lobby/rooms/{room_public_id}` | path의 객실 없음 |
+| `GAME_ROOM_ENTRY_FORBIDDEN` | `1008` | `/ws/lobby/rooms/{room_public_id}` | 현재 유저가 path 객실의 활성 멤버가 아님 |
+| `GAME_SESSION_ENTRY_FORBIDDEN` | `1008` | `/ws/match` | 현재 유저 또는 재접속 token이 게임 세션 참가자로 확인되지 않음 |
+| `VALIDATION_ERROR` | `1008` | 전체 WebSocket | JSON, envelope, query, command payload 계약 위반 |
+| `HTTP_ERROR` | `1011` | 전체 WebSocket | 서버 내부 오류 |
 
 ## 테스트 클라이언트
 

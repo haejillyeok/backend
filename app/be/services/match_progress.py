@@ -7,15 +7,12 @@ from uuid import UUID
 
 
 AI_ANSWER_FAILED_EVENT_TYPE = "ai_answer_failed"
-AI_ANSWER_FAILED_MESSAGE_TYPE = "match.turn.failed"
 TURN_TIMEOUT_EVENT_TYPE = "turn_timeout"
-TURN_TIMEOUT_MESSAGE_TYPE = "match.turn.timeout"
 WORD_ACCEPTED_EVENT_TYPE = "word.accepted"
 WORD_REJECTED_EVENT_TYPE = "word.rejected"
 WORD_SUBMIT_ACTION_TYPE = "word_submit"
 WORD_REJECT_ACTION_TYPE = "word_reject"
-WORD_ACCEPTED_MESSAGE_TYPE = "match.word.accepted"
-WORD_REJECTED_MESSAGE_TYPE = "match.word.rejected"
+TURN_RESOLVED_MESSAGE_TYPE = "match.turn.resolved"
 
 
 @dataclass(frozen=True)
@@ -187,26 +184,23 @@ class MatchProgressService:
         if record is None:
             return None
         await self.repository.commit()
-        payload = {
+        payload: dict[str, Any] = {
             "event_sequence": record.event_sequence,
             "phase_id": record.phase_id,
             "participant": {
                 "display_name": record.display_name,
                 "seat_number": record.seat_number,
             },
+            "result": "failed",
+            "word": None,
+            "normalized_word": None,
             "reason": record.reason,
             "details": record.details,
+            "score_delta": 0,
             "created_at": record.created_at,
         }
         if record.next_turn is not None:
-            payload["next_turn"] = {
-                "phase_id": record.next_turn.phase_id,
-                "round_number": record.next_turn.round_number,
-                "turn_number": record.next_turn.turn_number,
-                "actor_seat_number": record.next_turn.actor_seat_number,
-                "deadline_at": record.next_turn.deadline_at,
-                "required_start_char": record.next_turn.required_start_char,
-            }
+            payload["next_turn"] = _serialize_next_turn(record.next_turn)
         if record.next_status is not None:
             payload["next_status"] = record.next_status
         if record.voting_deadline_at is not None:
@@ -214,7 +208,7 @@ class MatchProgressService:
         return MatchBroadcastEvent(
             game_session_public_id=record.game_session_public_id,
             message={
-                "type": AI_ANSWER_FAILED_MESSAGE_TYPE,
+                "type": TURN_RESOLVED_MESSAGE_TYPE,
                 "payload": payload,
             },
         )
@@ -234,26 +228,24 @@ class MatchProgressService:
         )
         if record is None:
             return None
-        payload = {
+        payload: dict[str, Any] = {
             "event_sequence": record.event_sequence,
             "phase_id": record.phase_id,
             "participant": {
                 "display_name": record.display_name,
                 "seat_number": record.seat_number,
             },
+            "result": "timeout",
+            "word": None,
+            "normalized_word": None,
             "reason": "deadline_exceeded",
+            "details": {},
+            "score_delta": 0,
             "deadline_at": record.deadline_at,
             "created_at": record.created_at,
         }
         if record.next_turn is not None:
-            payload["next_turn"] = {
-                "phase_id": record.next_turn.phase_id,
-                "round_number": record.next_turn.round_number,
-                "turn_number": record.next_turn.turn_number,
-                "actor_seat_number": record.next_turn.actor_seat_number,
-                "deadline_at": record.next_turn.deadline_at,
-                "required_start_char": record.next_turn.required_start_char,
-            }
+            payload["next_turn"] = _serialize_next_turn(record.next_turn)
         if record.next_status is not None:
             payload["next_status"] = record.next_status
         if record.voting_deadline_at is not None:
@@ -262,7 +254,7 @@ class MatchProgressService:
         return MatchBroadcastEvent(
             game_session_public_id=record.game_session_public_id,
             message={
-                "type": TURN_TIMEOUT_MESSAGE_TYPE,
+                "type": TURN_RESOLVED_MESSAGE_TYPE,
                 "payload": payload,
             },
         )
@@ -288,7 +280,7 @@ class MatchProgressService:
         return MatchBroadcastEvent(
             game_session_public_id=record.game_session_public_id,
             message={
-                "type": WORD_ACCEPTED_MESSAGE_TYPE,
+                "type": TURN_RESOLVED_MESSAGE_TYPE,
                 "payload": {
                     "event_sequence": record.event_sequence,
                     "phase_id": record.phase_id,
@@ -296,17 +288,13 @@ class MatchProgressService:
                         "display_name": record.display_name,
                         "seat_number": record.seat_number,
                     },
+                    "result": "accepted",
                     "word": record.word,
                     "normalized_word": record.normalized_word,
+                    "reason": None,
+                    "details": {},
                     "score_delta": record.score_delta,
-                    "next_turn": {
-                        "phase_id": record.next_turn.phase_id,
-                        "round_number": record.next_turn.round_number,
-                        "turn_number": record.next_turn.turn_number,
-                        "actor_seat_number": record.next_turn.actor_seat_number,
-                        "deadline_at": record.next_turn.deadline_at,
-                        "required_start_char": record.next_turn.required_start_char,
-                    },
+                    "next_turn": _serialize_next_turn(record.next_turn),
                     "created_at": record.created_at,
                 },
             },
@@ -337,7 +325,7 @@ class MatchProgressService:
         return MatchBroadcastEvent(
             game_session_public_id=record.game_session_public_id,
             message={
-                "type": WORD_REJECTED_MESSAGE_TYPE,
+                "type": TURN_RESOLVED_MESSAGE_TYPE,
                 "payload": {
                     "event_sequence": record.event_sequence,
                     "phase_id": record.phase_id,
@@ -345,6 +333,7 @@ class MatchProgressService:
                         "display_name": record.display_name,
                         "seat_number": record.seat_number,
                     },
+                    "result": "rejected",
                     "word": record.word,
                     "normalized_word": record.normalized_word,
                     "reason": record.reason,
@@ -354,3 +343,15 @@ class MatchProgressService:
                 },
             },
         )
+
+
+def _serialize_next_turn(next_turn: MatchTurnEventPayload) -> dict[str, Any]:
+    """다음 턴 record를 `match.turn.resolved` payload의 공통 객체로 변환합니다."""
+    return {
+        "phase_id": next_turn.phase_id,
+        "round_number": next_turn.round_number,
+        "turn_number": next_turn.turn_number,
+        "actor_seat_number": next_turn.actor_seat_number,
+        "deadline_at": next_turn.deadline_at,
+        "required_start_char": next_turn.required_start_char,
+    }

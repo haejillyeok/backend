@@ -32,7 +32,8 @@ updated: 2026-06-11
 
 - vLLM이 비활성화됐거나 호출/검증에 실패하면 `no_candidate`를 반환한다.
 - 생성 단어는 Qdrant에 자동 적재하지 않으며 사용 횟수 갱신 대상에도 포함하지 않는다.
-- 외부 사전 검증이 없으므로 생성 단어가 실제 사전에 등재된 단어인지 완전히 보장하지는 않는다.
+- Agent 단독으로는 생성 단어의 실제 사전 등재를 완전히 보장하지 않는다. Backend match domain은
+  `word_game.valid_words` active 단어셋으로 사용자/AI 제출의 최종 유효성을 판정한다.
 - 동일 `request_id` 재시도는 한 프로세스 안에서 Qdrant/vLLM/count 중복 실행을 막는다.
 - Pod 재시작이나 여러 Pod 간 완전한 멱등성 및 count 정합성은 Redis 도입 전까지 보장하지 않는다.
 - Azure Nginx와 tunnel 관리는 k3s manifest와 분리된 운영 책임이다.

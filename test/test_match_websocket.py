@@ -418,8 +418,9 @@ async def test_process_match_turn_timeout_broadcasts_event_and_returns_next_time
             return MatchBroadcastEvent(
                 game_session_public_id=game_session_public_id,
                 message={
-                    "type": "match.turn.timeout",
+                    "type": "match.turn.resolved",
                     "payload": {
+                        "result": "timeout",
                         "next_turn": {
                             "phase_id": next_phase_id,
                             "round_number": 2,
@@ -444,7 +445,8 @@ async def test_process_match_turn_timeout_broadcasts_event_and_returns_next_time
     )
 
     assert manager.broadcasts[0][0] == game_session_public_id
-    assert manager.broadcasts[0][1]["type"] == "match.turn.timeout"
+    assert manager.broadcasts[0][1]["type"] == "match.turn.resolved"
+    assert manager.broadcasts[0][1]["payload"]["result"] == "timeout"
     assert next_timer == MatchTurnTimer(phase_id=next_phase_id, deadline_at=next_deadline_at)
 
 
@@ -568,11 +570,12 @@ def test_match_websocket_accepts_word_submit_and_broadcasts_result() -> None:
             return MatchBroadcastEvent(
                 game_session_public_id=game_session_public_id,
                 message={
-                    "type": "match.word.accepted",
+                    "type": "match.turn.resolved",
                     "payload": {
                         "event_sequence": 1,
                         "phase_id": phase_id,
                         "participant": {"display_name": "1번 손님", "seat_number": 1},
+                        "result": "accepted",
                         "word": "사과",
                         "normalized_word": "사과",
                         "score_delta": 10,
@@ -612,7 +615,8 @@ def test_match_websocket_accepts_word_submit_and_broadcasts_result() -> None:
         )
         event = websocket.receive_json()
 
-    assert event["type"] == "match.word.accepted"
+    assert event["type"] == "match.turn.resolved"
+    assert event["payload"]["result"] == "accepted"
     assert event["payload"]["word"] == "사과"
     assert event["payload"]["next_turn"]["required_start_char"] == "과"
     assert progress_service.submitted_words
@@ -648,11 +652,12 @@ def test_match_websocket_triggers_ai_turn_after_word_submit_when_next_turn_is_ai
             return MatchBroadcastEvent(
                 game_session_public_id=game_session_public_id,
                 message={
-                    "type": "match.word.accepted",
+                    "type": "match.turn.resolved",
                     "payload": {
                         "event_sequence": 1,
                         "phase_id": phase_id,
                         "participant": {"display_name": "1번 손님", "seat_number": 1},
+                        "result": "accepted",
                         "word": "사과",
                         "normalized_word": "사과",
                         "score_delta": 10,
@@ -680,8 +685,9 @@ def test_match_websocket_triggers_ai_turn_after_word_submit_when_next_turn_is_ai
             return MatchBroadcastEvent(
                 game_session_public_id=game_session_public_id,
                 message={
-                    "type": "match.word.accepted",
+                    "type": "match.turn.resolved",
                     "payload": {
+                        "result": "accepted",
                         "word": "과자",
                         "normalized_word": "과자",
                         "next_turn": {
@@ -722,11 +728,13 @@ def test_match_websocket_triggers_ai_turn_after_word_submit_when_next_turn_is_ai
         ai_event = websocket.receive_json()
 
     assert user_event["payload"]["word"] == "사과"
+    assert user_event["payload"]["result"] == "accepted"
     assert ai_event["payload"]["word"] == "과자"
+    assert ai_event["payload"]["result"] == "accepted"
     assert ai_turn_service.played_turns
 
 
-def test_match_websocket_broadcasts_word_rejection_without_closing_on_rule_failure() -> None:
+def test_match_websocket_broadcasts_dictionary_rejection_without_closing() -> None:
     user = current_user()
     game_session_public_id = uuid4()
     participant_id = uuid4()
@@ -760,10 +768,7 @@ def test_match_websocket_broadcasts_word_rejection_without_closing_on_rule_failu
         async def submit_word(self, **kwargs):
             raise AppException(
                 code=ErrorCode.VALIDATION_ERROR,
-                details={
-                    "reason": "word_start_char_mismatch",
-                    "required_start_char": "가",
-                },
+                details={"reason": "word_not_in_dictionary"},
             )
 
         async def reject_word(self, **kwargs):
@@ -772,20 +777,21 @@ def test_match_websocket_broadcasts_word_rejection_without_closing_on_rule_failu
             assert kwargs["phase_id"] == phase_id
             assert kwargs["participant_id"] == participant_id
             assert kwargs["word"] == "사과"
-            assert kwargs["reason"] == "word_start_char_mismatch"
-            assert kwargs["details"] == {"required_start_char": "가"}
+            assert kwargs["reason"] == "word_not_in_dictionary"
+            assert kwargs["details"] == {}
             return MatchBroadcastEvent(
                 game_session_public_id=game_session_public_id,
                 message={
-                    "type": "match.word.rejected",
+                    "type": "match.turn.resolved",
                     "payload": {
                         "event_sequence": 1,
                         "phase_id": phase_id,
                         "participant": {"display_name": "1번 손님", "seat_number": 1},
+                        "result": "rejected",
                         "word": "사과",
                         "normalized_word": "사과",
-                        "reason": "word_start_char_mismatch",
-                        "details": {"required_start_char": "가"},
+                        "reason": "word_not_in_dictionary",
+                        "details": {},
                         "score_delta": -5,
                         "created_at": datetime(2026, 6, 13, 0, 0, 5, tzinfo=KST),
                     },
@@ -817,8 +823,9 @@ def test_match_websocket_broadcasts_word_rejection_without_closing_on_rule_failu
         websocket.send_json({"type": "ping", "payload": {"client_time": "after-reject"}})
         pong_event = websocket.receive_json()
 
-    assert rejected_event["type"] == "match.word.rejected"
-    assert rejected_event["payload"]["reason"] == "word_start_char_mismatch"
+    assert rejected_event["type"] == "match.turn.resolved"
+    assert rejected_event["payload"]["result"] == "rejected"
+    assert rejected_event["payload"]["reason"] == "word_not_in_dictionary"
     assert pong_event == {
         "type": "match.pong",
         "payload": {"client_time": "after-reject"},
@@ -870,11 +877,12 @@ def test_match_websocket_broadcasts_turn_timeout_without_closing_on_late_word_su
             return MatchBroadcastEvent(
                 game_session_public_id=game_session_public_id,
                 message={
-                    "type": "match.turn.timeout",
+                    "type": "match.turn.resolved",
                     "payload": {
                         "event_sequence": 3,
                         "phase_id": phase_id,
                         "participant": {"display_name": "1번 손님", "seat_number": 1},
+                        "result": "timeout",
                         "reason": "deadline_exceeded",
                         "deadline_at": datetime(2026, 6, 13, 0, 0, 10, tzinfo=KST),
                         "created_at": datetime(2026, 6, 13, 0, 0, 11, tzinfo=KST),
@@ -907,7 +915,8 @@ def test_match_websocket_broadcasts_turn_timeout_without_closing_on_late_word_su
         websocket.send_json({"type": "ping", "payload": {"client_time": "after-timeout"}})
         pong_event = websocket.receive_json()
 
-    assert timeout_event["type"] == "match.turn.timeout"
+    assert timeout_event["type"] == "match.turn.resolved"
+    assert timeout_event["payload"]["result"] == "timeout"
     assert timeout_event["payload"]["reason"] == "deadline_exceeded"
     assert pong_event == {
         "type": "match.pong",

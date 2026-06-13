@@ -499,3 +499,34 @@ class UsedWord(Base):
         nullable=False,
     )
     normalized_word: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class ValidWord(Base):
+    """단어 게임에서 제출 가능한 전체 유효 단어셋을 관리하는 ORM 모델입니다."""
+
+    __tablename__ = "valid_words"
+    __table_args__ = {"schema": WORD_GAME_SCHEMA}
+
+    id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        primary_key=True,
+        default=generate_uuid_v7,
+    )
+    game_type: Mapped[str] = mapped_column(Text, nullable=False)
+    word: Mapped[str] = mapped_column(Text, nullable=False)
+    normalized_word: Mapped[str] = mapped_column(Text, nullable=False)
+    starts_with: Mapped[str] = mapped_column(Text, nullable=False)
+    ends_with: Mapped[str] = mapped_column(Text, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    source: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=kst_now,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=kst_now,
+        onupdate=kst_now,
+    )

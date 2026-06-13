@@ -83,14 +83,31 @@ def test_ws_docs_renders_websocket_api_page():
     assert "요청(Request)" in response.text
     assert "응답(Response)" in response.text
     assert "이벤트(Event)" in response.text
+    assert "match.turn.resolved" in response.text
+    assert "SESSION_EXPIRED" in response.text
+    assert "GAME_ROOM_NOT_FOUND" in response.text
+    assert "GAME_ROOM_ENTRY_FORBIDDEN" in response.text
+    assert "GAME_SESSION_ENTRY_FORBIDDEN" in response.text
+    assert "VALIDATION_ERROR" in response.text
+    assert "HTTP_ERROR" in response.text
+    assert "match.word.accepted" not in response.text
+    assert "match.word.rejected" not in response.text
+    assert "match.turn.failed" not in response.text
+    assert "match.turn.timeout" not in response.text
 
 
-def test_ws_docs_renders_toc_and_split_mermaid_user_flows():
+def test_ws_docs_renders_full_width_collapsible_sections_and_split_mermaid_user_flows():
     client = TestClient(create_app())
 
     response = client.get("/ws-docs")
 
     assert response.status_code == 200
+    assert "width: calc(100% - 32px);" in response.text
+    assert 'class="doc-toolbar"' in response.text
+    assert 'class="doc-section"' in response.text
+    assert "<summary" in response.text
+    assert "모두 펼치기" in response.text
+    assert "모두 접기" in response.text
     assert '<nav class="toc" aria-label="문서 목차">' in response.text
     assert '<a href="#로비-websocket">' in response.text
     assert '<a href="#사용자-흐름">' in response.text
@@ -98,6 +115,7 @@ def test_ws_docs_renders_toc_and_split_mermaid_user_flows():
     assert 'id="로비-연결"' in response.text
     assert 'id="객실-생성과-참여"' in response.text
     assert 'id="게임-시작과-매치-연결"' in response.text
-    assert response.text.count('<pre class="mermaid">') == 3
-    assert response.text.count("sequenceDiagram") == 3
+    assert 'id="게임-진행과-판정-동기화"' in response.text
+    assert response.text.count('<pre class="mermaid">') == 4
+    assert response.text.count("sequenceDiagram") == 4
     assert "mermaid.initialize" in response.text

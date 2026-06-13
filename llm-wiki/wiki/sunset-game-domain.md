@@ -1,7 +1,7 @@
 ---
 title: Sunset Game Domain
 type: domain-model
-updated: 2026-06-13
+updated: 2026-06-14
 audience: ai
 ---
 
@@ -183,7 +183,8 @@ lobby
 - 제한 시간 내 입력하지 못하면 실패 처리된다.
 - 플레이어당 기본 입력 시간은 room `rule_config.turn_time_seconds`이며 기본값은 10초다.
 - 성공한 단어 제출은 같은 Round 안의 다음 Turn으로 이어진다.
-- 단어 실패, AI 답변 실패, 제한 시간 초과는 현재 Round를 종료한다.
+- 단어 실패와 AI 답변 실패는 공개 판정으로 기록하되 현재 턴을 유지한다.
+- 제한 시간 초과는 현재 Round를 종료한다.
 - 남은 Round가 있으면 다음 Round의 첫 Turn으로 넘어가고, `rule_config.max_rounds`를 채우면 AI 지목 투표로 넘어간다.
 - `max_rounds=8`이면 한 게임 세션에서 끝말잇기 8판을 마친 뒤 투표로 넘어간다.
 
@@ -332,7 +333,7 @@ idle -> matching -> settled -> countdown -> transitioning -> playing
 - `/ws/match` loop는 heartbeat 대기 시간과 현재 턴 또는 투표 deadline 중 더 이른 시점까지만 client
   frame을 기다리고, deadline이 먼저 도달하면 서버 기준 timeout 확정을 시도한다.
 - timeout이 확정된 턴은 `turn_timeout` action/event와 `session_phases.result_status=timeout`으로 저장하고,
-  commit 이후 `/ws/match` 연결에 `match.turn.timeout`을 보낸다.
+  commit 이후 `/ws/match` 연결에 `match.turn.resolved`를 `payload.result=timeout`으로 보낸다.
 - deadline 이후 도착한 `word.submit`도 연결 오류로 닫지 않고 같은 timeout 확정 경로로 처리한다.
 - Timeout으로 현재 끝말잇기 한판이 종료되면 남은 판이 있을 때 `next_turn`, 모든 판이 끝났을 때
   `next_status=voting`과 `voting_deadline_at`을 함께 보내 화면 전환을 동기화한다.
@@ -343,20 +344,23 @@ idle -> matching -> settled -> countdown -> transitioning -> playing
   `last_char`, `condition.last_char`로 함께 보낸다.
 - Agent가 `no_candidate`를 반환하면 Backend가 AI 손님의 실패/감점 또는 대체 정책을 결정한다.
 - Agent API timeout, 네트워크 오류, 4xx/5xx, invalid payload처럼 답변이 돌아오지 않는 경우도 Backend가
-  `ai_answer_failed` action/event로 확정하고, commit 이후 `/ws/match` 연결에 `match.turn.failed`를 보낸다.
-- AI 실패로 현재 끝말잇기 한판이 종료되는 경우도 timeout과 같은 전환 규칙을 적용해 `next_turn` 또는
-  `next_status=voting`, `voting_deadline_at`을 함께 보낸다.
+  `ai_answer_failed` action/event로 확정하고, commit 이후 `/ws/match` 연결에 `match.turn.resolved`를
+  `payload.result=failed`로 보낸다.
+- AI 실패는 현재 phase를 종료하거나 다음 턴/투표로 전환하지 않는다. 현재 턴은 deadline까지 유지하고,
+  실제 턴 종료와 다음 판/투표 전환은 `turn_timeout` 확정 경로만 담당한다.
 - Agent 호출 대기 중 서버 timeout 등으로 phase가 이미 종료된 경우, 뒤늦게 도착한 AI 성공/실패는 추가 event 없이
   무시한다.
 - AI 성공 답변이 도착했더라도 서버 deadline이 이미 지났으면 단어 제출로 저장하지 않고 `turn_timeout`으로
   확정한다.
-- 사용자가 `/ws/match`에 `word.submit`을 보내면 Backend가 현재 턴 actor, deadline, 시작 글자, 중복 단어를
-  검증한 뒤 제출/사용 단어/점수/다음 턴을 저장하고 commit 이후 `match.word.accepted`를 보낸다.
-- 시작 글자 불일치, 중복 단어처럼 게임 규칙상 거절된 단어 제출은 연결 오류로 처리하지 않는다. Backend는
-  `word_reject` action, score ledger, `word.rejected` event를 저장하고 commit 이후 `match.word.rejected`를
-  broadcast하며 현재 턴은 유지한다.
+- 사용자가 `/ws/match`에 `word.submit`을 보내면 Backend가 현재 턴 actor, deadline, 시작 글자, 사전 등재,
+  중복 단어를 검증한 뒤 제출/사용 단어/점수/다음 턴을 저장하고 commit 이후 `match.turn.resolved`를
+  `payload.result=accepted`로 보낸다.
+- 시작 글자 불일치, 사전 미등재, 중복 단어처럼 게임 규칙상 거절된 단어 제출은 연결 오류로 처리하지 않는다. Backend는
+  `word_reject` action, score ledger, `word.rejected` event를 저장하고 commit 이후 `match.turn.resolved`를
+  `payload.result=rejected`로 broadcast하며 현재 턴은 유지한다. 제출이 있는 `accepted`/`rejected` 판정은
+  정답 여부와 무관하게 `word`, `normalized_word`를 모든 연결 client에 공개한다.
 - 다음 턴이 AI actor이고 Agent answer 설정이 활성화되어 있으면 Backend가 바로 AI 턴을 실행해 추가
-  `match.word.accepted` 또는 `match.turn.failed` event를 같은 세션에 broadcast한다.
+  `match.turn.resolved` event를 같은 세션에 broadcast한다.
 - `voting` 상태에서 `/ws/match`의 `vote.submit`은 `target_seat_number`만 받는다. 투표 저장 후
   `match.vote.accepted`를 보내고, 모든 실제 유저가 투표하면 `SessionResult`와 투표 점수 ledger를 저장한
   뒤 `match.result.published`를 같은 세션에 broadcast한다.

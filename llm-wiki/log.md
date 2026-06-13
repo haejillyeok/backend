@@ -4,6 +4,27 @@
 코드 변경 상세는 Git history, PR, issue에서 확인하고, 이 파일에는 위키 페이지의 지식, 계약, 정책,
 컨벤션이 어떻게 바뀌었는지만 남깁니다.
 
+## [2026-06-14] maintenance | Clarify WebSocket error code contract
+
+- `/ws-docs`의 WebSocket error/close code 표는 lobby, realtime, match 공개 경로 기준으로 6개 코드를 노출한다는 기준을 정리했다.
+- match 연결 실패 코드인 `GAME_SESSION_ENTRY_FORBIDDEN`도 WebSocket 문서의 공개 오류 코드에 포함해야 한다는 기준을 추가했다.
+
+## [2026-06-14] maintenance | Add valid word dictionary contract
+
+- 단어 제출과 AI answer는 `word_game.valid_words`의 active 단어셋을 기준으로 유효성을 판정하고, 사전 미등재 단어는 `word_not_in_dictionary` 거절로 broadcast한다는 기준을 추가했다.
+- AI answer timeout/error/no_candidate는 현재 턴을 즉시 종료하지 않고 실패 event만 기록하며, 실제 다음 턴/투표 전환은 서버 deadline timeout 확정 경로만 담당한다는 기준을 정리했다.
+
+## [2026-06-14] maintenance | Add game database index strategy
+
+- 로비 목록, 활성 room member 목록, active game session 조회, 점수판 집계, match 재접속 token 조회에 맞춘 현재 게임 DB index 전략을 `sunset-game-database-design.md`에 추가했다.
+- 복합 unique constraint가 prefix 조회를 커버하는 경우 같은 첫 column만 가진 단일 index를 별도로 두지 않는다는 기준을 정리했다.
+
+## [2026-06-14] maintenance | Unify match turn result event contract
+
+- `/ws/match`의 단어 성공, 단어 거절, 턴 timeout, AI 답변 실패 public broadcast를 `match.turn.resolved` 하나로 통합하고, 판정 차이는 `payload.result`의 `accepted`, `rejected`, `timeout`, `failed` 값으로 구분한다는 기준을 반영했다.
+- 제출이 있는 `accepted`/`rejected` 판정은 정답 여부와 무관하게 `word`, `normalized_word`를 같은 게임 세션의 모든 연결 client에 공개한다는 계약을 정리했다.
+- `/ws-docs`는 전체 가로 폭을 사용하고 큰 섹션을 접고 펼칠 수 있으며, 게임 진행과 판정 동기화 Mermaid 흐름을 포함한다는 문서 운영 기준을 추가했다.
+
 ## [2026-06-13] maintenance | Align current match MVP docs with implementation
 
 - 끝말잇기 현재 Backend MVP 규칙을 단어 성공/거절, 실패/timeout 라운드 종료, 투표 점수 기준으로 정리하고, Cycle 시간 감소와 시간/길이 보너스는 확장 후보로 분리했다.
