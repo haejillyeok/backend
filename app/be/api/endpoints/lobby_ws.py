@@ -1,5 +1,4 @@
 import asyncio
-from datetime import UTC, datetime
 from time import perf_counter
 from typing import Annotated
 from uuid import UUID
@@ -20,6 +19,7 @@ from app.be.services.lobby import (
 )
 from app.shared.core.observability import get_websocket_metrics, start_span
 from app.shared.core.exceptions import AppException
+from app.shared.core.timezone import kst_now, to_kst_isoformat
 
 
 router = APIRouter(prefix="/ws", tags=["websocket"])
@@ -73,6 +73,14 @@ async def lobby_websocket(
         message_type="lobby.room.connected",
         direction="outbound",
     )
+    if connection.snapshot is not None:
+        await lobby_connection_manager.send_snapshot(websocket, connection.snapshot)
+        metrics.record_message(
+            ws_route=LOBBY_WS_ROUTE,
+            ws_endpoint=LOBBY_WS_ENDPOINT,
+            message_type="lobby.room.snapshot",
+            direction="outbound",
+        )
     try:
         while True:
             raw_message = await asyncio.wait_for(
@@ -161,7 +169,7 @@ def schedule_room_leave_after_grace(websocket: WebSocket, disconnect: LobbyDisco
                 result = await game_service.leave_room_after_disconnect_grace(
                     room_public_id=disconnect.room_public_id,
                     user=disconnect.user,
-                    left_at=datetime.now(UTC),
+                    left_at=kst_now(),
                 )
         if result is None:
             return
@@ -170,10 +178,18 @@ def schedule_room_leave_after_grace(websocket: WebSocket, disconnect: LobbyDisco
             {
                 "type": "lobby.room.left",
                 "payload": {
-                    "room_public_id": result.room_public_id,
-                    "user_public_id": result.user_public_id,
+                    "room_public_id": str(result.room_public_id),
+                    "user_public_id": str(result.user_public_id),
                     "nickname": result.nickname,
-                    "left_at": result.left_at,
+                    "left_at": to_kst_isoformat(result.left_at),
+                    "remaining_member_count": result.remaining_member_count,
+                    "new_owner_user_public_id": (
+                        str(result.new_owner_user_public_id)
+                        if result.new_owner_user_public_id
+                        else None
+                    ),
+                    "new_owner_nickname": result.new_owner_nickname,
+                    "room_closed": result.room_closed,
                 },
             },
         )

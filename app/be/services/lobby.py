@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 from collections.abc import Awaitable, Callable
 from uuid import UUID
@@ -11,18 +11,16 @@ from fastapi import WebSocket
 from fastapi.encoders import jsonable_encoder
 
 from app.be.services.auth import CurrentUser
+from app.be.services.game import RoomLobbySnapshotResult
 from app.be.services.realtime import parse_realtime_message
 from app.shared.core.error_codes import ErrorCode
 from app.shared.core.exceptions import AppException
+from app.shared.core.timezone import kst_now, to_kst_isoformat
 
 
 LobbyMessage = dict[str, Any]
 LOBBY_HEARTBEAT_TIMEOUT_SECONDS = 45
 LOBBY_DISCONNECT_GRACE_SECONDS = 90
-
-
-def _utc_now() -> datetime:
-    return datetime.now(UTC)
 
 
 @dataclass(frozen=True)
@@ -83,7 +81,7 @@ class LobbyConnectionManager:
         self._connections[websocket] = LobbyConnection(
             user=user,
             room_public_id=room_public_id,
-            last_seen_at=now or _utc_now(),
+            last_seen_at=now or kst_now(),
         )
         self._user_connections.setdefault(user.id, set()).add(websocket)
         self._room_subscriptions.setdefault(room_public_id, set()).add(websocket)
@@ -123,7 +121,7 @@ class LobbyConnectionManager:
         self._connections[websocket] = LobbyConnection(
             user=connection.user,
             room_public_id=connection.room_public_id,
-            last_seen_at=now or _utc_now(),
+            last_seen_at=now or kst_now(),
         )
 
     def is_heartbeat_expired(
@@ -135,7 +133,7 @@ class LobbyConnectionManager:
     ) -> bool:
         """마지막 ping 이후 timeout 기준을 넘었는지 반환합니다."""
         connection = self._connections[websocket]
-        return ((now or _utc_now()) - connection.last_seen_at).total_seconds() > timeout_seconds
+        return ((now or kst_now()) - connection.last_seen_at).total_seconds() > timeout_seconds
 
     def schedule_grace_leave(
         self,
@@ -193,6 +191,28 @@ class LobbyConnectionManager:
                         "account_id": connection.user.account_id,
                         "nickname": connection.user.nickname,
                     },
+                },
+            },
+        )
+
+    async def send_snapshot(self, websocket: WebSocket, snapshot: RoomLobbySnapshotResult) -> None:
+        """연결 직후 room 화면을 초기화할 활성 멤버 snapshot event를 보냅니다."""
+        await self.send(
+            websocket,
+            {
+                "type": "lobby.room.snapshot",
+                "payload": {
+                    "room_public_id": snapshot.room_public_id,
+                    "owner_user_public_id": snapshot.owner_user_public_id,
+                    "members": [
+                        {
+                            "user_public_id": member.user_public_id,
+                            "nickname": member.nickname,
+                            "is_owner": member.is_owner,
+                            "joined_at": to_kst_isoformat(member.joined_at),
+                        }
+                        for member in snapshot.members
+                    ],
                 },
             },
         )

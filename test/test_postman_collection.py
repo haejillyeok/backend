@@ -59,14 +59,14 @@ def test_create_be_collection_adds_useful_sample_bodies():
     create_room = next(item for item in items if item["name"] == "로비 객실 생성")
 
     assert signup["request"]["body"]["raw"] == (
-        '{\n'
+        "{\n"
         '  "account_id": "{{accountId}}",\n'
         '  "nickname": "{{nickname}}",\n'
         '  "password": "{{password}}"\n'
         "}"
     )
     assert create_room["request"]["body"]["raw"] == (
-        '{\n'
+        "{\n"
         '  "name": "{{roomName}}",\n'
         '  "game_type": "{{gameType}}",\n'
         '  "max_players": {{maxPlayers}}\n'
@@ -88,7 +88,7 @@ def test_create_be_collection_stores_auth_session_cookie_in_environment():
 
         assert auth_event["listen"] == "test"
         assert 'pm.environment.set("sessionToken", sessionToken);' in script
-        assert 'setCookie.match(/session_token=([^;]+)/);' in script
+        assert "setCookie.match(/session_token=([^;]+)/);" in script
 
 
 def test_create_local_environment_contains_editable_postman_variables():

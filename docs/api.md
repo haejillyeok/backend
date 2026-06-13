@@ -135,7 +135,7 @@ Response:
       "account_id": "player_001",
       "nickname": "초보자"
     },
-    "expires_at": "2026-06-12T00:00:00Z"
+    "expires_at": "2026-06-12T00:00:00+09:00"
   }
 }
 ```
@@ -172,7 +172,7 @@ Response:
       "account_id": "player_001",
       "nickname": "초보자"
     },
-    "expires_at": "2026-06-12T00:00:00Z"
+    "expires_at": "2026-06-12T00:00:00+09:00"
   }
 }
 ```
@@ -248,9 +248,22 @@ Response:
         "game_type": "shiritori",
         "status": "waiting",
         "max_players": 4,
-        "member_count": 1
+        "member_count": 1,
+        "is_current_user_member": true,
+        "is_current_user_owner": true,
+        "lobby_websocket_path": "/ws/lobby/rooms/018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7e"
       }
-    ]
+    ],
+    "current_membership": {
+      "room_public_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7e",
+      "name": "첫 객실",
+      "game_type": "shiritori",
+      "status": "waiting",
+      "max_players": 4,
+      "member_count": 1,
+      "is_owner": true,
+      "lobby_websocket_path": "/ws/lobby/rooms/018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7e"
+    }
   }
 }
 ```
@@ -288,7 +301,7 @@ Response:
     "status": "waiting",
     "max_players": 4,
     "member_count": 1,
-    "created_at": "2026-06-12T00:00:00Z"
+    "created_at": "2026-06-12T00:00:00+09:00"
   }
 }
 ```
@@ -317,7 +330,7 @@ Response:
     "room_public_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7e",
     "user_public_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7f",
     "nickname": "초보자",
-    "joined_at": "2026-06-12T00:00:00Z",
+    "joined_at": "2026-06-12T00:00:00+09:00",
     "already_member": false
   }
 }
@@ -329,6 +342,42 @@ Response:
 | `401` / `SESSION_EXPIRED` | 로그인 세션 없음, 만료, 폐기 |
 | `404` / `GAME_ROOM_NOT_FOUND` | 객실 없음 |
 | `409` / `GAME_ROOM_NOT_JOINABLE` | 객실이 대기 상태가 아니거나 정원 초과 |
+| `422` / `VALIDATION_ERROR` | path UUID validation 실패 |
+
+### POST `/api/v1/game/rooms/{room_public_id}/leave`
+
+로그인 유저를 대기 중인 객실의 활성 `room_members`에서 퇴장시킵니다. 방장이 나갔고 남은 활성 멤버가
+있으면 가장 먼저 입장한 남은 멤버에게 방장을 승계합니다. 마지막 멤버가 나가면 room을 `closed`로
+바꾸고 `closed_at`을 기록해 목록, 참여, 로비 WebSocket 진입에서 제외합니다.
+
+성공 후 서버는 같은 room의 `/ws/lobby/rooms/{room_public_id}` 연결에 `lobby.room.left` event를
+broadcast합니다.
+
+Response:
+
+```json
+{
+  "success": true,
+  "data": {
+    "room_public_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7e",
+    "user_public_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7f",
+    "nickname": "초보자",
+    "left_at": "2026-06-12T00:00:00+09:00",
+    "remaining_member_count": 1,
+    "new_owner_user_public_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b80",
+    "new_owner_nickname": "다음방장",
+    "room_closed": false
+  }
+}
+```
+
+| Status | Meaning |
+| --- | --- |
+| `200` | 객실 퇴장 성공 |
+| `401` / `SESSION_EXPIRED` | 로그인 세션 없음, 만료, 폐기 |
+| `403` / `GAME_ROOM_ENTRY_FORBIDDEN` | 현재 유저가 활성 room member가 아님 |
+| `404` / `GAME_ROOM_NOT_FOUND` | 객실 없음 |
+| `409` / `GAME_ROOM_NOT_JOINABLE` | 객실이 대기 상태가 아님 |
 | `422` / `VALIDATION_ERROR` | path UUID validation 실패 |
 
 ### POST `/api/v1/game/rooms/{room_public_id}/start`
@@ -355,7 +404,7 @@ Response:
     "game_type": "shiritori",
     "status": "starting",
     "game_session_token": "opaque-game-session-token",
-    "game_session_token_expires_at": "2026-06-12T03:00:00Z",
+    "game_session_token_expires_at": "2026-06-12T03:00:00+09:00",
     "participants": [
       {
         "participant_type": "user",
@@ -398,7 +447,7 @@ Response:
     "game_session_public_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7f",
     "allowed": true,
     "game_session_token": "opaque-game-session-token",
-    "game_session_token_expires_at": "2026-06-12T03:00:00Z",
+    "game_session_token_expires_at": "2026-06-12T03:00:00+09:00",
     "participant": {
       "participant_type": "user",
       "display_name": "초보자",

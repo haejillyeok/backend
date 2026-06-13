@@ -12,10 +12,25 @@ class GameRoomSummaryResponse(SchemaModel):
     status: RoomStatus
     max_players: int
     member_count: int
+    is_current_user_member: bool
+    is_current_user_owner: bool
+    lobby_websocket_path: str
+
+
+class CurrentLobbyMembershipResponse(SchemaModel):
+    room_public_id: UUID
+    name: str
+    game_type: GameType
+    status: RoomStatus
+    max_players: int
+    member_count: int
+    is_owner: bool
+    lobby_websocket_path: str
 
 
 class GameRoomListResponse(SchemaModel):
     rooms: list[GameRoomSummaryResponse]
+    current_membership: CurrentLobbyMembershipResponse | None
 
 
 class CreateGameRoomResponse(SchemaModel):
@@ -34,6 +49,17 @@ class RoomJoinResponse(SchemaModel):
     nickname: str
     joined_at: datetime
     already_member: bool
+
+
+class RoomLeaveResponse(SchemaModel):
+    room_public_id: UUID
+    user_public_id: UUID
+    nickname: str
+    left_at: datetime
+    remaining_member_count: int
+    new_owner_user_public_id: UUID | None
+    new_owner_nickname: str | None
+    room_closed: bool
 
 
 class GameSessionParticipantResponse(SchemaModel):

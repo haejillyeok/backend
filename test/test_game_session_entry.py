@@ -1,6 +1,7 @@
 import asyncio
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import pytest
 from fastapi.testclient import TestClient
@@ -15,16 +16,17 @@ from app.be.services.game import (
     GameRoomNotJoinableError,
     GameRoomRecord,
     GameService,
-    GameSessionStartResult,
-    GameSessionCredential,
     GameSessionEntryForbiddenError,
     GameSessionParticipantRecord,
+    GameSessionStartResult,
     RoomCreateResult,
     RoomLeaveResult,
     RoomMemberRecord,
 )
 from app.be.models.user import User
 from app.be.models.user_session import UserSession
+
+KST = ZoneInfo("Asia/Seoul")
 
 
 class FakeAuthSessionRepository:
@@ -85,10 +87,13 @@ class FakeGameRepository(GameRepositoryProtocol):
         self.left_members: list[RoomLeaveResult] = []
         self.room_summaries: list[GameRoomListItem] = []
         self.issued_credentials: list[dict[str, object]] = []
+        self.new_owner_user_id = None
+        self.closed_rooms: list[dict[str, object]] = []
         self.committed = False
         self.locked_room_public_ids: list[object] = []
 
-    async def list_rooms(self):
+    async def list_rooms(self, *, user_id):
+        _ = user_id
         return self.room_summaries
 
     async def create_room(self, *, owner_user_id, name, game_type, status, max_players):
@@ -99,7 +104,7 @@ class FakeGameRepository(GameRepositoryProtocol):
             status=status,
             max_players=max_players,
             member_count=0,
-            created_at=datetime(2026, 6, 12, tzinfo=UTC),
+            created_at=datetime(2026, 6, 12, tzinfo=KST),
         )
         self.created_rooms.append(
             {
@@ -153,7 +158,7 @@ class FakeGameRepository(GameRepositoryProtocol):
             room_id=room_id,
             user_id=user_id,
             nickname=nickname,
-            joined_at=datetime(2026, 6, 12, tzinfo=UTC),
+            joined_at=datetime(2026, 6, 12, tzinfo=KST),
         )
         self.members.append(member)
         self.created_members.append(member)
@@ -176,6 +181,23 @@ class FakeGameRepository(GameRepositoryProtocol):
         )
         self.left_members.append(result)
         return result
+
+    async def transfer_room_owner(self, *, room_id, owner_user_id):
+        if self.room and self.room.id == room_id:
+            self.room = GameRoomRecord(
+                id=self.room.id,
+                public_id=self.room.public_id,
+                owner_user_id=owner_user_id,
+                name=self.room.name,
+                game_type=self.room.game_type,
+                status=self.room.status,
+                max_players=self.room.max_players,
+                created_at=self.room.created_at,
+            )
+            self.new_owner_user_id = owner_user_id
+
+    async def close_room(self, *, room_id, closed_at):
+        self.closed_rooms.append({"room_id": room_id, "closed_at": closed_at})
 
     async def create_game_session(self, **kwargs):
         self.created_sessions.append(kwargs)
@@ -236,7 +258,7 @@ def test_auth_service_resolves_current_user_from_active_session_token():
         token_hash="stored-hash",
         user_agent="pytest",
         last_access_ip="203.0.113.10",
-        expires_at=datetime.now(UTC) + timedelta(days=1),
+        expires_at=datetime.now(KST) + timedelta(days=1),
     )
     repository = FakeAuthSessionRepository(user=user, session=session)
     service = AuthService(repository)
@@ -286,6 +308,7 @@ def test_game_service_joins_waiting_room_and_persists_membership():
 
 
 def test_game_service_lists_rooms_for_lobby_selection():
+    user_id = uuid4()
     room_public_id = uuid4()
     repository = FakeGameRepository(room=None)
     repository.room_summaries = [
@@ -296,14 +319,19 @@ def test_game_service_lists_rooms_for_lobby_selection():
             status="waiting",
             max_players=4,
             member_count=2,
+            is_current_user_member=True,
+            is_current_user_owner=False,
         )
     ]
     service = GameService(repository)
 
-    rooms = asyncio.run(service.list_rooms())
+    result = asyncio.run(service.list_rooms(user_id=user_id))
 
-    assert rooms[0].room_public_id == room_public_id
-    assert rooms[0].member_count == 2
+    assert result.rooms[0].room_public_id == room_public_id
+    assert result.rooms[0].member_count == 2
+    assert result.current_membership is not None
+    assert result.current_membership.room_public_id == room_public_id
+    assert result.current_membership.lobby_websocket_path == f"/ws/lobby/rooms/{room_public_id}"
 
 
 def test_game_service_creates_waiting_room_and_owner_membership():
@@ -335,13 +363,16 @@ def test_game_service_creates_waiting_room_and_owner_membership():
 
 def test_game_service_authorizes_room_lobby_connection_for_active_member():
     user_id = uuid4()
+    user_public_id = uuid4()
+    owner_public_id = uuid4()
     room_id = uuid4()
     room_public_id = uuid4()
+    joined_at = datetime(2026, 6, 12, tzinfo=KST)
     repository = FakeGameRepository(
         room=GameRoomRecord(
             id=room_id,
             public_id=room_public_id,
-            owner_user_id=uuid4(),
+            owner_user_id=user_id,
             name="첫 객실",
             game_type="shiritori",
             status="waiting",
@@ -352,8 +383,16 @@ def test_game_service_authorizes_room_lobby_connection_for_active_member():
                 room_id=room_id,
                 user_id=user_id,
                 nickname="초보자",
-                joined_at=datetime(2026, 6, 12, tzinfo=UTC),
-            )
+                joined_at=joined_at,
+                user_public_id=user_public_id,
+            ),
+            RoomMemberRecord(
+                room_id=room_id,
+                user_id=uuid4(),
+                nickname="손님",
+                joined_at=joined_at + timedelta(minutes=1),
+                user_public_id=owner_public_id,
+            ),
         ],
     )
     service = GameService(repository)
@@ -366,6 +405,11 @@ def test_game_service_authorizes_room_lobby_connection_for_active_member():
     )
 
     assert result.room_public_id == room_public_id
+    assert result.snapshot is not None
+    assert result.snapshot.room_public_id == room_public_id
+    assert result.snapshot.owner_user_public_id == user_public_id
+    assert [member.nickname for member in result.snapshot.members] == ["초보자", "손님"]
+    assert [member.is_owner for member in result.snapshot.members] == [True, False]
 
 
 def test_game_service_rejects_room_lobby_connection_for_user_outside_room():
@@ -403,7 +447,7 @@ def test_game_service_marks_room_member_left_after_disconnect_grace():
     )
     room_id = uuid4()
     room_public_id = uuid4()
-    left_at = datetime(2026, 6, 12, tzinfo=UTC)
+    left_at = datetime(2026, 6, 12, tzinfo=KST)
     repository = FakeGameRepository(
         room=GameRoomRecord(
             id=room_id,
@@ -419,7 +463,7 @@ def test_game_service_marks_room_member_left_after_disconnect_grace():
                 room_id=room_id,
                 user_id=user.id,
                 nickname=user.nickname,
-                joined_at=datetime(2026, 6, 12, tzinfo=UTC),
+                joined_at=datetime(2026, 6, 12, tzinfo=KST),
             )
         ],
     )
@@ -438,8 +482,115 @@ def test_game_service_marks_room_member_left_after_disconnect_grace():
         user_public_id=user.public_id,
         nickname=user.nickname,
         left_at=left_at,
+        room_closed=True,
     )
     assert repository.left_members[0].nickname == user.nickname
+    assert repository.committed is True
+
+
+def test_game_service_transfers_owner_when_room_owner_leaves_waiting_room():
+    owner = CurrentUser(
+        id=uuid4(),
+        public_id=uuid4(),
+        account_id="player_001",
+        nickname="방장",
+    )
+    next_owner_id = uuid4()
+    next_owner_public_id = uuid4()
+    room_id = uuid4()
+    room_public_id = uuid4()
+    left_at = datetime(2026, 6, 12, tzinfo=KST)
+    next_owner = RoomMemberRecord(
+        room_id=room_id,
+        user_id=next_owner_id,
+        nickname="다음방장",
+        joined_at=datetime(2026, 6, 12, 0, 1, tzinfo=KST),
+        user_public_id=next_owner_public_id,
+    )
+    repository = FakeGameRepository(
+        room=GameRoomRecord(
+            id=room_id,
+            public_id=room_public_id,
+            owner_user_id=owner.id,
+            name="첫 객실",
+            game_type="shiritori",
+            status="waiting",
+            max_players=4,
+        ),
+        members=[
+            RoomMemberRecord(
+                room_id=room_id,
+                user_id=owner.id,
+                nickname=owner.nickname,
+                joined_at=datetime(2026, 6, 12, tzinfo=KST),
+            ),
+            next_owner,
+        ],
+    )
+    service = GameService(repository)
+
+    result = asyncio.run(
+        service.leave_room(
+            room_public_id=room_public_id,
+            user=owner,
+            left_at=left_at,
+        )
+    )
+
+    assert result is not None
+    assert result.new_owner_user_public_id == next_owner_public_id
+    assert result.new_owner_nickname == "다음방장"
+    assert result.remaining_member_count == 1
+    assert result.room_closed is False
+    assert repository.new_owner_user_id == next_owner_id
+    assert repository.closed_rooms == []
+    assert repository.committed is True
+
+
+def test_game_service_closes_waiting_room_when_last_member_leaves():
+    user = CurrentUser(
+        id=uuid4(),
+        public_id=uuid4(),
+        account_id="player_001",
+        nickname="방장",
+    )
+    room_id = uuid4()
+    room_public_id = uuid4()
+    left_at = datetime(2026, 6, 12, tzinfo=KST)
+    repository = FakeGameRepository(
+        room=GameRoomRecord(
+            id=room_id,
+            public_id=room_public_id,
+            owner_user_id=user.id,
+            name="첫 객실",
+            game_type="shiritori",
+            status="waiting",
+            max_players=4,
+        ),
+        members=[
+            RoomMemberRecord(
+                room_id=room_id,
+                user_id=user.id,
+                nickname=user.nickname,
+                joined_at=datetime(2026, 6, 12, tzinfo=KST),
+            )
+        ],
+    )
+    service = GameService(repository)
+
+    result = asyncio.run(
+        service.leave_room(
+            room_public_id=room_public_id,
+            user=user,
+            left_at=left_at,
+        )
+    )
+
+    assert result is not None
+    assert result.room_closed is True
+    assert result.remaining_member_count == 0
+    assert result.new_owner_user_public_id is None
+    assert repository.closed_rooms == [{"room_id": room_id, "closed_at": left_at}]
     assert repository.committed is True
 
 
@@ -470,7 +621,7 @@ def test_game_service_skips_leave_when_room_member_already_inactive():
         service.leave_room_after_disconnect_grace(
             room_public_id=room_public_id,
             user=user,
-            left_at=datetime(2026, 6, 12, tzinfo=UTC),
+            left_at=datetime(2026, 6, 12, tzinfo=KST),
         )
     )
 
@@ -492,7 +643,7 @@ def test_game_service_returns_existing_room_member_for_repeated_join():
         room_id=room_id,
         user_id=user.id,
         nickname="초보자",
-        joined_at=datetime(2026, 6, 12, tzinfo=UTC),
+        joined_at=datetime(2026, 6, 12, tzinfo=KST),
     )
     repository = FakeGameRepository(
         room=GameRoomRecord(
@@ -540,7 +691,7 @@ def test_game_service_rejects_join_when_room_is_full():
                 room_id=room_id,
                 user_id=uuid4(),
                 nickname="초보자",
-                joined_at=datetime(2026, 6, 12, tzinfo=UTC),
+                joined_at=datetime(2026, 6, 12, tzinfo=KST),
             )
         ],
     )
@@ -570,13 +721,13 @@ def test_game_service_starts_session_for_room_owner_and_freezes_allowed_members(
                 room_id=room_id,
                 user_id=owner_id,
                 nickname="방장",
-                joined_at=datetime(2026, 6, 11, tzinfo=UTC),
+                joined_at=datetime(2026, 6, 11, tzinfo=KST),
             ),
             RoomMemberRecord(
                 room_id=room_id,
                 user_id=member_id,
                 nickname="손님",
-                joined_at=datetime(2026, 6, 11, 0, 1, tzinfo=UTC),
+                joined_at=datetime(2026, 6, 11, 0, 1, tzinfo=KST),
             ),
         ],
     )
@@ -751,7 +902,7 @@ def test_start_game_session_endpoint_returns_session_for_authenticated_owner():
                     "game_type": "shiritori",
                     "status": "starting",
                     "game_session_token": "owner-resume-token",
-                    "game_session_token_expires_at": datetime(2026, 6, 12, 1, tzinfo=UTC),
+                    "game_session_token_expires_at": datetime(2026, 6, 12, 1, tzinfo=KST),
                     "participants": [
                         type(
                             "Participant",
@@ -792,7 +943,7 @@ def test_start_game_session_endpoint_returns_session_for_authenticated_owner():
             "game_type": "shiritori",
             "status": "starting",
             "game_session_token": "owner-resume-token",
-            "game_session_token_expires_at": "2026-06-12T01:00:00Z",
+            "game_session_token_expires_at": "2026-06-12T01:00:00+09:00",
             "participants": [
                 {
                     "participant_type": "user",

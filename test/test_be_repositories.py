@@ -1,6 +1,7 @@
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 from app.be.models.game import GameSession, Room, RoomMember, SessionParticipant
 from app.be.models.user import User
@@ -8,6 +9,8 @@ from app.be.models.user_session import UserSession
 from app.be.repository.auth import AuthRepository
 from app.be.repository.game import GameRepository
 from app.be.services.game import GameSessionParticipantRecord, GameSessionStartResult
+
+KST = ZoneInfo("Asia/Seoul")
 
 
 class FakeScalarCollection:
@@ -83,7 +86,7 @@ async def test_auth_repository_creates_user_and_session_records() -> None:
     db_session = FakeDbSession()
     repository = AuthRepository(db_session)
     user_id = uuid4()
-    expires_at = datetime.now(UTC) + timedelta(days=1)
+    expires_at = datetime.now(KST) + timedelta(days=1)
 
     user = await repository.create_user(
         account_id="player_001",
@@ -115,7 +118,7 @@ async def test_auth_repository_resolves_and_touches_active_session_user() -> Non
         id=uuid4(),
         user_id=user.id,
         token_hash="token-hash",
-        expires_at=datetime.now(UTC) + timedelta(days=1),
+        expires_at=datetime.now(KST) + timedelta(days=1),
     )
     db_session = FakeDbSession(
         [
@@ -124,7 +127,7 @@ async def test_auth_repository_resolves_and_touches_active_session_user() -> Non
         ]
     )
     repository = AuthRepository(db_session)
-    now = datetime.now(UTC)
+    now = datetime.now(KST)
 
     active = await repository.get_active_session_user(token_hash="token-hash", now=now)
     missing = await repository.get_active_session_user(token_hash="missing", now=now)
@@ -179,14 +182,16 @@ async def test_game_repository_maps_locked_room_to_service_record() -> None:
 
 async def test_game_repository_lists_rooms_with_active_member_counts() -> None:
     room = build_room(owner_user_id=uuid4())
-    repository = GameRepository(FakeDbSession([FakeResult(rows=[(room, 2)])]))
+    repository = GameRepository(FakeDbSession([FakeResult(rows=[(room, 2, True)])]))
 
-    rooms = await repository.list_rooms()
+    rooms = await repository.list_rooms(user_id=room.owner_user_id)
 
     assert len(rooms) == 1
     assert rooms[0].room_public_id == room.public_id
     assert rooms[0].name == "첫 객실"
     assert rooms[0].member_count == 2
+    assert rooms[0].is_current_user_member is True
+    assert rooms[0].is_current_user_owner is True
 
 
 async def test_game_repository_creates_waiting_room_record() -> None:
@@ -268,7 +273,7 @@ async def test_game_repository_lists_room_members_in_repository_records() -> Non
         id=uuid4(),
         room_id=room_id,
         user_id=user.id,
-        joined_at=datetime(2026, 6, 12, tzinfo=UTC),
+        joined_at=datetime(2026, 6, 12, tzinfo=KST),
     )
     repository = GameRepository(FakeDbSession([FakeResult(rows=[(member, user)])]))
 
@@ -288,7 +293,7 @@ async def test_game_repository_gets_active_room_member_record() -> None:
         id=uuid4(),
         room_id=room_id,
         user_id=user.id,
-        joined_at=datetime(2026, 6, 12, tzinfo=UTC),
+        joined_at=datetime(2026, 6, 12, tzinfo=KST),
     )
     repository = GameRepository(
         FakeDbSession(
@@ -333,12 +338,12 @@ async def test_game_repository_marks_active_room_member_left() -> None:
     user = build_user(nickname="손님1")
     room = build_room(owner_user_id=uuid4())
     room.id = room_id
-    left_at = datetime(2026, 6, 12, tzinfo=UTC)
+    left_at = datetime(2026, 6, 12, tzinfo=KST)
     member = RoomMember(
         id=uuid4(),
         room_id=room_id,
         user_id=user.id,
-        joined_at=datetime(2026, 6, 12, tzinfo=UTC),
+        joined_at=datetime(2026, 6, 12, tzinfo=KST),
     )
     db_session = FakeDbSession([FakeResult(row=(member, user, room))])
     repository = GameRepository(db_session)
@@ -363,11 +368,36 @@ async def test_game_repository_skips_leave_when_no_active_room_member() -> None:
     result = await repository.mark_room_member_left(
         room_id=uuid4(),
         user_id=uuid4(),
-        left_at=datetime(2026, 6, 12, tzinfo=UTC),
+        left_at=datetime(2026, 6, 12, tzinfo=KST),
     )
 
     assert result is None
     assert db_session.flush_count == 0
+
+
+async def test_game_repository_transfers_room_owner() -> None:
+    new_owner_id = uuid4()
+    room = build_room(owner_user_id=uuid4())
+    db_session = FakeDbSession([FakeResult(scalar=room)])
+    repository = GameRepository(db_session)
+
+    await repository.transfer_room_owner(room_id=room.id, owner_user_id=new_owner_id)
+
+    assert room.owner_user_id == new_owner_id
+    assert db_session.flush_count == 1
+
+
+async def test_game_repository_closes_room() -> None:
+    room = build_room(owner_user_id=uuid4())
+    closed_at = datetime(2026, 6, 12, tzinfo=KST)
+    db_session = FakeDbSession([FakeResult(scalar=room)])
+    repository = GameRepository(db_session)
+
+    await repository.close_room(room_id=room.id, closed_at=closed_at)
+
+    assert room.status == "closed"
+    assert room.closed_at == closed_at
+    assert db_session.flush_count == 1
 
 
 async def test_game_repository_creates_game_session_and_participant_snapshot() -> None:
@@ -467,7 +497,7 @@ async def test_game_repository_saves_game_session_token_hash_for_user_participan
         seat_number=1,
         is_uninvited_guest=False,
     )
-    expires_at = datetime(2026, 6, 12, 1, tzinfo=UTC)
+    expires_at = datetime(2026, 6, 12, 1, tzinfo=KST)
     db_session = FakeDbSession([FakeResult(row=(game_session, participant))])
     repository = GameRepository(db_session)
 
@@ -496,7 +526,7 @@ async def test_game_repository_resolves_participant_by_active_game_session_token
         seat_number=1,
         is_uninvited_guest=False,
         resume_token_hash="hashed-token",
-        resume_token_expires_at=datetime(2026, 6, 12, 1, tzinfo=UTC),
+        resume_token_expires_at=datetime(2026, 6, 12, 1, tzinfo=KST),
     )
     db_session = FakeDbSession(
         [
@@ -508,11 +538,11 @@ async def test_game_repository_resolves_participant_by_active_game_session_token
 
     record = await repository.get_participant_for_game_session_token(
         token_hash="hashed-token",
-        now=datetime(2026, 6, 12, tzinfo=UTC),
+        now=datetime(2026, 6, 12, tzinfo=KST),
     )
     missing = await repository.get_participant_for_game_session_token(
         token_hash="missing",
-        now=datetime(2026, 6, 12, tzinfo=UTC),
+        now=datetime(2026, 6, 12, tzinfo=KST),
     )
 
     assert record is not None

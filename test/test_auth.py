@@ -1,6 +1,7 @@
-from datetime import UTC, datetime, timedelta
 import asyncio
+from datetime import datetime, timedelta
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import pytest
 from fastapi import Request
@@ -12,6 +13,8 @@ from app.be.models.user import User
 from app.be.security.password import hash_password
 from app.be.services.auth import AuthService
 from app.shared.core.exceptions import AppException, InvalidCredentialsError
+
+KST = ZoneInfo("Asia/Seoul")
 
 
 class FakeAuthRepository:
@@ -212,7 +215,7 @@ def test_login_endpoint_sets_session_cookie_for_auth_success():
                         {"public_id": uuid4(), "account_id": account_id, "nickname": "초보자"},
                     )(),
                     "session_token": "plain-session-token",
-                    "expires_at": datetime.now(UTC) + timedelta(days=1),
+                    "expires_at": datetime.now(KST) + timedelta(days=1),
                 },
             )()
 
@@ -361,7 +364,7 @@ def test_signup_endpoint_sets_session_cookie_for_auth_success():
                         {"public_id": uuid4(), "account_id": account_id, "nickname": nickname},
                     )(),
                     "session_token": "plain-session-token",
-                    "expires_at": datetime.now(UTC) + timedelta(days=1),
+                    "expires_at": datetime.now(KST) + timedelta(days=1),
                 },
             )()
 

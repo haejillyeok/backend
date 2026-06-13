@@ -1,6 +1,7 @@
 import asyncio
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from uuid import UUID, uuid4
+from zoneinfo import ZoneInfo
 
 import pytest
 from fastapi.websockets import WebSocketDisconnect
@@ -10,8 +11,16 @@ from app.be.dependencies.services import get_auth_service, get_current_user, get
 from app.be.api.endpoints import lobby_ws
 from app.be.main import create_app
 from app.be.services.auth import CurrentUser, SessionExpiredError
-from app.be.services.game import RoomJoinResult, RoomLobbyConnectionResult
+from app.be.services.game import (
+    RoomJoinResult,
+    RoomLobbyConnectionResult,
+    RoomLobbyMemberSnapshot,
+    RoomLobbySnapshotResult,
+)
 from app.be.services.lobby import LobbyConnectionManager, lobby_connection_manager
+
+
+KST = ZoneInfo("Asia/Seoul")
 
 
 class FakeWebSocket:
@@ -68,6 +77,27 @@ def current_user() -> CurrentUser:
     )
 
 
+def build_lobby_snapshot(
+    *,
+    room_public_id: UUID,
+    owner: CurrentUser,
+    joined_at: datetime | None = None,
+) -> RoomLobbySnapshotResult:
+    """WebSocket 연결 테스트에서 사용할 최소 room snapshot을 만듭니다."""
+    return RoomLobbySnapshotResult(
+        room_public_id=room_public_id,
+        owner_user_public_id=owner.public_id,
+        members=[
+            RoomLobbyMemberSnapshot(
+                user_public_id=owner.public_id,
+                nickname=owner.nickname,
+                is_owner=True,
+                joined_at=joined_at or datetime(2026, 6, 12, tzinfo=KST),
+            )
+        ],
+    )
+
+
 class FakeAuthService:
     def __init__(self, user: CurrentUser) -> None:
         self.user = user
@@ -101,6 +131,8 @@ def test_lobby_websocket_rejects_missing_session_cookie() -> None:
 def test_room_lobby_websocket_connects_with_path_room_id_and_cleans_up() -> None:
     user = current_user()
     room_public_id = uuid4()
+    other_user_public_id = uuid4()
+    joined_at = datetime(2026, 6, 12, tzinfo=KST)
 
     class FakeGameService:
         async def authorize_room_lobby_connection(
@@ -110,7 +142,27 @@ def test_room_lobby_websocket_connects_with_path_room_id_and_cleans_up() -> None
             user_id: UUID,
         ) -> RoomLobbyConnectionResult:
             assert user_id == user.id
-            return RoomLobbyConnectionResult(room_public_id=room_public_id)
+            return RoomLobbyConnectionResult(
+                room_public_id=room_public_id,
+                snapshot=RoomLobbySnapshotResult(
+                    room_public_id=room_public_id,
+                    owner_user_public_id=user.public_id,
+                    members=[
+                        RoomLobbyMemberSnapshot(
+                            user_public_id=user.public_id,
+                            nickname=user.nickname,
+                            is_owner=True,
+                            joined_at=joined_at,
+                        ),
+                        RoomLobbyMemberSnapshot(
+                            user_public_id=other_user_public_id,
+                            nickname="손님",
+                            is_owner=False,
+                            joined_at=joined_at + timedelta(minutes=1),
+                        ),
+                    ],
+                ),
+            )
 
     app = create_app()
     app.dependency_overrides[get_auth_service] = lambda: FakeAuthService(user)
@@ -128,6 +180,27 @@ def test_room_lobby_websocket_connects_with_path_room_id_and_cleans_up() -> None
                     "account_id": user.account_id,
                     "nickname": user.nickname,
                 },
+            },
+        }
+        assert websocket.receive_json() == {
+            "type": "lobby.room.snapshot",
+            "payload": {
+                "room_public_id": str(room_public_id),
+                "owner_user_public_id": str(user.public_id),
+                "members": [
+                    {
+                        "user_public_id": str(user.public_id),
+                        "nickname": user.nickname,
+                        "is_owner": True,
+                        "joined_at": "2026-06-12T00:00:00+09:00",
+                    },
+                    {
+                        "user_public_id": str(other_user_public_id),
+                        "nickname": "손님",
+                        "is_owner": False,
+                        "joined_at": "2026-06-12T00:01:00+09:00",
+                    },
+                ],
             },
         }
         assert lobby_connection_manager.connection_count == 1
@@ -156,7 +229,10 @@ def test_room_lobby_websocket_records_apm_metrics_and_spans(monkeypatch) -> None
             room_public_id: UUID,
             user_id: UUID,
         ) -> RoomLobbyConnectionResult:
-            return RoomLobbyConnectionResult(room_public_id=room_public_id)
+            return RoomLobbyConnectionResult(
+                room_public_id=room_public_id,
+                snapshot=build_lobby_snapshot(room_public_id=room_public_id, owner=user),
+            )
 
     monkeypatch.setattr(
         lobby_ws,
@@ -171,7 +247,8 @@ def test_room_lobby_websocket_records_apm_metrics_and_spans(monkeypatch) -> None
     client.cookies.set("session_token", "valid-session")
 
     with client.websocket_connect(f"/ws/lobby/rooms/{room_public_id}") as websocket:
-        websocket.receive_json()
+        assert websocket.receive_json()["type"] == "lobby.room.connected"
+        assert websocket.receive_json()["type"] == "lobby.room.snapshot"
         websocket.send_json({"type": "ping", "payload": {"client_time": "now"}})
         websocket.receive_json()
 
@@ -182,10 +259,12 @@ def test_room_lobby_websocket_records_apm_metrics_and_spans(monkeypatch) -> None
     ) in metrics.calls
     assert message_calls[0][1]["message_type"] == "lobby.room.connected"
     assert message_calls[0][1]["direction"] == "outbound"
-    assert message_calls[1][1]["message_type"] == "ping"
-    assert message_calls[1][1]["direction"] == "inbound"
-    assert message_calls[2][1]["message_type"] == "lobby.pong"
-    assert message_calls[2][1]["direction"] == "outbound"
+    assert message_calls[1][1]["message_type"] == "lobby.room.snapshot"
+    assert message_calls[1][1]["direction"] == "outbound"
+    assert message_calls[2][1]["message_type"] == "ping"
+    assert message_calls[2][1]["direction"] == "inbound"
+    assert message_calls[3][1]["message_type"] == "lobby.pong"
+    assert message_calls[3][1]["direction"] == "outbound"
     assert any(call[0] == "disconnect" for call in metrics.calls)
     assert any(call[0] == "duration" for call in metrics.calls)
     assert "WebSocket.lobby.connect" in span_names
@@ -204,7 +283,10 @@ def test_room_lobby_websocket_closes_when_heartbeat_timeout_passes(monkeypatch) 
             room_public_id: UUID,
             user_id: UUID,
         ) -> RoomLobbyConnectionResult:
-            return RoomLobbyConnectionResult(room_public_id=room_public_id)
+            return RoomLobbyConnectionResult(
+                room_public_id=room_public_id,
+                snapshot=build_lobby_snapshot(room_public_id=room_public_id, owner=user),
+            )
 
     monkeypatch.setattr(lobby_ws, "LOBBY_HEARTBEAT_TIMEOUT_SECONDS", 0.01)
     app = create_app()
@@ -215,6 +297,8 @@ def test_room_lobby_websocket_closes_when_heartbeat_timeout_passes(monkeypatch) 
 
     with client.websocket_connect(f"/ws/lobby/rooms/{room_public_id}") as websocket:
         assert websocket.receive_json()["type"] == "lobby.room.connected"
+        maybe_snapshot = websocket.receive_json()
+        assert maybe_snapshot["type"] == "lobby.room.snapshot"
         with pytest.raises(WebSocketDisconnect) as exc_info:
             websocket.receive_text()
 
@@ -227,7 +311,7 @@ async def test_lobby_manager_records_ping_as_heartbeat() -> None:
     user = current_user()
     room_public_id = uuid4()
     websocket = FakeWebSocket()
-    connected_at = datetime(2026, 6, 12, tzinfo=UTC)
+    connected_at = datetime(2026, 6, 12, tzinfo=KST)
     ping_at = connected_at + timedelta(seconds=15)
 
     await manager.connect(websocket, user, room_public_id, now=connected_at)
@@ -302,7 +386,7 @@ async def test_lobby_manager_cancels_grace_leave_when_user_reconnects_to_same_ro
 def test_join_room_api_broadcasts_to_lobby_room_subscribers() -> None:
     user = current_user()
     room_public_id = uuid4()
-    joined_at = datetime(2026, 6, 12, tzinfo=UTC)
+    joined_at = datetime(2026, 6, 12, tzinfo=KST)
 
     class FakeGameService:
         async def authorize_room_lobby_connection(
@@ -311,7 +395,10 @@ def test_join_room_api_broadcasts_to_lobby_room_subscribers() -> None:
             room_public_id: UUID,
             user_id: UUID,
         ) -> RoomLobbyConnectionResult:
-            return RoomLobbyConnectionResult(room_public_id=room_public_id)
+            return RoomLobbyConnectionResult(
+                room_public_id=room_public_id,
+                snapshot=build_lobby_snapshot(room_public_id=room_public_id, owner=user),
+            )
 
         async def join_room(self, *, room_public_id: UUID, user: CurrentUser) -> RoomJoinResult:
             return RoomJoinResult(
@@ -331,6 +418,8 @@ def test_join_room_api_broadcasts_to_lobby_room_subscribers() -> None:
 
     with client.websocket_connect(f"/ws/lobby/rooms/{room_public_id}") as websocket:
         assert websocket.receive_json()["type"] == "lobby.room.connected"
+        maybe_snapshot = websocket.receive_json()
+        assert maybe_snapshot["type"] == "lobby.room.snapshot"
         response = client.post(f"/api/v1/game/rooms/{room_public_id}/join")
 
         assert response.status_code == 200
@@ -338,7 +427,7 @@ def test_join_room_api_broadcasts_to_lobby_room_subscribers() -> None:
             "room_public_id": str(room_public_id),
             "user_public_id": str(user.public_id),
             "nickname": "초보자",
-            "joined_at": "2026-06-12T00:00:00Z",
+            "joined_at": "2026-06-12T00:00:00+09:00",
             "already_member": False,
         }
         assert websocket.receive_json() == {

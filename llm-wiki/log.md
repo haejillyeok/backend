@@ -4,6 +4,21 @@
 코드 변경 상세는 Git history, PR, issue에서 확인하고, 이 파일에는 위키 페이지의 지식, 계약, 정책,
 컨벤션이 어떻게 바뀌었는지만 남깁니다.
 
+## [2026-06-13] maintenance | Align timestamps on KST
+
+- `runtime-configuration.md`의 DB timestamp 기준을 UTC가 아니라 KST timezone-aware datetime으로 정정했다.
+- 서버가 생성해 public API와 WebSocket payload로 내보내는 timestamp도 KST offset을 포함한다는 기준을 정리했다.
+
+## [2026-06-13] maintenance | Add lobby room snapshot contract
+
+- `realtime-websocket.md`와 `sunset-game-domain.md`에 `/ws/lobby/rooms/{room_public_id}` 연결 성공 직후 `lobby.room.snapshot`으로 현재 활성 멤버 목록을 초기화한다는 계약을 추가했다.
+- Snapshot 이후 멤버 변경은 `lobby.room.joined`, `lobby.room.left` event로 반영한다는 클라이언트 상태 관리 기준을 정리했다.
+
+## [2026-06-13] maintenance | Complete lobby leave contract
+
+- `realtime-websocket.md`와 `sunset-game-domain.md`에 로비 목록의 현재 유저 active membership 응답, REST room leave, 방장 승계, 마지막 멤버 퇴장 시 room 폐쇄 기준을 반영했다.
+- `lobby.room.left` event가 REST 퇴장과 WebSocket grace leave 모두에서 같은 퇴장 결과 payload를 전달한다는 기준을 정리했다.
+
 ## [2026-06-13] maintenance | Clarify Postman WebSocket collection format
 
 - `openapi-swagger.md`에 Postman file import의 collection v2.1 JSON은 `ws://` URL도 HTTP

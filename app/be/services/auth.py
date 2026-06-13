@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Protocol
 from uuid import UUID
 
@@ -10,6 +10,7 @@ from app.be.security.session import generate_session_token, hash_session_token
 from app.shared.core.error_codes import ErrorCode
 from app.shared.core.exceptions import AppException, AuthUserConflictError, InvalidCredentialsError
 from app.shared.core.observability import traced_method
+from app.shared.core.timezone import kst_now
 
 
 class AuthRepositoryProtocol(Protocol):
@@ -133,7 +134,7 @@ class AuthService:
     @traced_method("AuthService.authenticate_session", layer="service")
     async def _authenticate_session(self, session_token: str) -> CurrentUser:
         """세션 조회와 last_seen 갱신 실행 시간을 trace span으로 기록합니다."""
-        now = datetime.now(UTC)
+        now = kst_now()
         result = await self.repository.get_active_session_user(
             token_hash=hash_session_token(session_token),
             now=now,
@@ -208,7 +209,7 @@ class AuthService:
     ) -> AuthLoginResult:
         """검증된 유저에 대한 세션 토큰을 생성하고 DB transaction을 확정합니다."""
         session_token = generate_session_token()
-        expires_at = datetime.now(UTC) + SESSION_TTL
+        expires_at = kst_now() + SESSION_TTL
         await self.repository.create_user_session(
             user_id=user.id,
             token_hash=hash_session_token(session_token),

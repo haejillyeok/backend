@@ -41,6 +41,15 @@ def test_configure_app_timezone_sets_process_timezone(monkeypatch):
     assert os.environ["TZ"] == "Asia/Seoul"
 
 
+def test_shared_kst_clock_returns_timezone_aware_kst_datetime():
+    from app.shared.core.timezone import KST, kst_now
+
+    now = kst_now()
+
+    assert now.tzinfo == KST
+    assert now.utcoffset().total_seconds() == 9 * 60 * 60
+
+
 def test_log_file_settings_read_environment(monkeypatch, tmp_path):
     monkeypatch.setenv("LOG_FILE_ENABLED", "false")
     monkeypatch.setenv("LOG_DIR", str(tmp_path / "app-logs"))

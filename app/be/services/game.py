@@ -1,5 +1,5 @@
 from dataclasses import dataclass, replace
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Protocol
 from uuid import UUID
 
@@ -9,6 +9,7 @@ from app.be.services.auth import CurrentUser
 from app.shared.core.identifiers import generate_uuid_v7
 from app.shared.core.error_codes import ErrorCode
 from app.shared.core.exceptions import AppException
+from app.shared.core.timezone import kst_now
 
 
 AI_DISPLAY_NAME = "수상한 손님"
@@ -37,6 +38,26 @@ class GameRoomListItem:
     status: str
     max_players: int
     member_count: int
+    is_current_user_member: bool = False
+    is_current_user_owner: bool = False
+
+
+@dataclass(frozen=True)
+class CurrentLobbyMembership:
+    room_public_id: UUID
+    name: str
+    game_type: str
+    status: str
+    max_players: int
+    member_count: int
+    is_owner: bool
+    lobby_websocket_path: str
+
+
+@dataclass(frozen=True)
+class GameRoomListResult:
+    rooms: list[GameRoomListItem]
+    current_membership: CurrentLobbyMembership | None = None
 
 
 @dataclass(frozen=True)
@@ -53,6 +74,22 @@ class RoomCreateResult:
 @dataclass(frozen=True)
 class RoomLobbyConnectionResult:
     room_public_id: UUID
+    snapshot: "RoomLobbySnapshotResult | None" = None
+
+
+@dataclass(frozen=True)
+class RoomLobbyMemberSnapshot:
+    user_public_id: UUID
+    nickname: str
+    is_owner: bool
+    joined_at: datetime
+
+
+@dataclass(frozen=True)
+class RoomLobbySnapshotResult:
+    room_public_id: UUID
+    owner_user_public_id: UUID | None
+    members: list[RoomLobbyMemberSnapshot]
 
 
 @dataclass(frozen=True)
@@ -61,6 +98,7 @@ class RoomMemberRecord:
     user_id: UUID
     nickname: str
     joined_at: datetime
+    user_public_id: UUID | None = None
 
 
 @dataclass(frozen=True)
@@ -78,6 +116,10 @@ class RoomLeaveResult:
     user_public_id: UUID
     nickname: str
     left_at: datetime
+    remaining_member_count: int = 0
+    new_owner_user_public_id: UUID | None = None
+    new_owner_nickname: str | None = None
+    room_closed: bool = False
 
 
 @dataclass(frozen=True)
@@ -119,8 +161,8 @@ class GameSessionCredential:
 
 
 class GameRepositoryProtocol(Protocol):
-    async def list_rooms(self) -> list[GameRoomListItem]:
-        """로비 목록에 표시할 닫히지 않은 room 요약과 활성 멤버 수를 조회합니다."""
+    async def list_rooms(self, *, user_id: UUID) -> list[GameRoomListItem]:
+        """로비 목록과 현재 유저의 활성 room membership 여부를 조회합니다."""
 
     async def create_room(
         self,
@@ -170,6 +212,12 @@ class GameRepositoryProtocol(Protocol):
         left_at: datetime,
     ) -> RoomLeaveResult | None:
         """활성 room member의 퇴장 시각을 기록하고 없으면 None을 반환합니다."""
+
+    async def transfer_room_owner(self, *, room_id: UUID, owner_user_id: UUID) -> None:
+        """활성 멤버가 남아 있는 room의 방장을 새 유저로 승계합니다."""
+
+    async def close_room(self, *, room_id: UUID, closed_at: datetime) -> None:
+        """활성 멤버가 없는 room을 더 이상 사용할 수 없도록 닫습니다."""
 
     async def create_game_session(
         self, *, session: GameSessionStartResult
@@ -248,15 +296,45 @@ class GameSessionEntryForbiddenError(AppException):
         super().__init__(code=ErrorCode.GAME_SESSION_ENTRY_FORBIDDEN)
 
 
+def build_lobby_websocket_path(room_public_id: UUID) -> str:
+    """REST 응답에서 클라이언트가 같은 origin으로 연결할 로비 WebSocket path를 만듭니다."""
+    return f"/ws/lobby/rooms/{room_public_id}"
+
+
 class GameService:
     """게임 시작 시 세션을 발급하고 허용된 멤버만 진입하도록 검증합니다."""
 
     def __init__(self, repository: GameRepositoryProtocol) -> None:
         self.repository = repository
 
-    async def list_rooms(self) -> list[GameRoomListItem]:
-        """로비 화면에서 선택할 수 있는 닫히지 않은 객실 목록을 반환합니다."""
-        return await self.repository.list_rooms()
+    async def list_rooms(self, *, user_id: UUID) -> GameRoomListResult:
+        """로비 화면에서 선택할 수 있는 객실과 현재 참여 중인 유효 로비를 반환합니다."""
+        rooms = await self.repository.list_rooms(user_id=user_id)
+        current_room = next(
+            (
+                room
+                for room in rooms
+                if room.is_current_user_member and room.status == WAITING_ROOM_STATUS
+            ),
+            None,
+        )
+        return GameRoomListResult(
+            rooms=rooms,
+            current_membership=(
+                CurrentLobbyMembership(
+                    room_public_id=current_room.room_public_id,
+                    name=current_room.name,
+                    game_type=current_room.game_type,
+                    status=current_room.status,
+                    max_players=current_room.max_players,
+                    member_count=current_room.member_count,
+                    is_owner=current_room.is_current_user_owner,
+                    lobby_websocket_path=build_lobby_websocket_path(current_room.room_public_id),
+                )
+                if current_room is not None
+                else None
+            ),
+        )
 
     async def create_room(
         self,
@@ -305,7 +383,7 @@ class GameService:
         room_public_id: UUID,
         user_id: UUID,
     ) -> RoomLobbyConnectionResult:
-        """room 로비 WebSocket 연결 전에 해당 유저가 활성 room member인지 확인합니다."""
+        """room 로비 WebSocket 연결 전에 권한을 확인하고 초기 room snapshot을 반환합니다."""
         room = await self.repository.get_room_by_public_id(room_public_id)
         if room is None:
             raise GameRoomNotFoundError
@@ -315,7 +393,25 @@ class GameService:
         )
         if member is None:
             raise GameRoomEntryForbiddenError
-        return RoomLobbyConnectionResult(room_public_id=room.public_id)
+        members = await self.repository.list_active_room_members(room.id)
+        owner = next((member for member in members if member.user_id == room.owner_user_id), None)
+        return RoomLobbyConnectionResult(
+            room_public_id=room.public_id,
+            snapshot=RoomLobbySnapshotResult(
+                room_public_id=room.public_id,
+                owner_user_public_id=owner.user_public_id if owner else None,
+                members=[
+                    RoomLobbyMemberSnapshot(
+                        user_public_id=member.user_public_id,
+                        nickname=member.nickname,
+                        is_owner=member.user_id == room.owner_user_id,
+                        joined_at=member.joined_at,
+                    )
+                    for member in members
+                    if member.user_public_id is not None
+                ],
+            ),
+        )
 
     async def join_room(self, *, room_public_id: UUID, user: CurrentUser) -> RoomJoinResult:
         """로그인 유저를 대기 중인 room의 활성 멤버로 참여시킵니다.
@@ -360,6 +456,24 @@ class GameService:
             already_member=False,
         )
 
+    async def leave_room(
+        self,
+        *,
+        room_public_id: UUID,
+        user: CurrentUser,
+        left_at: datetime,
+    ) -> RoomLeaveResult:
+        """현재 유저를 대기 room에서 퇴장시키고 방장 승계 또는 room 폐쇄를 처리합니다."""
+        result = await self._leave_waiting_room(
+            room_public_id=room_public_id,
+            user=user,
+            left_at=left_at,
+            ignore_inactive_member=False,
+        )
+        if result is None:
+            raise GameRoomEntryForbiddenError
+        return result
+
     async def leave_room_after_disconnect_grace(
         self,
         *,
@@ -369,24 +483,63 @@ class GameService:
     ) -> RoomLeaveResult | None:
         """WebSocket grace timeout 이후에도 복귀하지 않은 유저를 room에서 퇴장 처리합니다.
 
-        이미 다른 흐름에서 퇴장된 멤버라면 DB를 다시 변경하지 않고 None을 반환합니다.
+        이미 다른 흐름에서 퇴장됐거나 room이 더 이상 대기 로비가 아니면 DB를 다시 변경하지 않고
+        None을 반환합니다.
         """
-        room = await self.repository.get_room_by_public_id(room_public_id)
+        return await self._leave_waiting_room(
+            room_public_id=room_public_id,
+            user=user,
+            left_at=left_at,
+            ignore_inactive_member=True,
+        )
+
+    async def _leave_waiting_room(
+        self,
+        *,
+        room_public_id: UUID,
+        user: CurrentUser,
+        left_at: datetime,
+        ignore_inactive_member: bool,
+    ) -> RoomLeaveResult | None:
+        """대기 room 퇴장 후 남은 멤버 기준으로 방장 승계 또는 room 폐쇄를 결정합니다."""
+        room = await self.repository.get_room_by_public_id_for_update(room_public_id)
         if room is None:
             raise GameRoomNotFoundError
+        if room.status != WAITING_ROOM_STATUS:
+            if ignore_inactive_member:
+                return None
+            raise GameRoomNotJoinableError
         result = await self.repository.mark_room_member_left(
             room_id=room.id,
             user_id=user.id,
             left_at=left_at,
         )
         if result is None:
-            return None
+            if ignore_inactive_member:
+                return None
+            raise GameRoomEntryForbiddenError
+        remaining_members = await self.repository.list_active_room_members(room.id)
+        new_owner = None
+        room_closed = False
+        if not remaining_members:
+            await self.repository.close_room(room_id=room.id, closed_at=left_at)
+            room_closed = True
+        elif room.owner_user_id == user.id:
+            new_owner = remaining_members[0]
+            await self.repository.transfer_room_owner(
+                room_id=room.id,
+                owner_user_id=new_owner.user_id,
+            )
         await self.repository.commit()
         return RoomLeaveResult(
             room_public_id=room.public_id,
             user_public_id=user.public_id,
             nickname=result.nickname,
             left_at=result.left_at,
+            remaining_member_count=len(remaining_members),
+            new_owner_user_public_id=new_owner.user_public_id if new_owner else None,
+            new_owner_nickname=new_owner.nickname if new_owner else None,
+            room_closed=room_closed,
         )
 
     async def start_session(self, *, room_public_id: UUID, user_id: UUID) -> GameSessionStartResult:
@@ -495,7 +648,7 @@ class GameService:
         """로그인 세션 만료 후에도 유효한 게임 세션 토큰으로 match 참가자를 복원합니다."""
         participant = await self.repository.get_participant_for_game_session_token(
             token_hash=hash_game_session_token(game_session_token),
-            now=datetime.now(UTC),
+            now=kst_now(),
         )
         if participant is None:
             raise GameSessionEntryForbiddenError
@@ -503,7 +656,7 @@ class GameService:
             game_session_public_id=participant.game_session_public_id,
             participant=participant,
             game_session_token=game_session_token,
-            game_session_token_expires_at=participant.resume_token_expires_at or datetime.now(UTC),
+            game_session_token_expires_at=participant.resume_token_expires_at or kst_now(),
         )
 
     async def _issue_game_session_credential(
@@ -514,7 +667,7 @@ class GameService:
     ) -> GameSessionCredential:
         """로그인 세션과 별개로 특정 match 참가자에게만 유효한 복구 토큰을 발급합니다."""
         game_session_token = generate_game_session_token()
-        expires_at = datetime.now(UTC) + GAME_SESSION_TOKEN_TTL
+        expires_at = kst_now() + GAME_SESSION_TOKEN_TTL
         await self.repository.save_game_session_token(
             game_session_public_id=game_session_public_id,
             user_id=user_id,

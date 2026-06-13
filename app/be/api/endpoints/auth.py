@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request, Response, status
@@ -103,13 +104,15 @@ def _set_session_cookie(
     response: Response,
     *,
     session_token: str,
-    expires_at,
+    expires_at: datetime,
 ) -> None:
     """로그인/회원가입 성공 시 공통 세션 쿠키 속성을 적용합니다."""
+    cookie_expires_at = expires_at.astimezone(UTC)
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
         value=session_token,
-        expires=expires_at,
+        # HTTP cookie Expires는 GMT 형식만 허용하므로 저장/응답 시간 기준과 별도로 변환합니다.
+        expires=cookie_expires_at,
         httponly=True,
         secure=settings.environment == "prod",
         samesite="lax",

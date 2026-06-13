@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import datetime
 import re
 from uuid import UUID
 
@@ -8,6 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column, validates
 
 from app.be.models.base import Base
 from app.shared.core.identifiers import generate_uuid_v7
+from app.shared.core.timezone import kst_now
 
 
 MIN_ACCOUNT_ID_LENGTH = 3
@@ -17,11 +18,6 @@ MIN_NICKNAME_LENGTH = 3
 MAX_NICKNAME_LENGTH = 20
 NICKNAME_PATTERN = r"^[가-힣A-Za-z0-9_]+$"
 USER_SCHEMA = "users"
-
-
-def utc_now() -> datetime:
-    """DB 저장용 현재 UTC 시각을 반환합니다."""
-    return datetime.now(UTC)
 
 
 class User(Base):
@@ -48,13 +44,13 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=utc_now,
+        default=kst_now,
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=utc_now,
-        onupdate=utc_now,
+        default=kst_now,
+        onupdate=kst_now,
     )
 
     @validates("account_id")

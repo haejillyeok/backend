@@ -74,16 +74,21 @@ message direction, endpoint별 message contract, error/close code를 분리해 �
 
 ## Lobby Contract
 
-로비 목록 조회, 객실 생성, 객실 참여는 REST API가 담당한다.
+로비 목록 조회, 객실 생성, 객실 참여, 명시적 객실 퇴장은 REST API가 담당한다.
 
-- `GET /api/v1/game/rooms`: 닫히지 않은 객실 목록과 활성 멤버 수를 반환한다.
+- `GET /api/v1/game/rooms`: 닫히지 않은 객실 목록, 활성 멤버 수, 현재 유저의 active room membership 여부, 참여 중인 유효 로비의 WebSocket 연결 path를 반환한다.
 - `POST /api/v1/game/rooms`: 대기 객실을 만들고 방장을 첫 활성 room member로 등록한다.
 - `POST /api/v1/game/rooms/{room_public_id}/join`: 대기 객실에 현재 유저를 활성 room member로 등록한다.
+- `POST /api/v1/game/rooms/{room_public_id}/leave`: 대기 객실에서 현재 유저를 퇴장시키고, 방장 퇴장 시 가장 먼저 입장한 남은 활성 멤버에게 방장을 승계한다. 마지막 멤버가 나가면 room을 `closed` 처리하고 `closed_at`을 기록해 이후 목록, 참여, WebSocket 진입에서 제외한다.
 
 `/ws/lobby/rooms/{room_public_id}`는 연결 수락 전에 `session_token` 쿠키로 로그인 세션을 확인하고,
 path의 `room_public_id`와 user_id로 활성 `game.room_members` 존재 여부를 확인한다. 인증 실패, 객실
 없음, 활성 멤버 아님은 `1008` close code로 닫는다. 성공하면 `lobby.room.connected` event로
-`room_public_id`와 현재 유저 identity를 보낸다.
+`room_public_id`와 현재 유저 identity를 보내고, 이어서 `lobby.room.snapshot` event로 현재 활성
+room member 목록을 `joined_at` 오름차순으로 보낸다. Snapshot member에는 `user_public_id`, `nickname`,
+`is_owner`, `joined_at`을 담고, payload root에는 현재 `owner_user_public_id`를 둔다. 클라이언트는
+방 화면 진입/재접속 시 snapshot으로 멤버 목록을 초기화하고 이후 `lobby.room.joined`,
+`lobby.room.left` event로 변경분을 반영한다.
 
 지원하는 client message type은 `ping` 하나이며, 같은 payload를 `lobby.pong`으로 반환한다. 별도
 `lobby.subscribe_room`/`lobby.unsubscribe_room` 메시지는 사용하지 않는다. path의 room public_id가
@@ -92,12 +97,12 @@ path의 `room_public_id`와 user_id로 활성 `game.room_members` 존재 여부�
 room 로비 WebSocket은 client가 주기적으로 보내는 `ping`을 heartbeat로 본다. 서버는 마지막 메시지 이후
 45초 동안 새 메시지가 없으면 연결을 닫는다. disconnect 시점에는 즉시 DB 퇴장 처리하지 않고 90초
 grace leave task를 예약한다. 같은 유저가 같은 room으로 grace time 안에 재연결하면 task를 취소하고,
-복귀하지 않으면 `game.room_members.left_at`을 기록한 뒤 같은 room 연결에 `lobby.room.left` event를
-broadcast한다.
+복귀하지 않으면 REST 퇴장과 같은 service 경로로 `game.room_members.left_at`, 방장 승계, 마지막 멤버
+퇴장 시 room 폐쇄를 처리한 뒤 같은 room 연결에 `lobby.room.left` event를 broadcast한다.
 
 REST commit 이후 server process 안의 lobby connection manager가 같은 room 연결에
-`lobby.room.joined` event를 broadcast한다. WebSocket manager는 연결 상태만 process memory에 보관하며,
-room membership의 최종 사실은 DB다. Broadcast message는 특정 client request의 응답이 아니므로
+`lobby.room.joined` 또는 `lobby.room.left` event를 broadcast한다. WebSocket manager는 연결 상태만
+process memory에 보관하며, room membership의 최종 사실은 DB다. Broadcast message는 특정 client request의 응답이 아니므로
 `응답(Response)`이 아니라 `이벤트(Event)`로 문서화한다.
 
 ## Design Notes

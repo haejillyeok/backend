@@ -11,9 +11,10 @@ BE 서버의 WebSocket 명세 문서입니다. HTTP API 계약은 Swagger와 `do
 | `/ws/realtime` | 사용 중 | 없음 | 연결 테스트용 ping/pong |
 | `/ws/match` | 예정 | `session_token` + `game_session_public_id` 또는 `game_session_token`으로 참가자 identity 고정 | 게임 진행, 턴, 점수, 투표 |
 
-로비의 객실 목록 조회, 객실 생성, 객실 참여는 REST API가 담당합니다. WebSocket은 이미 참여가 허용된
-객실의 실시간 이벤트를 받기 위해 연결합니다. 영속 상태는 DB가 소유하고, WebSocket manager는 현재 열린
-연결, 유저 identity, 객실별 연결 registry 같은 process-local 상태만 보관합니다.
+로비의 객실 목록 조회, 객실 생성, 객실 참여, 명시적 객실 퇴장은 REST API가 담당합니다. WebSocket은
+이미 참여가 허용된 객실의 실시간 이벤트를 받기 위해 연결합니다. 영속 상태는 DB가 소유하고,
+WebSocket manager는 현재 열린 연결, 유저 identity, 객실별 연결 registry 같은 process-local 상태만
+보관합니다.
 
 ## 공통 메시지 규칙
 
@@ -30,7 +31,7 @@ BE 서버의 WebSocket 명세 문서입니다. HTTP API 계약은 Swagger와 `do
 {
   "type": "ping",
   "payload": {
-    "client_time": "2026-06-12T00:00:00Z"
+    "client_time": "2026-06-12T00:00:00+09:00"
   }
 }
 ```
@@ -41,7 +42,7 @@ BE 서버의 WebSocket 명세 문서입니다. HTTP API 계약은 Swagger와 `do
 {
   "type": "lobby.pong",
   "payload": {
-    "client_time": "2026-06-12T00:00:00Z"
+    "client_time": "2026-06-12T00:00:00+09:00"
   }
 }
 ```
@@ -109,6 +110,53 @@ Payload:
 }
 ```
 
+### 이벤트(Event): `lobby.room.snapshot`
+
+방향: Server -> 연결된 client
+
+발생 시점: `lobby.room.connected` 전송 직후
+
+목적: 방 화면 진입 또는 재접속 시 현재 활성 멤버 리스트를 초기화합니다. 이후 변경분은
+`lobby.room.joined`, `lobby.room.left` 이벤트로 반영합니다.
+
+Payload:
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| `room_public_id` | uuid | snapshot 대상 객실 public ID |
+| `owner_user_public_id` | uuid 또는 null | 현재 방장 public ID |
+| `members` | array | 활성 room member 목록. `joined_at` 오름차순 |
+| `members[].user_public_id` | uuid | 멤버 유저 public ID |
+| `members[].nickname` | string | 멤버 닉네임 |
+| `members[].is_owner` | boolean | 현재 방장 여부 |
+| `members[].joined_at` | datetime | 객실 멤버십 생성 시각 |
+
+예시:
+
+```json
+{
+  "type": "lobby.room.snapshot",
+  "payload": {
+    "room_public_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7e",
+    "owner_user_public_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7f",
+    "members": [
+      {
+        "user_public_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7f",
+        "nickname": "초보자",
+        "is_owner": true,
+        "joined_at": "2026-06-12T00:00:00+09:00"
+      },
+      {
+        "user_public_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b80",
+        "nickname": "손님",
+        "is_owner": false,
+        "joined_at": "2026-06-12T00:01:00+09:00"
+      }
+    ]
+  }
+}
+```
+
 ### 요청(Request): `ping`
 
 방향: Client -> Server
@@ -127,7 +175,7 @@ Payload:
 {
   "type": "ping",
   "payload": {
-    "client_time": "2026-06-12T00:00:00Z"
+    "client_time": "2026-06-12T00:00:00+09:00"
   }
 }
 ```
@@ -144,7 +192,7 @@ Payload:
 {
   "type": "lobby.pong",
   "payload": {
-    "client_time": "2026-06-12T00:00:00Z"
+    "client_time": "2026-06-12T00:00:00+09:00"
   }
 }
 ```
@@ -174,7 +222,7 @@ Payload:
     "room_public_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7e",
     "user_public_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7f",
     "nickname": "초보자",
-    "joined_at": "2026-06-12T00:00:00Z",
+    "joined_at": "2026-06-12T00:00:00+09:00",
     "already_member": false
   }
 }
@@ -184,7 +232,8 @@ Payload:
 
 방향: Server -> 같은 방에 연결된 client
 
-발생 시점: WebSocket 연결 종료 후 grace time 안에 같은 유저가 같은 방으로 재연결하지 않음
+발생 시점: `POST /api/v1/game/rooms/{room_public_id}/leave` 성공 또는 WebSocket 연결 종료 후 grace
+time 안에 같은 유저가 같은 방으로 재연결하지 않음
 
 Payload:
 
@@ -194,6 +243,10 @@ Payload:
 | `user_public_id` | uuid | 퇴장 처리된 유저 public ID |
 | `nickname` | string | 퇴장 처리된 유저 닉네임 |
 | `left_at` | datetime | DB에 기록된 퇴장 시각 |
+| `remaining_member_count` | number | 퇴장 후 남은 활성 멤버 수 |
+| `new_owner_user_public_id` | uuid 또는 null | 방장이 승계된 경우 새 방장 public ID |
+| `new_owner_nickname` | string 또는 null | 방장이 승계된 경우 새 방장 닉네임 |
+| `room_closed` | boolean | 마지막 멤버 퇴장으로 room이 닫혔는지 여부 |
 
 예시:
 
@@ -204,7 +257,11 @@ Payload:
     "room_public_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7e",
     "user_public_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7f",
     "nickname": "초보자",
-    "left_at": "2026-06-12T00:00:00Z"
+    "left_at": "2026-06-12T00:00:00+09:00",
+    "remaining_member_count": 1,
+    "new_owner_user_public_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b80",
+    "new_owner_nickname": "다음방장",
+    "room_closed": false
   }
 }
 ```
@@ -248,7 +305,7 @@ Payload:
 {
   "type": "ping",
   "payload": {
-    "client_time": "2026-06-11T00:00:00Z"
+    "client_time": "2026-06-11T00:00:00+09:00"
   }
 }
 ```
@@ -265,7 +322,7 @@ Payload:
 {
   "type": "realtime.pong",
   "payload": {
-    "client_time": "2026-06-11T00:00:00Z"
+    "client_time": "2026-06-11T00:00:00+09:00"
   }
 }
 ```

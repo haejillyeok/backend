@@ -61,7 +61,8 @@ Backend가 소유하는 게임 상태, WebSocket event, Agent 경계를 우선�
 
 - `GET /api/v1/game/rooms`
   - `session_token` 쿠키로 현재 유저를 인증한다.
-  - 닫히지 않은 room 목록과 활성 room member 수를 반환한다.
+  - 닫히지 않은 room 목록, 활성 room member 수, 현재 유저가 active member인지 여부를 반환한다.
+  - 현재 유저가 유효한 대기 로비에 이미 참여 중이면 `current_membership`에 room 요약과 `/ws/lobby/rooms/{room_public_id}` 연결 path를 함께 반환한다.
   - 목록 조회는 snapshot이고, 특정 room의 실시간 이벤트는 room 참여 후 WebSocket으로 받는다.
 - `POST /api/v1/game/rooms`
   - `session_token` 쿠키로 현재 유저를 인증한다.
@@ -73,6 +74,12 @@ Backend가 소유하는 게임 상태, WebSocket event, Agent 경계를 우선�
   - 참여 정보는 DB의 `game.room_members`에 저장한다.
   - 이미 활성 room member인 유저의 반복 요청은 새 row를 만들지 않고 기존 참여 정보를 반환한다.
   - 성공 후 `/ws/lobby/rooms/{room_public_id}`의 같은 room 연결에 `lobby.room.joined`를 broadcast한다.
+- `POST /api/v1/game/rooms/{room_public_id}/leave`
+  - `session_token` 쿠키로 현재 유저를 인증한다.
+  - `waiting` room row를 lock한 뒤 현재 유저의 활성 `room_members.left_at`을 기록한다.
+  - 방장이 나갔고 남은 활성 멤버가 있으면 가장 먼저 입장한 남은 멤버에게 방장을 승계한다.
+  - 마지막 멤버가 나가면 room을 `closed`로 바꾸고 `closed_at`을 기록해 목록, 참여, WebSocket 진입에서 제외한다.
+  - 성공 후 `/ws/lobby/rooms/{room_public_id}`의 같은 room 연결에 `lobby.room.left`를 broadcast한다.
 - `POST /api/v1/game/rooms/{room_public_id}/start`
   - `session_token` 쿠키로 현재 유저를 인증한다.
   - 방장만 게임을 시작할 수 있다.
@@ -105,6 +112,10 @@ REST handler 안에서 WebSocket 알림이 필요하면 API response에 WebSocke
 broadcast한다. 단일 서버에서는 `room_public_id -> websocket` registry에 직접
 `game.started`를 보내고, 여러 서버 instance에서는 Redis Pub/Sub, PostgreSQL NOTIFY, outbox 같은
 event bus를 통해 각 instance가 자신이 가진 연결에 broadcast한다.
+
+room 로비 화면의 초기 멤버 리스트는 `/ws/lobby/rooms/{room_public_id}` 연결 성공 직후 서버가 보내는
+`lobby.room.snapshot`으로 초기화한다. Snapshot은 활성 멤버를 `joined_at` 순서로 담고, 이후 입장/퇴장
+변경분은 `lobby.room.joined`, `lobby.room.left` event로 반영한다.
 
 `/ws/match` 연결은 연결 시점에 유효한 `session_token + game_session_public_id` 조합 또는
 `game_session_token`으로 participant identity를 복원한다. 연결이 성립하면 내부 connection identity를

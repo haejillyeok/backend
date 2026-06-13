@@ -7,8 +7,9 @@ from sqlalchemy.dialects.postgresql import UUID as PostgreSQLUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.be.models.base import Base
-from app.be.models.user import USER_SCHEMA, utc_now
+from app.be.models.user import USER_SCHEMA
 from app.shared.core.identifiers import generate_uuid_v7
+from app.shared.core.timezone import kst_now
 
 
 GAME_SCHEMA = "game"
@@ -43,13 +44,13 @@ class Room(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=utc_now,
+        default=kst_now,
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=utc_now,
-        onupdate=utc_now,
+        default=kst_now,
+        onupdate=kst_now,
     )
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -79,7 +80,7 @@ class RoomMember(Base):
     joined_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=utc_now,
+        default=kst_now,
     )
     left_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -116,19 +117,19 @@ class GameSession(Base):
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=utc_now,
+        default=kst_now,
     )
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=utc_now,
+        default=kst_now,
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=utc_now,
-        onupdate=utc_now,
+        default=kst_now,
+        onupdate=kst_now,
     )
 
 
@@ -166,6 +167,6 @@ class SessionParticipant(Base):
     joined_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=utc_now,
+        default=kst_now,
     )
     left_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

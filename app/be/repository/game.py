@@ -2,10 +2,11 @@ from uuid import UUID
 
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.be.models.game import GameSession, Room, RoomMember, SessionParticipant
-from app.be.models.user import User, utc_now
-from app.be.schemas.game_enum import GameSessionStatus
+from app.be.models.user import User
+from app.be.schemas.game_enum import GameSessionStatus, RoomStatus
 from app.be.services.game import (
     GameRoomListItem,
     GameRoomRecord,
@@ -16,6 +17,7 @@ from app.be.services.game import (
 )
 from app.shared.core.identifiers import generate_uuid_v7
 from app.shared.core.observability import traced_method
+from app.shared.core.timezone import kst_now
 
 
 TERMINAL_SESSION_STATUSES = (
@@ -30,18 +32,32 @@ class GameRepository:
     def __init__(self, db_session: AsyncSession) -> None:
         self.db_session = db_session
 
-    async def list_rooms(self) -> list[GameRoomListItem]:
-        """닫히지 않은 room 목록과 활성 멤버 수를 로비 목록 record로 조회합니다."""
-        return await self._list_rooms()
+    async def list_rooms(self, *, user_id: UUID) -> list[GameRoomListItem]:
+        """닫히지 않은 room 목록, 활성 멤버 수, 현재 유저 참여 여부를 조회합니다."""
+        return await self._list_rooms(user_id=user_id)
 
     @traced_method("GameRepository.list_rooms", layer="repository")
-    async def _list_rooms(self) -> list[GameRoomListItem]:
+    async def _list_rooms(self, *, user_id: UUID) -> list[GameRoomListItem]:
         """room 목록 조회 query 실행 시간을 trace span으로 기록합니다."""
+        active_member = aliased(RoomMember)
+        current_member = aliased(RoomMember)
         statement = (
-            select(Room, func.count(RoomMember.id))
+            select(
+                Room,
+                func.count(func.distinct(active_member.id)),
+                func.count(func.distinct(current_member.id)) > 0,
+            )
             .outerjoin(
-                RoomMember,
-                and_(RoomMember.room_id == Room.id, RoomMember.left_at.is_(None)),
+                active_member,
+                and_(active_member.room_id == Room.id, active_member.left_at.is_(None)),
+            )
+            .outerjoin(
+                current_member,
+                and_(
+                    current_member.room_id == Room.id,
+                    current_member.user_id == user_id,
+                    current_member.left_at.is_(None),
+                ),
             )
             .where(Room.closed_at.is_(None))
             .group_by(Room.id)
@@ -56,8 +72,10 @@ class GameRepository:
                 status=room.status,
                 max_players=room.max_players,
                 member_count=member_count,
+                is_current_user_member=bool(is_current_user_member),
+                is_current_user_owner=room.owner_user_id == user_id,
             )
-            for room, member_count in result.all()
+            for room, member_count, is_current_user_member in result.all()
         ]
 
     async def create_room(
@@ -89,7 +107,7 @@ class GameRepository:
         max_players: int,
     ) -> GameRoomRecord:
         """room insert 실행 시간을 trace span으로 기록합니다."""
-        now = utc_now()
+        now = kst_now()
         room = Room(
             public_id=generate_uuid_v7(),
             owner_user_id=owner_user_id,
@@ -202,6 +220,7 @@ class GameRepository:
                 user_id=member.user_id,
                 nickname=user.nickname,
                 joined_at=member.joined_at,
+                user_public_id=user.public_id,
             )
             for member, user in result.all()
         ]
@@ -243,6 +262,7 @@ class GameRepository:
             user_id=member.user_id,
             nickname=user.nickname,
             joined_at=member.joined_at,
+            user_public_id=user.public_id,
         )
 
     async def create_room_member(
@@ -267,7 +287,7 @@ class GameRepository:
         member = RoomMember(
             room_id=room_id,
             user_id=user_id,
-            joined_at=utc_now(),
+            joined_at=kst_now(),
         )
         self.db_session.add(member)
         await self.db_session.flush()
@@ -324,6 +344,33 @@ class GameRepository:
             nickname=user.nickname,
             left_at=left_at,
         )
+
+    async def transfer_room_owner(self, *, room_id: UUID, owner_user_id: UUID) -> None:
+        """room owner_user_id를 남은 활성 멤버 중 새 방장으로 변경합니다."""
+        await self._transfer_room_owner(room_id=room_id, owner_user_id=owner_user_id)
+
+    @traced_method("GameRepository.transfer_room_owner", layer="repository")
+    async def _transfer_room_owner(self, *, room_id: UUID, owner_user_id: UUID) -> None:
+        """room owner update 실행 시간을 trace span으로 기록합니다."""
+        result = await self.db_session.execute(select(Room).where(Room.id == room_id))
+        room = result.scalar_one()
+        room.owner_user_id = owner_user_id
+        room.updated_at = kst_now()
+        await self.db_session.flush()
+
+    async def close_room(self, *, room_id: UUID, closed_at) -> None:
+        """room을 closed 상태로 바꾸고 closed_at을 기록합니다."""
+        await self._close_room(room_id=room_id, closed_at=closed_at)
+
+    @traced_method("GameRepository.close_room", layer="repository")
+    async def _close_room(self, *, room_id: UUID, closed_at) -> None:
+        """room close update 실행 시간을 trace span으로 기록합니다."""
+        result = await self.db_session.execute(select(Room).where(Room.id == room_id))
+        room = result.scalar_one()
+        room.status = RoomStatus.CLOSED.value
+        room.closed_at = closed_at
+        room.updated_at = closed_at
+        await self.db_session.flush()
 
     async def create_game_session(
         self,
