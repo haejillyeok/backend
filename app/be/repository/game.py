@@ -505,6 +505,7 @@ class GameRepository:
             display_name=participant.display_name,
             seat_number=participant.seat_number,
             is_uninvited_guest=participant.is_uninvited_guest,
+            resume_token_expires_at=participant.resume_token_expires_at,
         )
 
     async def save_game_session_token(

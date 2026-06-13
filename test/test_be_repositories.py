@@ -548,4 +548,5 @@ async def test_game_repository_resolves_participant_by_active_game_session_token
     assert record is not None
     assert record.game_session_public_id == game_session.public_id
     assert record.participant_id == participant.id
+    assert record.resume_token_expires_at == participant.resume_token_expires_at
     assert missing is None

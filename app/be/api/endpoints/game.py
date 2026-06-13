@@ -130,19 +130,20 @@ async def join_game_room(
     """로그인 유저를 대기 중인 객실 멤버로 참여시키고 로비 구독자에게 알립니다."""
     result = await game_service.join_room(room_public_id=room_public_id, user=current_user)
     response = map_room_join_result(result)
-    await lobby_connection_manager.broadcast_room(
-        room_public_id,
-        {
-            "type": "lobby.room.joined",
-            "payload": response.model_dump(mode="json"),
-        },
-    )
-    get_websocket_metrics(request.app).record_message(
-        ws_route="/ws/lobby/rooms/{room_public_id}",
-        ws_endpoint="lobby",
-        message_type="lobby.room.joined",
-        direction="outbound",
-    )
+    if not result.already_member:
+        await lobby_connection_manager.broadcast_room(
+            room_public_id,
+            {
+                "type": "lobby.room.joined",
+                "payload": response.model_dump(mode="json"),
+            },
+        )
+        get_websocket_metrics(request.app).record_message(
+            ws_route="/ws/lobby/rooms/{room_public_id}",
+            ws_endpoint="lobby",
+            message_type="lobby.room.joined",
+            direction="outbound",
+        )
     return ok(response)
 
 
@@ -208,6 +209,7 @@ async def leave_game_room(
     ),
 )
 async def start_game_session(
+    request: Request,
     room_public_id: UUID,
     current_user: Annotated[CurrentUser, Depends(get_current_user)],
     game_service: Annotated[GameService, Depends(get_game_service)],
@@ -217,7 +219,24 @@ async def start_game_session(
         room_public_id=room_public_id,
         user_id=current_user.id,
     )
-    return ok(map_start_result(result))
+    response = map_start_result(result)
+    await lobby_connection_manager.broadcast_room(
+        room_public_id,
+        {
+            "type": "game.started",
+            "payload": response.model_dump(
+                mode="json",
+                exclude={"game_session_token", "game_session_token_expires_at"},
+            ),
+        },
+    )
+    get_websocket_metrics(request.app).record_message(
+        ws_route="/ws/lobby/rooms/{room_public_id}",
+        ws_endpoint="lobby",
+        message_type="game.started",
+        direction="outbound",
+    )
+    return ok(response)
 
 
 @router.get(

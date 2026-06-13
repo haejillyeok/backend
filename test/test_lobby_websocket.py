@@ -7,8 +7,10 @@ import pytest
 from fastapi.websockets import WebSocketDisconnect
 from fastapi.testclient import TestClient
 
-from app.be.dependencies.services import get_auth_service, get_current_user, get_game_service
 from app.be.api.endpoints import lobby_ws
+from app.be.api.endpoints import game as game_endpoint
+from app.be.dependencies.database import get_db_session
+from app.be.dependencies.services import get_auth_service, get_current_user, get_game_service
 from app.be.main import create_app
 from app.be.services.auth import CurrentUser, SessionExpiredError
 from app.be.services.game import (
@@ -35,6 +37,11 @@ class FakeWebSocket:
         self.sent_json.append(message)
 
 
+class BrokenSendWebSocket(FakeWebSocket):
+    async def send_json(self, message: dict) -> None:
+        raise RuntimeError("websocket is already closed")
+
+
 class FakeWebSocketMetrics:
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict]] = []
@@ -53,6 +60,25 @@ class FakeWebSocketMetrics:
 
     def record_duration(self, **kwargs) -> None:
         self.calls.append(("duration", kwargs))
+
+
+class FakeDbSession:
+    def __init__(self) -> None:
+        self.rolled_back = False
+
+    async def rollback(self) -> None:
+        self.rolled_back = True
+
+
+def use_fake_db_session(app, db_session: FakeDbSession | None = None) -> FakeDbSession:
+    """WebSocket 테스트에서 인증/권한 확인 transaction 종료 여부를 관찰할 fake session을 주입합니다."""
+    fake_db_session = db_session or FakeDbSession()
+
+    async def fake_db_session_dependency():
+        yield fake_db_session
+
+    app.dependency_overrides[get_db_session] = fake_db_session_dependency
+    return fake_db_session
 
 
 class FakeSpan:
@@ -116,6 +142,7 @@ def test_lobby_websocket_rejects_missing_session_cookie() -> None:
             raise AssertionError("세션 인증 실패 전에는 room 권한을 확인하지 않습니다.")
 
     app = create_app()
+    use_fake_db_session(app)
     app.dependency_overrides[get_auth_service] = lambda: FakeAuthService(user)
     app.dependency_overrides[get_game_service] = lambda: FakeGameService()
     client = TestClient(app)
@@ -165,6 +192,7 @@ def test_room_lobby_websocket_connects_with_path_room_id_and_cleans_up() -> None
             )
 
     app = create_app()
+    use_fake_db_session(app)
     app.dependency_overrides[get_auth_service] = lambda: FakeAuthService(user)
     app.dependency_overrides[get_game_service] = lambda: FakeGameService()
     client = TestClient(app)
@@ -216,6 +244,44 @@ def test_room_lobby_websocket_connects_with_path_room_id_and_cleans_up() -> None
     assert lobby_connection_manager.room_subscription_count(room_public_id) == 0
 
 
+def test_room_lobby_websocket_closes_auth_transaction_before_accept(monkeypatch) -> None:
+    user = current_user()
+    room_public_id = uuid4()
+    db_session = FakeDbSession()
+    rollback_state_at_connect: list[bool] = []
+    original_connect = lobby_connection_manager.connect
+
+    class FakeGameService:
+        async def authorize_room_lobby_connection(
+            self,
+            *,
+            room_public_id: UUID,
+            user_id: UUID,
+        ) -> RoomLobbyConnectionResult:
+            return RoomLobbyConnectionResult(
+                room_public_id=room_public_id,
+                snapshot=build_lobby_snapshot(room_public_id=room_public_id, owner=user),
+            )
+
+    async def record_connect(websocket, user, room_public_id, **kwargs):
+        rollback_state_at_connect.append(db_session.rolled_back)
+        await original_connect(websocket, user, room_public_id, **kwargs)
+
+    monkeypatch.setattr(lobby_connection_manager, "connect", record_connect)
+    app = create_app()
+    use_fake_db_session(app, db_session)
+    app.dependency_overrides[get_auth_service] = lambda: FakeAuthService(user)
+    app.dependency_overrides[get_game_service] = lambda: FakeGameService()
+    client = TestClient(app)
+    client.cookies.set("session_token", "valid-session")
+
+    with client.websocket_connect(f"/ws/lobby/rooms/{room_public_id}") as websocket:
+        assert websocket.receive_json()["type"] == "lobby.room.connected"
+        assert websocket.receive_json()["type"] == "lobby.room.snapshot"
+
+    assert rollback_state_at_connect == [True]
+
+
 def test_room_lobby_websocket_records_apm_metrics_and_spans(monkeypatch) -> None:
     user = current_user()
     room_public_id = uuid4()
@@ -240,6 +306,7 @@ def test_room_lobby_websocket_records_apm_metrics_and_spans(monkeypatch) -> None
         lambda name, attributes=None: FakeSpan(span_names, name),
     )
     app = create_app()
+    use_fake_db_session(app)
     app.state.websocket_metrics = metrics
     app.dependency_overrides[get_auth_service] = lambda: FakeAuthService(user)
     app.dependency_overrides[get_game_service] = lambda: FakeGameService()
@@ -290,6 +357,7 @@ def test_room_lobby_websocket_closes_when_heartbeat_timeout_passes(monkeypatch) 
 
     monkeypatch.setattr(lobby_ws, "LOBBY_HEARTBEAT_TIMEOUT_SECONDS", 0.01)
     app = create_app()
+    use_fake_db_session(app)
     app.dependency_overrides[get_auth_service] = lambda: FakeAuthService(user)
     app.dependency_overrides[get_game_service] = lambda: FakeGameService()
     client = TestClient(app)
@@ -383,6 +451,28 @@ async def test_lobby_manager_cancels_grace_leave_when_user_reconnects_to_same_ro
     assert manager.room_subscription_count(room_public_id) == 1
 
 
+async def test_lobby_manager_skips_failed_websocket_during_room_broadcast() -> None:
+    manager = LobbyConnectionManager()
+    room_public_id = uuid4()
+    healthy_user = current_user()
+    stale_user = CurrentUser(
+        id=uuid4(),
+        public_id=uuid4(),
+        account_id="player_002",
+        nickname="끊긴손님",
+    )
+    healthy_socket = FakeWebSocket()
+    stale_socket = BrokenSendWebSocket()
+
+    await manager.connect(healthy_socket, healthy_user, room_public_id)
+    await manager.connect(stale_socket, stale_user, room_public_id)
+
+    await manager.broadcast_room(room_public_id, {"type": "lobby.notice", "payload": {}})
+
+    assert healthy_socket.sent_json == [{"type": "lobby.notice", "payload": {}}]
+    assert manager.room_subscription_count(room_public_id) == 1
+
+
 def test_join_room_api_broadcasts_to_lobby_room_subscribers() -> None:
     user = current_user()
     room_public_id = uuid4()
@@ -410,6 +500,7 @@ def test_join_room_api_broadcasts_to_lobby_room_subscribers() -> None:
             )
 
     app = create_app()
+    use_fake_db_session(app)
     app.dependency_overrides[get_auth_service] = lambda: FakeAuthService(user)
     app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_game_service] = lambda: FakeGameService()
@@ -434,3 +525,39 @@ def test_join_room_api_broadcasts_to_lobby_room_subscribers() -> None:
             "type": "lobby.room.joined",
             "payload": response.json()["data"],
         }
+
+
+def test_join_room_api_does_not_broadcast_when_user_is_already_member(monkeypatch) -> None:
+    user = current_user()
+    room_public_id = uuid4()
+    joined_at = datetime(2026, 6, 12, tzinfo=KST)
+    broadcast_calls: list[tuple[object, dict]] = []
+
+    class FakeGameService:
+        async def join_room(self, *, room_public_id: UUID, user: CurrentUser) -> RoomJoinResult:
+            return RoomJoinResult(
+                room_public_id=room_public_id,
+                user_public_id=user.public_id,
+                nickname=user.nickname,
+                joined_at=joined_at,
+                already_member=True,
+            )
+
+    async def record_broadcast(room_public_id, message):
+        broadcast_calls.append((room_public_id, message))
+
+    monkeypatch.setattr(
+        game_endpoint.lobby_connection_manager,
+        "broadcast_room",
+        record_broadcast,
+    )
+    app = create_app()
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_game_service] = lambda: FakeGameService()
+    client = TestClient(app)
+
+    response = client.post(f"/api/v1/game/rooms/{room_public_id}/join")
+
+    assert response.status_code == 200
+    assert response.json()["data"]["already_member"] is True
+    assert broadcast_calls == []

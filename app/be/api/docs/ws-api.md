@@ -272,18 +272,17 @@ Payload:
 
 발생 시점: `POST /api/v1/game/rooms/{room_public_id}/start` 성공
 
-상태: 예정된 broadcast입니다. REST start API와 세션 생성은 구현되어 있고, 이 메시지 타입은
-로비에서 매치로 넘어가는 handoff용으로 예약해둡니다.
+REST start API가 세션 생성을 확정한 뒤 로비에서 매치로 넘어가는 handoff용으로 broadcast합니다.
+방 전체 공통 payload에는 사용자별 `game_session_token`을 포함하지 않습니다.
 
-예상 Payload:
+Payload:
 
 | 필드 | 타입 | 설명 |
 | --- | --- | --- |
 | `room_public_id` | uuid | 시작된 객실 public ID |
 | `game_session_public_id` | uuid | match 연결에 사용할 게임 세션 public ID |
-| `game_session_token` | string | 사용자별 handoff payload에만 포함하는 match 복구 토큰. 방 전체 공통 broadcast payload에는 포함하지 않음 |
-| `game_session_token_expires_at` | datetime | match 복구 토큰 만료 시각 |
 | `game_type` | string | 게임 종류 |
+| `status` | string | 시작된 게임 세션 상태 |
 | `participants` | array | 시작 시 고정된 참가자 snapshot |
 
 ## Realtime WebSocket

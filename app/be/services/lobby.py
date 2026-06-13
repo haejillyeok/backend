@@ -9,6 +9,7 @@ from uuid import UUID
 
 from fastapi import WebSocket
 from fastapi.encoders import jsonable_encoder
+from starlette.websockets import WebSocketDisconnect
 
 from app.be.services.auth import CurrentUser
 from app.be.services.game import RoomLobbySnapshotResult
@@ -220,7 +221,10 @@ class LobbyConnectionManager:
     async def broadcast_room(self, room_public_id: UUID, message: LobbyMessage) -> None:
         """특정 room 구독자에게 같은 JSON envelope event를 전송합니다."""
         for websocket in list(self._room_subscriptions.get(room_public_id, set())):
-            await self.send(websocket, message)
+            try:
+                await self.send(websocket, message)
+            except (RuntimeError, WebSocketDisconnect):
+                self.disconnect(websocket)
 
     def _has_active_room_connection(self, *, room_public_id: UUID, user_id: UUID) -> bool:
         return any(

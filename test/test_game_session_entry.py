@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 import pytest
 from fastapi.testclient import TestClient
 
+from app.be.api.endpoints import game as game_endpoint
 from app.be.dependencies.services import get_current_user, get_game_service
 from app.be.main import create_app
 from app.be.services.auth import AuthService, CurrentUser
@@ -879,10 +880,11 @@ def test_game_service_rejects_invalid_game_session_token():
         asyncio.run(service.authorize_resume_token("invalid-token"))
 
 
-def test_start_game_session_endpoint_returns_session_for_authenticated_owner():
+def test_start_game_session_endpoint_returns_session_for_authenticated_owner(monkeypatch):
     app = create_app()
     room_public_id = uuid4()
     game_session_public_id = uuid4()
+    broadcast_calls: list[tuple[object, dict]] = []
     current_user = CurrentUser(
         id=uuid4(),
         public_id=uuid4(),
@@ -928,6 +930,14 @@ def test_start_game_session_endpoint_returns_session_for_authenticated_owner():
                 },
             )()
 
+    async def record_broadcast(room_public_id, message):
+        broadcast_calls.append((room_public_id, message))
+
+    monkeypatch.setattr(
+        game_endpoint.lobby_connection_manager,
+        "broadcast_room",
+        record_broadcast,
+    )
     app.dependency_overrides[get_current_user] = lambda: current_user
     app.dependency_overrides[get_game_service] = lambda: FakeGameService()
     client = TestClient(app)
@@ -960,6 +970,34 @@ def test_start_game_session_endpoint_returns_session_for_authenticated_owner():
             ],
         },
     }
+    assert broadcast_calls == [
+        (
+            room_public_id,
+            {
+                "type": "game.started",
+                "payload": {
+                    "game_session_public_id": str(game_session_public_id),
+                    "room_public_id": str(room_public_id),
+                    "game_type": "shiritori",
+                    "status": "starting",
+                    "participants": [
+                        {
+                            "participant_type": "user",
+                            "display_name": "방장",
+                            "seat_number": 1,
+                            "is_uninvited_guest": False,
+                        },
+                        {
+                            "participant_type": "ai",
+                            "display_name": "수상한 손님",
+                            "seat_number": 2,
+                            "is_uninvited_guest": True,
+                        },
+                    ],
+                },
+            },
+        )
+    ]
 
 
 def test_game_session_entry_endpoint_rejects_uninvited_user():

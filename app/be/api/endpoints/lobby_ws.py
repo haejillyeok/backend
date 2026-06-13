@@ -5,7 +5,9 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, WebSocket
 from starlette.websockets import WebSocketDisconnect
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.be.dependencies.database import get_db_session
 from app.be.dependencies.services import get_auth_service, get_game_service
 from app.be.repository.game import GameRepository
 from app.be.services.auth import AuthService
@@ -33,6 +35,7 @@ async def lobby_websocket(
     websocket: WebSocket,
     auth_service: Annotated[AuthService, Depends(get_auth_service)],
     game_service: Annotated[GameService, Depends(get_game_service)],
+    db_session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> None:
     """인증된 유저의 room 로비 WebSocket 연결을 열고 path의 room event를 구독합니다.
 
@@ -55,6 +58,8 @@ async def lobby_websocket(
                 room_public_id=room_public_id,
                 user_id=current_user.id,
             )
+            # WebSocket loop가 오래 유지되어도 인증/권한 확인용 read transaction은 붙잡지 않습니다.
+            await db_session.rollback()
     except AppException as exc:
         metrics.record_error(
             ws_route=LOBBY_WS_ROUTE,
