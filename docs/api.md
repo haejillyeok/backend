@@ -318,8 +318,9 @@ Response:
 참여 중이면 새 row를 만들지 않고 기존 참여 정보를 반환하므로 반복 요청에 멱등적으로 동작합니다.
 객실이 대기 상태가 아니거나 정원이 가득 찬 경우에는 참여할 수 없습니다.
 
-성공 후 서버는 같은 room의 `/ws/lobby/rooms/{room_public_id}` 연결에 `lobby.room.joined` event를
-broadcast합니다.
+신규 멤버로 추가된 경우(`already_member=false`) 서버는 같은 room의
+`/ws/lobby/rooms/{room_public_id}` 연결에 `lobby.room.joined` event를 broadcast합니다. 이미 참여
+중인 반복 요청은 응답만 반환하고 별도 WebSocket event를 보내지 않습니다.
 
 Response:
 

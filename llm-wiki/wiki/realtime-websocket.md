@@ -100,10 +100,12 @@ grace leave task를 예약한다. 같은 유저가 같은 room으로 grace time 
 복귀하지 않으면 REST 퇴장과 같은 service 경로로 `game.room_members.left_at`, 방장 승계, 마지막 멤버
 퇴장 시 room 폐쇄를 처리한 뒤 같은 room 연결에 `lobby.room.left` event를 broadcast한다.
 
-REST commit 이후 server process 안의 lobby connection manager가 같은 room 연결에
-`lobby.room.joined` 또는 `lobby.room.left` event를 broadcast한다. WebSocket manager는 연결 상태만
-process memory에 보관하며, room membership의 최종 사실은 DB다. Broadcast message는 특정 client request의 응답이 아니므로
-`응답(Response)`이 아니라 `이벤트(Event)`로 문서화한다.
+REST commit 이후 server process 안의 lobby connection manager가 같은 room 연결에 event를
+broadcast한다. `lobby.room.joined`는 신규 멤버가 추가된 경우(`already_member=false`)에만 보내고,
+이미 참여 중인 반복 join 요청은 REST 응답만 반환한다. `lobby.room.left`는 REST 퇴장 또는
+WebSocket grace leave로 퇴장이 확정된 경우 broadcast한다. WebSocket manager는 연결 상태만
+process memory에 보관하며, room membership의 최종 사실은 DB다. Broadcast message는 특정 client
+request의 응답이 아니므로 `응답(Response)`이 아니라 `이벤트(Event)`로 문서화한다.
 
 ## Design Notes
 

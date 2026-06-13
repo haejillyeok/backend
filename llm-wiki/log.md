@@ -4,6 +4,13 @@
 코드 변경 상세는 Git history, PR, issue에서 확인하고, 이 파일에는 위키 페이지의 지식, 계약, 정책,
 컨벤션이 어떻게 바뀌었는지만 남깁니다.
 
+## [2026-06-13] maintenance | Clarify repeated lobby join event
+
+- `realtime-websocket.md`와 `sunset-game-domain.md`에 반복 room join 요청은 REST 응답만 반환하고
+  `lobby.room.joined` WebSocket event를 보내지 않는다는 기준을 정리했다.
+- `lobby.room.joined`는 신규 멤버가 추가된 경우(`already_member=false`)에만 broadcast한다는 계약으로
+  명확히 했다.
+
 ## [2026-06-13] maintenance | Align timestamps on KST
 
 - `runtime-configuration.md`의 DB timestamp 기준을 UTC가 아니라 KST timezone-aware datetime으로 정정했다.

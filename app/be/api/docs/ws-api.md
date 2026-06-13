@@ -201,7 +201,8 @@ Payload:
 
 방향: Server -> 같은 객실에 연결된 client
 
-발생 시점: `POST /api/v1/game/rooms/{room_public_id}/join` 성공
+발생 시점: `POST /api/v1/game/rooms/{room_public_id}/join` 성공 중 신규 멤버가 추가된 경우
+(`already_member=false`)
 
 Payload:
 
@@ -210,8 +211,8 @@ Payload:
 | `room_public_id` | uuid | 참여한 객실 public ID |
 | `user_public_id` | uuid | 참여한 유저 public ID |
 | `nickname` | string | 참여 유저 닉네임 |
-| `joined_at` | datetime | 객실 멤버십 생성 또는 기존 참여 시각 |
-| `already_member` | boolean | 반복 join 요청으로 기존 멤버십을 반환했는지 여부 |
+| `joined_at` | datetime | 객실 멤버십 생성 시각 |
+| `already_member` | boolean | 이 event에서는 항상 `false` |
 
 예시:
 

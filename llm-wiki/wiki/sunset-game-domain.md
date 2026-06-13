@@ -73,7 +73,9 @@ Backend가 소유하는 게임 상태, WebSocket event, Agent 경계를 우선�
   - room row를 lock한 뒤 `waiting` 상태와 정원을 확인한다.
   - 참여 정보는 DB의 `game.room_members`에 저장한다.
   - 이미 활성 room member인 유저의 반복 요청은 새 row를 만들지 않고 기존 참여 정보를 반환한다.
-  - 성공 후 `/ws/lobby/rooms/{room_public_id}`의 같은 room 연결에 `lobby.room.joined`를 broadcast한다.
+  - 신규 멤버가 추가된 경우(`already_member=false`) `/ws/lobby/rooms/{room_public_id}`의 같은 room
+    연결에 `lobby.room.joined`를 broadcast한다.
+  - 이미 참여 중인 반복 join 요청은 REST 응답만 반환하고 WebSocket event를 보내지 않는다.
 - `POST /api/v1/game/rooms/{room_public_id}/leave`
   - `session_token` 쿠키로 현재 유저를 인증한다.
   - `waiting` room row를 lock한 뒤 현재 유저의 활성 `room_members.left_at`을 기록한다.
