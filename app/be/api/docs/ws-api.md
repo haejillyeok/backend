@@ -9,7 +9,7 @@ BE 서버의 WebSocket 명세 문서입니다. HTTP API 계약은 Swagger와 `do
 | --- | --- | --- | --- |
 | `/ws/lobby/rooms/{room_public_id}` | 사용 중 | `session_token` 쿠키, 활성 room member | 특정 객실 로비 연결, 객실 이벤트 수신 |
 | `/ws/realtime` | 사용 중 | 없음 | 연결 테스트용 ping/pong |
-| `/ws/match` | 예정 | `session_token` + `game_session_public_id` 또는 `game_session_token`으로 참가자 identity 고정 | 게임 진행, 턴, 점수, 투표 |
+| `/ws/match` | 사용 중 | `session_token` + `game_session_public_id` 또는 `game_session_token`으로 참가자 identity 고정 | 게임 진행, snapshot, 단어 제출, timeout, 투표, 결과 이벤트 |
 
 로비의 객실 목록 조회, 객실 생성, 객실 참여, 명시적 객실 퇴장은 REST API가 담당합니다. WebSocket은
 이미 참여가 허용된 객실의 실시간 이벤트를 받기 위해 연결합니다. 영속 상태는 DB가 소유하고,
@@ -275,6 +275,8 @@ Payload:
 
 REST start API가 세션 생성을 확정한 뒤 로비에서 매치로 넘어가는 handoff용으로 broadcast합니다.
 방 전체 공통 payload에는 사용자별 `game_session_token`을 포함하지 않습니다.
+끝말잇기 세션은 시작 transaction 안에서 첫 번째 턴을 함께 생성하며, `/ws/match` 연결 직후
+`match.snapshot.current_turn`으로 복구할 수 있습니다.
 
 Payload:
 
@@ -284,7 +286,301 @@ Payload:
 | `game_session_public_id` | uuid | match 연결에 사용할 게임 세션 public ID |
 | `game_type` | string | 게임 종류 |
 | `status` | string | 시작된 게임 세션 상태 |
-| `participants` | array | 시작 시 고정된 참가자 snapshot |
+| `rule_config` | object | 시작 시점에 세션으로 고정된 룰 설정 |
+| `participants` | array | 시작 시 고정된 익명 참가자 snapshot |
+| `participants[].display_name` | string | `1번 손님` 같은 익명 표시명 |
+| `participants[].seat_number` | number | 게임 세션 안 순서 |
+
+`game.started` payload에는 `game_session_token`, `participant_type`, `is_uninvited_guest`, 원래 닉네임을
+넣지 않습니다.
+
+### 이벤트(Event): `lobby.room.updated`
+
+방향: Server -> 같은 객실에 연결된 client
+
+발생 시점: `PATCH /api/v1/game/rooms/{room_public_id}` 성공
+
+Payload:
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| `room_public_id` | uuid | 수정된 객실 public ID |
+| `name` | string | 객실 이름 |
+| `game_type` | string | 게임 종류 |
+| `status` | string | 객실 상태 |
+| `max_players` | number | AI를 제외한 실제 유저 최대 인원 |
+| `rule_config.max_rounds` | number | 끝말잇기 판 수 |
+| `rule_config.turn_time_seconds` | number | 기본 턴 제한 시간 |
+
+## Match WebSocket
+
+### 연결
+
+| 환경 | URL |
+| --- | --- |
+| 운영 | `wss://<host>/ws/match?game_session_public_id={game_session_public_id}` |
+| 로컬 | `ws://127.0.0.1:8000/ws/match?game_session_public_id={game_session_public_id}` |
+| 재접속 | `ws://127.0.0.1:8000/ws/match?game_session_token={game_session_token}` |
+
+`session_token` 쿠키와 `game_session_public_id` 조합으로 참가자를 확인하거나, 재접속용
+`game_session_token`으로 participant identity를 복원합니다. 연결이 수락되면 서버는 `match.connected`,
+`match.snapshot` 순서로 현재 상태를 보냅니다.
+
+### 이벤트(Event): `match.connected`
+
+방향: Server -> 연결 client
+
+Payload:
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| `game_session_public_id` | uuid | 연결된 게임 세션 public ID |
+| `participant.display_name` | string | 현재 참가자의 익명 표시명 |
+| `participant.seat_number` | number | 현재 참가자의 순서 |
+
+### 이벤트(Event): `match.snapshot`
+
+방향: Server -> 연결 client
+
+재접속과 화면 복구에 필요한 익명 match 상태입니다. 참가자는 `display_name`, `seat_number`, `is_me`로만
+노출하고, 실제 닉네임, 유저 ID, AI 여부는 포함하지 않습니다.
+
+Payload 주요 필드:
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| `game_session_public_id` | uuid | 게임 세션 public ID |
+| `status` | string | 게임 세션 상태 |
+| `rule_config` | object | 시작 시점에 고정된 룰 설정 |
+| `participants` | array | 익명 참가자 목록 |
+| `current_round_number` | number/null | 현재 끝말잇기 판 번호 |
+| `current_turn` | object/null | 현재 턴 정보 |
+| `current_turn.phase_id` | uuid | `word.submit.phase_id`에 사용할 현재 턴 phase ID |
+| `current_turn.round_number` | number | 현재 끝말잇기 판 번호 |
+| `current_turn.turn_number` | number | 현재 판 안의 턴 번호 |
+| `current_turn.actor_seat_number` | number | 현재 차례 참가자의 순서 |
+| `current_turn.deadline_at` | datetime/null | 서버 기준 턴 제한 시각 |
+| `current_turn.required_start_char` | string/null | 이번 턴에 필요한 시작 글자. 첫 턴은 `null` |
+| `used_words` | array | 해당 세션에서 이미 사용된 정규화 단어 |
+| `scoreboard` | array | 익명 점수판 |
+| `server_time` | datetime | 서버 기준 현재 시각 |
+| `voting_deadline_at` | datetime/null | `voting` 상태에서 서버가 결과를 강제 확정할 시각 |
+| `results` | array | `result` 상태에서 재접속 화면 복구에 사용할 최종 결과 목록. 진행 중에는 빈 배열 |
+| `results[].participant.display_name` | string | 결과 참가자의 익명 표시명 |
+| `results[].participant.seat_number` | number | 결과 참가자의 순서 |
+| `results[].participant.revealed_participant_type` | string | 결과 상태에서 공개되는 `user` 또는 `ai` |
+| `results[].final_score` | number | 최종 점수 |
+| `results[].rank` | number | 동점 공동 등수를 반영한 순위 |
+| `results[].is_winner` | boolean | 최종 공동/단독 우승 여부 |
+| `results[].vote_score_delta` | number | 투표로 발생한 점수 변화 |
+| `results[].is_me` | boolean | 현재 연결 참가자 여부 |
+
+### 요청(Request): `ping`
+
+방향: Client -> Server
+
+서버는 같은 payload를 `match.pong`으로 반환합니다. 지원하지 않는 message type은 `error` envelope를 보낸 뒤
+`1008` close code로 연결을 닫습니다.
+
+### 요청(Request): `word.submit`
+
+방향: Client -> Server
+
+현재 턴 참가자가 단어를 제출합니다. 서버는 연결 identity의 `participant_id`, payload의 `phase_id`, 서버 시각,
+DB의 현재 phase/turn/deadline/used_words를 기준으로 제출을 검증합니다.
+
+Payload:
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| `phase_id` | uuid | 클라이언트가 보고 있는 현재 턴 phase ID |
+| `word` | string | 제출 단어 |
+
+예시:
+
+```json
+{
+  "type": "word.submit",
+  "payload": {
+    "phase_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b90",
+    "word": "사과"
+  }
+}
+```
+
+### 이벤트(Event): `match.word.accepted`
+
+방향: Server -> 같은 게임 세션에 연결된 client
+
+발생 시점: `word.submit`이 현재 턴, 제한 시간, 시작 글자, 중복 단어 검증을 통과하고 서버가 다음 턴을 생성한 뒤.
+다음 턴 actor가 AI인 경우 Backend는 현재 phase, 사용된 단어 목록, 시작 글자를 Agent answer API에 넘겨
+AI 답변을 받아 같은 제출 확정 경로로 처리할 수 있습니다. Agent answer 설정이 활성화되어 있으면
+`match.word.accepted` 이후 AI 턴 결과 또는 실패 이벤트가 같은 WebSocket 연결에 이어서 broadcast됩니다.
+
+Payload:
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| `event_sequence` | number | 세션 안 event 순서 |
+| `phase_id` | uuid | 단어가 제출된 phase ID |
+| `participant.display_name` | string | 제출 참가자의 익명 표시명 |
+| `participant.seat_number` | number | 제출 참가자의 순서 |
+| `word` | string | 서버가 정규화해 저장한 제출 단어 |
+| `normalized_word` | string | 중복 방지에 사용하는 정규화 단어 |
+| `score_delta` | number | 제출 성공으로 부여된 점수 변화 |
+| `next_turn.phase_id` | uuid | 새로 생성된 다음 턴 phase ID |
+| `next_turn.round_number` | number | 다음 턴의 끝말잇기 판 번호 |
+| `next_turn.turn_number` | number | 다음 턴 번호 |
+| `next_turn.actor_seat_number` | number | 다음 차례 참가자의 순서 |
+| `next_turn.deadline_at` | datetime | 다음 턴의 서버 기준 제한 시각 |
+| `next_turn.required_start_char` | string | 다음 단어가 시작해야 하는 글자 |
+| `created_at` | datetime | 서버가 제출을 확정한 시각 |
+
+### 이벤트(Event): `match.word.rejected`
+
+방향: Server -> 같은 게임 세션에 연결된 client
+
+발생 시점: `word.submit`이 시작 글자 불일치, 중복 단어처럼 게임 규칙 검증에 실패한 뒤.
+이 이벤트는 WebSocket 연결 오류가 아니라 게임 안의 공개 판정이므로 서버는 `participant_actions`,
+`score_ledger`, `game_events`에 거절 기록을 저장하고 transaction commit 이후 broadcast합니다.
+현재 턴은 유지되며 `next_turn`은 생성하지 않습니다.
+
+Payload:
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| `event_sequence` | number | 세션 안 event 순서 |
+| `phase_id` | uuid | 단어가 거절된 phase ID |
+| `participant.display_name` | string | 제출 참가자의 익명 표시명 |
+| `participant.seat_number` | number | 제출 참가자의 순서 |
+| `word` | string | 클라이언트가 제출한 단어 |
+| `normalized_word` | string | 중복 방지에 사용하는 정규화 단어 |
+| `reason` | string | `word_start_char_mismatch`, `word_already_used` 같은 거절 사유 |
+| `details` | object | 필요한 시작 글자 등 비식별 세부 정보 |
+| `score_delta` | number | 거절로 적용된 점수 변화 |
+| `created_at` | datetime | 서버가 거절을 확정한 시각 |
+
+### 이벤트(Event): `match.turn.failed`
+
+방향: Server -> 같은 게임 세션에 연결된 client
+
+발생 시점: 서버가 현재 턴 실패를 확정한 뒤. 예를 들어 AI 손님의 차례에서 Agent API timeout, 네트워크 오류,
+`no_candidate` 같은 결과가 발생하면 Backend가 `participant_actions`, `game_events`에 실패를 저장하고
+transaction commit 이후 broadcast합니다.
+AI 실패로 현재 끝말잇기 판이 종료되면 payload에는 다음 판 정보인 `next_turn` 또는 투표 전환을 뜻하는
+`next_status="voting"`과 `voting_deadline_at`이 포함될 수 있습니다.
+
+Payload:
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| `event_sequence` | number | 세션 안 event 순서 |
+| `phase_id` | uuid | 실패가 확정된 phase ID |
+| `participant.display_name` | string | 실패 참가자의 익명 표시명 |
+| `participant.seat_number` | number | 실패 참가자의 순서 |
+| `reason` | string | `agent_timeout`, `agent_error`, `no_candidate` 같은 실패 사유 |
+| `details` | object | timeout 초, agent status 등 디버깅 가능한 비식별 세부 정보 |
+| `next_turn` | object 또는 null | 남은 판이 있을 때 새로 생성된 다음 판 첫 턴 정보 |
+| `next_status` | string 또는 null | 모든 판이 끝난 경우 다음 세션 상태. 현재는 `voting` |
+| `voting_deadline_at` | datetime/null | 투표가 강제 종료될 서버 기준 시각 |
+| `created_at` | datetime | 서버가 실패를 확정한 시각 |
+
+### 이벤트(Event): `match.turn.timeout`
+
+방향: Server -> 같은 게임 세션에 연결된 client
+
+발생 시점: 서버가 `current_turn.deadline_at`을 지난 턴을 timeout으로 확정한 뒤. 클라이언트 타이머는 표시용이고,
+실제 시간 초과 판단은 서버 시각과 DB의 phase deadline을 기준으로 합니다.
+`/ws/match` 서버 루프는 heartbeat 대기 시간과 현재 턴 deadline 중 더 이른 시점까지만 client frame을
+기다리고, deadline이 먼저 도달하면 `turn_timeout` 확정을 시도합니다.
+deadline 이후 도착한 `word.submit`도 연결 오류로 닫지 않고 같은 timeout 확정 경로로 처리해
+`match.turn.timeout`을 broadcast합니다.
+Timeout으로 현재 끝말잇기 판이 종료되면 payload에는 다음 판 정보인 `next_turn` 또는 투표 전환을 뜻하는
+`next_status="voting"`과 `voting_deadline_at`이 포함될 수 있습니다.
+
+Payload:
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| `event_sequence` | number | 세션 안 event 순서 |
+| `phase_id` | uuid | timeout이 확정된 phase ID |
+| `participant.display_name` | string | timeout 참가자의 익명 표시명 |
+| `participant.seat_number` | number | timeout 참가자의 순서 |
+| `reason` | string | 고정값 `deadline_exceeded` |
+| `deadline_at` | datetime | 서버가 확정한 제한 시각 |
+| `next_turn` | object 또는 null | 남은 판이 있을 때 새로 생성된 다음 판 첫 턴 정보 |
+| `next_status` | string 또는 null | 모든 판이 끝난 경우 다음 세션 상태. 현재는 `voting` |
+| `voting_deadline_at` | datetime/null | 투표가 강제 종료될 서버 기준 시각 |
+| `created_at` | datetime | 서버가 timeout을 확정한 시각 |
+
+### 요청(Request): `vote.submit`
+
+방향: Client -> Server
+
+`voting` 상태에서 실제 유저 참가자가 AI로 의심되는 손님을 지목합니다. 익명성을 유지하기 위해
+클라이언트는 참가자 UUID가 아니라 공개된 순서 번호인 `target_seat_number`만 보냅니다.
+
+Payload:
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| `target_seat_number` | number | AI로 지목할 참가자의 공개 순서 |
+
+### 이벤트(Event): `match.vote.accepted`
+
+방향: Server -> 같은 게임 세션에 연결된 client
+
+발생 시점: 서버가 투표 제출을 저장한 뒤. 다른 참가자의 선택을 누설하지 않도록 target은 broadcast하지 않고,
+투표자와 제출 현황만 공유합니다.
+
+Payload:
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| `event_sequence` | number | 세션 안 event 순서 |
+| `voter.display_name` | string | 투표를 제출한 참가자의 익명 표시명 |
+| `voter.seat_number` | number | 투표를 제출한 참가자의 순서 |
+| `submitted_vote_count` | number | 제출된 실제 유저 투표 수 |
+| `required_vote_count` | number | 결과 확정에 필요한 실제 유저 투표 수 |
+| `created_at` | datetime | 서버가 투표를 확정한 시각 |
+
+### 이벤트(Event): `match.vote.timeout`
+
+방향: Server -> 같은 게임 세션에 연결된 client
+
+발생 시점: `voting_deadline_at`이 지났는데 모든 실제 유저 투표가 제출되지 않은 경우. 서버는 제출된
+투표만 점수에 반영하고 미투표자는 투표 점수 0점으로 남긴 뒤 결과를 확정합니다.
+deadline 이후 도착한 `vote.submit`도 연결 오류로 닫지 않고 같은 timeout 확정 경로로 처리합니다.
+
+Payload:
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| `event_sequence` | number | 세션 안 event 순서 |
+| `submitted_vote_count` | number | deadline까지 제출된 실제 유저 투표 수 |
+| `required_vote_count` | number | 결과 확정에 필요했던 실제 유저 투표 수 |
+| `created_at` | datetime | 서버가 투표 timeout을 확정한 시각 |
+
+### 이벤트(Event): `match.result.published`
+
+방향: Server -> 같은 게임 세션에 연결된 client
+
+발생 시점: 모든 실제 유저 투표가 제출되었거나 투표 deadline이 지나 서버가 최종 점수와 순위를 저장한 뒤.
+이 이벤트에서 참가자의 `revealed_participant_type`이 공개됩니다.
+
+Payload:
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| `event_sequence` | number | 세션 안 event 순서 |
+| `results[].participant.display_name` | string | 익명 표시명 |
+| `results[].participant.seat_number` | number | 참가자 순서 |
+| `results[].participant.revealed_participant_type` | string | `user` 또는 `ai` |
+| `results[].final_score` | number | 단어 점수와 투표 점수를 합산한 최종 점수 |
+| `results[].rank` | number | 동점 공동 등수를 반영한 순위 |
+| `results[].is_winner` | boolean | 최종 공동/단독 우승 여부 |
+| `results[].vote_score_delta` | number | 투표로 발생한 점수 변화 |
+| `created_at` | datetime | 서버가 결과를 확정한 시각 |
 
 ## Realtime WebSocket
 

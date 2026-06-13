@@ -4,7 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Request, status
 
 from app.be.dependencies.services import get_current_user, get_game_service
-from app.be.schemas.request.game import CreateGameRoomRequest
+from app.be.schemas.request.game import CreateGameRoomRequest, UpdateGameRoomRequest
 from app.be.schemas.response.game import (
     CreateGameRoomResponse,
     CurrentLobbyMembershipResponse,
@@ -15,6 +15,7 @@ from app.be.schemas.response.game import (
     RoomJoinResponse,
     RoomLeaveResponse,
     StartGameSessionResponse,
+    UpdateGameRoomResponse,
 )
 from app.be.services.auth import CurrentUser
 from app.be.services.game import (
@@ -25,6 +26,7 @@ from app.be.services.game import (
     RoomCreateResult,
     RoomJoinResult,
     RoomLeaveResult,
+    RoomUpdateResult,
     build_lobby_websocket_path,
 )
 from app.be.services.lobby import lobby_connection_manager
@@ -104,6 +106,54 @@ async def create_game_room(
         owner=current_user,
     )
     return ok(map_room_create_result(result))
+
+
+@router.patch(
+    "/rooms/{room_public_id}",
+    response_model=SuccessResponse[UpdateGameRoomResponse],
+    status_code=status.HTTP_200_OK,
+    summary="로비 객실 설정 수정",
+    operation_id="be_game_update_room",
+    responses=error_responses_by_status(
+        codes=[
+            ErrorCode.SESSION_EXPIRED,
+            ErrorCode.GAME_ROOM_NOT_FOUND,
+            ErrorCode.GAME_ROOM_UPDATE_FORBIDDEN,
+            ErrorCode.GAME_ROOM_NOT_UPDATEABLE,
+            ErrorCode.VALIDATION_ERROR,
+        ],
+    ),
+)
+async def update_game_room(
+    request: Request,
+    room_public_id: UUID,
+    payload: UpdateGameRoomRequest,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    game_service: Annotated[GameService, Depends(get_game_service)],
+) -> SuccessResponse[UpdateGameRoomResponse]:
+    """방장이 대기 객실 설정을 수정하고 같은 객실 연결에 동기화 event를 보냅니다."""
+    result = await game_service.update_room(
+        room_public_id=room_public_id,
+        user=current_user,
+        name=payload.name,
+        max_players=payload.max_players,
+        rule_config=payload.rule_config.model_dump(),
+    )
+    response = map_room_update_result(result)
+    await lobby_connection_manager.broadcast_room(
+        room_public_id,
+        {
+            "type": "lobby.room.updated",
+            "payload": response.model_dump(mode="json"),
+        },
+    )
+    get_websocket_metrics(request.app).record_message(
+        ws_route="/ws/lobby/rooms/{room_public_id}",
+        ws_endpoint="lobby",
+        message_type="lobby.room.updated",
+        direction="outbound",
+    )
+    return ok(response)
 
 
 @router.post(
@@ -303,15 +353,26 @@ def map_start_result(result: GameSessionStartResult) -> StartGameSessionResponse
         status=result.status,
         game_session_token=result.game_session_token,
         game_session_token_expires_at=result.game_session_token_expires_at,
+        rule_config=result.rule_config,
         participants=[
             GameSessionParticipantResponse(
-                participant_type=participant.participant_type,
                 display_name=participant.display_name,
                 seat_number=participant.seat_number,
-                is_uninvited_guest=participant.is_uninvited_guest,
             )
             for participant in result.participants
         ],
+    )
+
+
+def map_room_update_result(result: RoomUpdateResult) -> UpdateGameRoomResponse:
+    """service의 room 설정 수정 결과를 public API response와 WebSocket payload로 변환합니다."""
+    return UpdateGameRoomResponse(
+        room_public_id=result.room_public_id,
+        name=result.name,
+        game_type=result.game_type,
+        status=result.status,
+        max_players=result.max_players,
+        rule_config=result.rule_config,
     )
 
 
@@ -348,9 +409,7 @@ def map_entry_result(result: GameSessionEntryResult) -> GameSessionEntryResponse
         game_session_token=result.game_session_token,
         game_session_token_expires_at=result.game_session_token_expires_at,
         participant=GameSessionParticipantResponse(
-            participant_type=result.participant.participant_type,
             display_name=result.participant.display_name,
             seat_number=result.participant.seat_number,
-            is_uninvited_guest=result.participant.is_uninvited_guest,
         ),
     )

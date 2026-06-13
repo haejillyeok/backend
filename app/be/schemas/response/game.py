@@ -2,7 +2,7 @@ from datetime import datetime
 from uuid import UUID
 
 from app.be.schemas.base import SchemaModel
-from app.be.schemas.game_enum import GameSessionStatus, GameType, ParticipantType, RoomStatus
+from app.be.schemas.game_enum import GameSessionStatus, GameType, RoomStatus
 
 
 class GameRoomSummaryResponse(SchemaModel):
@@ -43,6 +43,20 @@ class CreateGameRoomResponse(SchemaModel):
     created_at: datetime
 
 
+class GameRoomRuleConfigResponse(SchemaModel):
+    max_rounds: int
+    turn_time_seconds: int
+
+
+class UpdateGameRoomResponse(SchemaModel):
+    room_public_id: UUID
+    name: str
+    game_type: GameType
+    status: RoomStatus
+    max_players: int
+    rule_config: GameRoomRuleConfigResponse
+
+
 class RoomJoinResponse(SchemaModel):
     room_public_id: UUID
     user_public_id: UUID
@@ -63,10 +77,8 @@ class RoomLeaveResponse(SchemaModel):
 
 
 class GameSessionParticipantResponse(SchemaModel):
-    participant_type: ParticipantType
     display_name: str
     seat_number: int
-    is_uninvited_guest: bool
 
 
 class StartGameSessionResponse(SchemaModel):
@@ -76,6 +88,7 @@ class StartGameSessionResponse(SchemaModel):
     status: GameSessionStatus
     game_session_token: str
     game_session_token_expires_at: datetime
+    rule_config: GameRoomRuleConfigResponse
     participants: list[GameSessionParticipantResponse]
 
 

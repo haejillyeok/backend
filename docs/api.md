@@ -67,6 +67,8 @@ router에 등록합니다. endpoint 본문에서 유저 ID가 필요하면 같�
 | `GAME_ROOM_START_FORBIDDEN` | `AUTHORIZATION` | `403` | `1008` | 방장 또는 허용된 멤버가 아닌 유저의 게임 시작 요청 |
 | `GAME_ROOM_NOT_STARTABLE` | `CONFLICT` | `409` | `1008` | 현재 객실 상태나 멤버 조건에서 게임 시작 불가 |
 | `GAME_ROOM_NOT_JOINABLE` | `CONFLICT` | `409` | `1008` | 현재 객실 상태나 정원 조건에서 객실 참여 불가 |
+| `GAME_ROOM_UPDATE_FORBIDDEN` | `AUTHORIZATION` | `403` | `1008` | 방장이 아닌 유저의 객실 설정 수정 요청 |
+| `GAME_ROOM_NOT_UPDATEABLE` | `CONFLICT` | `409` | `1008` | 현재 객실 상태나 멤버 조건에서 객실 설정 수정 불가 |
 | `GAME_ROOM_ENTRY_FORBIDDEN` | `AUTHORIZATION` | `403` | `1008` | 활성 room member가 아닌 유저의 객실 로비 WebSocket 연결 요청 |
 | `GAME_SESSION_ENTRY_FORBIDDEN` | `AUTHORIZATION` | `403` | `1008` | 게임 시작 시 확정된 참가자가 아닌 유저의 세션 진입 요청 |
 
@@ -208,7 +210,10 @@ Swagger에는 게임 API의 닫힌 문자열 값을 enum으로 노출합니다.
 | `game_type` | `shiritori`, `chosung`, `contains` |
 | room `status` | `waiting`, `starting`, `playing`, `closed` |
 | game session `status` | `starting`, `playing`, `voting`, `result`, `aborted` |
-| `participant_type` | `user`, `ai` |
+
+게임 진행 중 public participant payload는 익명 처리된 `display_name`과 `seat_number`만 노출합니다.
+`participant_type`, `is_uninvited_guest`, 원래 닉네임은 결과 공개 전까지 REST/WebSocket 공통 payload에
+포함하지 않습니다.
 
 로비 WebSocket 클라이언트는 주기적으로 `ping`을 보내야 합니다. 서버는 마지막 메시지 이후 45초 동안
 새 메시지를 받지 못하면 연결을 닫고, 90초 grace time 안에 같은 유저가 같은 방으로 재연결하지 않으면
@@ -312,6 +317,54 @@ Response:
 | `401` / `SESSION_EXPIRED` | 로그인 세션 없음, 만료, 폐기 |
 | `422` / `VALIDATION_ERROR` | 요청 body validation 실패 |
 
+### PATCH `/api/v1/game/rooms/{room_public_id}`
+
+방장이 대기 중인 객실의 이름, 최대 실제 유저 수, 게임 시작 전 룰 설정을 수정합니다. 이 API는
+`waiting` 상태에서만 허용되며 현재 활성 멤버 수보다 작은 `max_players`로 줄일 수 없습니다.
+성공 후 서버는 같은 room의 `/ws/lobby/rooms/{room_public_id}` 연결에 `lobby.room.updated` event를
+broadcast합니다.
+
+Request:
+
+```json
+{
+  "name": "수정된 객실",
+  "max_players": 5,
+  "rule_config": {
+    "max_rounds": 8,
+    "turn_time_seconds": 10
+  }
+}
+```
+
+Response:
+
+```json
+{
+  "success": true,
+  "data": {
+    "room_public_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7e",
+    "name": "수정된 객실",
+    "game_type": "shiritori",
+    "status": "waiting",
+    "max_players": 5,
+    "rule_config": {
+      "max_rounds": 8,
+      "turn_time_seconds": 10
+    }
+  }
+}
+```
+
+| Status | Meaning |
+| --- | --- |
+| `200` | 객실 설정 수정 성공 |
+| `401` / `SESSION_EXPIRED` | 로그인 세션 없음, 만료, 폐기 |
+| `403` / `GAME_ROOM_UPDATE_FORBIDDEN` | 방장이 아닌 유저 |
+| `404` / `GAME_ROOM_NOT_FOUND` | 객실 없음 |
+| `409` / `GAME_ROOM_NOT_UPDATEABLE` | 객실이 대기 상태가 아니거나 설정 조건 불충족 |
+| `422` / `VALIDATION_ERROR` | 요청 body 또는 path UUID validation 실패 |
+
 ### POST `/api/v1/game/rooms/{room_public_id}/join`
 
 로그인 유저를 대기 중인 객실의 활성 `room_members`로 참여시킵니다. 이미 같은 room에 활성 멤버로
@@ -385,8 +438,8 @@ Response:
 
 방장이 대기 중인 객실의 활성 멤버를 게임 세션 참가자로 고정하고, 클라이언트가 이후 진입 확인에
 사용할 `game_session_public_id`를 반환합니다. 실제 유저 참가자 뒤에 AI 손님 1명이
-`is_uninvited_guest=true`로 추가됩니다. `game_session_public_id`는 한 게임판의 공개 식별자이며,
-라운드 ID가 아닙니다.
+내부 참가자로 추가됩니다. 시작 시점의 객실 `rule_config`는 `game_sessions.rule_config`에 snapshot으로
+고정됩니다. `game_session_public_id`는 한 게임 세션의 공개 식별자이며, 라운드 ID가 아닙니다.
 
 이 endpoint는 방장의 반복 요청에 대해 멱등적으로 동작합니다. 같은 room에 `starting`, `playing`,
 `voting`처럼 아직 종료되지 않은 active session이 있으면 새 session을 만들지 않고 기존
@@ -406,18 +459,18 @@ Response:
     "status": "starting",
     "game_session_token": "opaque-game-session-token",
     "game_session_token_expires_at": "2026-06-12T03:00:00+09:00",
+    "rule_config": {
+      "max_rounds": 8,
+      "turn_time_seconds": 10
+    },
     "participants": [
       {
-        "participant_type": "user",
-        "display_name": "초보자",
-        "seat_number": 1,
-        "is_uninvited_guest": false
+        "display_name": "1번 손님",
+        "seat_number": 1
       },
       {
-        "participant_type": "ai",
-        "display_name": "수상한 손님",
-        "seat_number": 2,
-        "is_uninvited_guest": true
+        "display_name": "2번 손님",
+        "seat_number": 2
       }
     ]
   }
@@ -450,10 +503,8 @@ Response:
     "game_session_token": "opaque-game-session-token",
     "game_session_token_expires_at": "2026-06-12T03:00:00+09:00",
     "participant": {
-      "participant_type": "user",
-      "display_name": "초보자",
-      "seat_number": 1,
-      "is_uninvited_guest": false
+      "display_name": "1번 손님",
+      "seat_number": 1
     }
   }
 }
@@ -557,6 +608,9 @@ Backend가 처리한 게임 상태를 받아 Qdrant 후보를 우선 반환합�
   "game_type": "shiritori",
   "used_words": ["자전거", "거미줄"],
   "last_char": "줄",
+  "condition": {
+    "last_char": "줄"
+  },
   "ai_policy": {
     "allow_fake_mistake": false,
     "allow_reuse_word": false

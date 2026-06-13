@@ -30,7 +30,7 @@
 
 | Page | Summary |
 | --- | --- |
-| [wiki/sunset-game-domain.md](wiki/sunset-game-domain.md) | 해질녘 게임의 로비, 객실, 게임 세션, 턴, 점수, 투표, WebSocket 상태 관리 기준 |
+| [wiki/sunset-game-domain.md](wiki/sunset-game-domain.md) | 해질녘 게임의 로비, 객실, 게임 세션, 라운드/사이클/턴, 점수, 투표, WebSocket 상태 관리 기준 |
 | [wiki/concepts/karpathy-llm-wiki.md](wiki/concepts/karpathy-llm-wiki.md) | Karpathy LLM Wiki 패턴을 이 레포에 적용하는 방식 |
 
 ## Decisions

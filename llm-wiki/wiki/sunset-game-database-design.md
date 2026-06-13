@@ -80,7 +80,8 @@ MVP가 단어 게임만 구현하더라도 공통 core는 플랫폼 기준으로
 
 ### `game.rooms`
 
-대기방과 객실 목록의 기준 resource다. 게임이 끝난 뒤 같은 room이 다시 대기 상태로 돌아갈 수 있다.
+대기방과 객실 목록의 기준 resource다. 게임이 끝난 뒤 같은 room을 다시 대기 상태로 돌리는 흐름은
+미래 확장 후보이며, 현재 Backend MVP는 게임 세션 결과 확정까지만 처리한다.
 
 | Column | Type | Notes |
 | --- | --- | --- |
@@ -340,8 +341,8 @@ MVP가 단어 게임만 구현하더라도 공통 core는 플랫폼 기준으로
 | `id` | UUID v7 | 내부 join용 primary key |
 | `phase_id` | UUID v7 | `game.session_phases.id` |
 | `participant_id` | UUID v7 | `game.session_participants.id` |
-| `round_number` | integer | 단어 게임 라운드 번호 |
-| `turn_number` | integer | 단어 게임 안 턴 번호 |
+| `round_number` | integer | 단어 게임 라운드 번호. 끝말잇기에서는 한판 번호이며 한 바퀴가 아니다 |
+| `turn_number` | integer | 해당 라운드 안 턴 번호. Cycle은 참가자 수와 turn_number로 계산하거나 필요 시 payload로 보강한다 |
 | `condition_payload` | jsonb | 초성, 포함 글자, 카테고리, 이전 단어 등 |
 
 ### `word_game.submissions`
@@ -593,11 +594,9 @@ erDiagram
 ## Open Questions
 
 - `room_members`를 이력 table로 둘지, 활성 membership table로 단순화할지
-- `game.participant_actions`와 `game.game_events`를 모두 영속화할지, MVP에서는 actions 중심으로 시작하고 event log를 늦출지
 - `game.state_snapshots`를 phase 전환마다 저장할지, reconnect 기준점과 결과 확정 시점에만 저장할지
 - 빠른 시작 queue와 matching 상태를 DB에 둘지, Redis/process memory로 둘지
 - AI participant가 최종 우승자가 될 수 있는지, 투표권을 가지는지
-- 단어 게임 MVP에서 `word_game.used_words`를 바로 둘지, service validation과 `word_game.submissions` 조회로 시작할지
 
 ## Related
 

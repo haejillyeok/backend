@@ -15,7 +15,9 @@ from app.be.services.game import (
     GameRoomEntryForbiddenError,
     GameRoomListItem,
     GameRoomNotJoinableError,
+    GameRoomNotUpdateableError,
     GameRoomRecord,
+    GameRoomUpdateForbiddenError,
     GameService,
     GameSessionEntryForbiddenError,
     GameSessionParticipantRecord,
@@ -23,6 +25,7 @@ from app.be.services.game import (
     RoomCreateResult,
     RoomLeaveResult,
     RoomMemberRecord,
+    RoomUpdateResult,
 )
 from app.be.models.user import User
 from app.be.models.user_session import UserSession
@@ -90,6 +93,7 @@ class FakeGameRepository(GameRepositoryProtocol):
         self.issued_credentials: list[dict[str, object]] = []
         self.new_owner_user_id = None
         self.closed_rooms: list[dict[str, object]] = []
+        self.updated_rooms: list[dict[str, object]] = []
         self.committed = False
         self.locked_room_public_ids: list[object] = []
 
@@ -199,6 +203,37 @@ class FakeGameRepository(GameRepositoryProtocol):
 
     async def close_room(self, *, room_id, closed_at):
         self.closed_rooms.append({"room_id": room_id, "closed_at": closed_at})
+
+    async def update_room_settings(self, *, room_id, name, max_players, rule_config):
+        self.updated_rooms.append(
+            {
+                "room_id": room_id,
+                "name": name,
+                "max_players": max_players,
+                "rule_config": rule_config,
+            }
+        )
+        if self.room is None:
+            raise AssertionError("room must exist before update")
+        self.room = GameRoomRecord(
+            id=self.room.id,
+            public_id=self.room.public_id,
+            owner_user_id=self.room.owner_user_id,
+            name=name,
+            game_type=self.room.game_type,
+            status=self.room.status,
+            max_players=max_players,
+            rule_config=rule_config,
+            created_at=self.room.created_at,
+        )
+        return RoomUpdateResult(
+            room_public_id=self.room.public_id,
+            name=name,
+            game_type=self.room.game_type,
+            status=self.room.status,
+            max_players=max_players,
+            rule_config=rule_config,
+        )
 
     async def create_game_session(self, **kwargs):
         self.created_sessions.append(kwargs)
@@ -668,6 +703,123 @@ def test_game_service_returns_existing_room_member_for_repeated_join():
     assert repository.committed is False
 
 
+def test_game_service_updates_waiting_room_settings_for_owner():
+    owner = CurrentUser(
+        id=uuid4(),
+        public_id=uuid4(),
+        account_id="player_001",
+        nickname="방장",
+    )
+    room_id = uuid4()
+    room_public_id = uuid4()
+    repository = FakeGameRepository(
+        room=GameRoomRecord(
+            id=room_id,
+            public_id=room_public_id,
+            owner_user_id=owner.id,
+            name="첫 객실",
+            game_type="shiritori",
+            status="waiting",
+            max_players=4,
+            rule_config={"max_rounds": 4, "turn_time_seconds": 10},
+        )
+    )
+    service = GameService(repository)
+
+    result = asyncio.run(
+        service.update_room(
+            room_public_id=room_public_id,
+            user=owner,
+            name="수정된 객실",
+            max_players=5,
+            rule_config={"max_rounds": 8, "turn_time_seconds": 9},
+        )
+    )
+
+    assert result == RoomUpdateResult(
+        room_public_id=room_public_id,
+        name="수정된 객실",
+        game_type="shiritori",
+        status="waiting",
+        max_players=5,
+        rule_config={"max_rounds": 8, "turn_time_seconds": 9},
+    )
+    assert repository.updated_rooms == [
+        {
+            "room_id": room_id,
+            "name": "수정된 객실",
+            "max_players": 5,
+            "rule_config": {"max_rounds": 8, "turn_time_seconds": 9},
+        }
+    ]
+    assert repository.locked_room_public_ids == [room_public_id]
+    assert repository.committed is True
+
+
+def test_game_service_rejects_room_update_from_non_owner():
+    user = CurrentUser(
+        id=uuid4(),
+        public_id=uuid4(),
+        account_id="player_002",
+        nickname="손님",
+    )
+    repository = FakeGameRepository(
+        room=GameRoomRecord(
+            id=uuid4(),
+            public_id=uuid4(),
+            owner_user_id=uuid4(),
+            name="첫 객실",
+            game_type="shiritori",
+            status="waiting",
+            max_players=4,
+        )
+    )
+    service = GameService(repository)
+
+    with pytest.raises(GameRoomUpdateForbiddenError):
+        asyncio.run(
+            service.update_room(
+                room_public_id=repository.room.public_id,
+                user=user,
+                name="수정된 객실",
+                max_players=4,
+                rule_config={"max_rounds": 8, "turn_time_seconds": 10},
+            )
+        )
+
+
+def test_game_service_rejects_room_update_after_game_started():
+    owner = CurrentUser(
+        id=uuid4(),
+        public_id=uuid4(),
+        account_id="player_001",
+        nickname="방장",
+    )
+    repository = FakeGameRepository(
+        room=GameRoomRecord(
+            id=uuid4(),
+            public_id=uuid4(),
+            owner_user_id=owner.id,
+            name="첫 객실",
+            game_type="shiritori",
+            status="starting",
+            max_players=4,
+        )
+    )
+    service = GameService(repository)
+
+    with pytest.raises(GameRoomNotUpdateableError):
+        asyncio.run(
+            service.update_room(
+                room_public_id=repository.room.public_id,
+                user=owner,
+                name="수정된 객실",
+                max_players=4,
+                rule_config={"max_rounds": 8, "turn_time_seconds": 10},
+            )
+        )
+
+
 def test_game_service_rejects_join_when_room_is_full():
     user = CurrentUser(
         id=uuid4(),
@@ -716,6 +868,7 @@ def test_game_service_starts_session_for_room_owner_and_freezes_allowed_members(
             game_type="shiritori",
             status="waiting",
             max_players=4,
+            rule_config={"max_rounds": 8, "turn_time_seconds": 10},
         ),
         members=[
             RoomMemberRecord(
@@ -739,10 +892,16 @@ def test_game_service_starts_session_for_room_owner_and_freezes_allowed_members(
     assert result.room_public_id == room_public_id
     assert result.game_type == "shiritori"
     assert result.status == "starting"
+    assert result.rule_config == {"max_rounds": 8, "turn_time_seconds": 10}
     assert [participant.participant_type for participant in result.participants] == [
         "user",
         "user",
         "ai",
+    ]
+    assert [participant.display_name for participant in result.participants] == [
+        "1번 손님",
+        "2번 손님",
+        "3번 손님",
     ]
     assert [participant.seat_number for participant in result.participants] == [1, 2, 3]
     assert result.game_session_token
@@ -752,6 +911,10 @@ def test_game_service_starts_session_for_room_owner_and_freezes_allowed_members(
     )
     assert repository.issued_credentials[0]["user_id"] == owner_id
     assert repository.issued_credentials[0]["token_hash"] != result.game_session_token
+    assert repository.created_sessions[0]["session"].rule_config == {
+        "max_rounds": 8,
+        "turn_time_seconds": 10,
+    }
     assert repository.locked_room_public_ids == [room_public_id]
     assert repository.committed is True
 
@@ -903,6 +1066,7 @@ def test_start_game_session_endpoint_returns_session_for_authenticated_owner(mon
                     "room_public_id": room_public_id,
                     "game_type": "shiritori",
                     "status": "starting",
+                    "rule_config": {"max_rounds": 8, "turn_time_seconds": 10},
                     "game_session_token": "owner-resume-token",
                     "game_session_token_expires_at": datetime(2026, 6, 12, 1, tzinfo=KST),
                     "participants": [
@@ -911,7 +1075,7 @@ def test_start_game_session_endpoint_returns_session_for_authenticated_owner(mon
                             (),
                             {
                                 "participant_type": "user",
-                                "display_name": "방장",
+                                "display_name": "1번 손님",
                                 "seat_number": 1,
                                 "is_uninvited_guest": False,
                             },
@@ -921,7 +1085,7 @@ def test_start_game_session_endpoint_returns_session_for_authenticated_owner(mon
                             (),
                             {
                                 "participant_type": "ai",
-                                "display_name": "수상한 손님",
+                                "display_name": "2번 손님",
                                 "seat_number": 2,
                                 "is_uninvited_guest": True,
                             },
@@ -954,18 +1118,15 @@ def test_start_game_session_endpoint_returns_session_for_authenticated_owner(mon
             "status": "starting",
             "game_session_token": "owner-resume-token",
             "game_session_token_expires_at": "2026-06-12T01:00:00+09:00",
+            "rule_config": {"max_rounds": 8, "turn_time_seconds": 10},
             "participants": [
                 {
-                    "participant_type": "user",
-                    "display_name": "방장",
+                    "display_name": "1번 손님",
                     "seat_number": 1,
-                    "is_uninvited_guest": False,
                 },
                 {
-                    "participant_type": "ai",
-                    "display_name": "수상한 손님",
+                    "display_name": "2번 손님",
                     "seat_number": 2,
-                    "is_uninvited_guest": True,
                 },
             ],
         },
@@ -980,18 +1141,15 @@ def test_start_game_session_endpoint_returns_session_for_authenticated_owner(mon
                     "room_public_id": str(room_public_id),
                     "game_type": "shiritori",
                     "status": "starting",
+                    "rule_config": {"max_rounds": 8, "turn_time_seconds": 10},
                     "participants": [
                         {
-                            "participant_type": "user",
-                            "display_name": "방장",
+                            "display_name": "1번 손님",
                             "seat_number": 1,
-                            "is_uninvited_guest": False,
                         },
                         {
-                            "participant_type": "ai",
-                            "display_name": "수상한 손님",
+                            "display_name": "2번 손님",
                             "seat_number": 2,
-                            "is_uninvited_guest": True,
                         },
                     ],
                 },

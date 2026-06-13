@@ -1,10 +1,15 @@
+import json
+
 import httpx
 import pytest
 from pydantic import SecretStr, ValidationError
 
 from app.shared.clients.agent import (
     AGENT_API_KEY_HEADER,
+    AGENT_ANSWER_PATH,
     AGENT_HEALTH_PATH,
+    AgentAnswerClient,
+    AgentAnswerRequest,
     AgentClientError,
     AgentClientSettings,
     AgentHealthClient,
@@ -41,6 +46,84 @@ async def test_agent_health_client_maps_enveloped_health_payload() -> None:
     result = await client.get_health()
 
     assert result.status == "ok"
+
+
+async def test_agent_answer_client_sends_used_words_and_maps_answer_payload() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url == "http://agent.local/api/v1/agent/answer"
+        assert request.headers[AGENT_API_KEY_HEADER] == "a" * 32
+        assert request.method == "POST"
+        assert json.loads(request.content) == {
+            "request_id": "turn-1",
+            "room_id": "session-1",
+            "game_type": "shiritori",
+            "used_words": ["사과", "과자"],
+            "last_char": "자",
+            "condition": {"last_char": "자"},
+            "ai_policy": {
+                "allow_fake_mistake": False,
+                "allow_reuse_word": False,
+            },
+        }
+        return httpx.Response(
+            200,
+            json={
+                "request_id": "turn-1",
+                "room_id": "session-1",
+                "game_type": "shiritori",
+                "answer": "자동차",
+                "status": "ok",
+                "reason": None,
+            },
+        )
+
+    client = AgentAnswerClient(settings=build_settings(), transport=httpx.MockTransport(handler))
+
+    result = await client.get_answer(
+        AgentAnswerRequest(
+            request_id="turn-1",
+            room_id="session-1",
+            game_type="shiritori",
+            used_words=["사과", "과자"],
+            last_char="자",
+            condition={"last_char": "자"},
+        )
+    )
+
+    assert result.answer == "자동차"
+    assert result.status == "ok"
+
+
+async def test_agent_answer_client_maps_no_candidate_payload() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "request_id": "turn-2",
+                "room_id": "session-1",
+                "game_type": "shiritori",
+                "answer": None,
+                "status": "no_candidate",
+                "reason": "no_available_word",
+            },
+        )
+
+    client = AgentAnswerClient(settings=build_settings(), transport=httpx.MockTransport(handler))
+
+    result = await client.get_answer(
+        AgentAnswerRequest(
+            request_id="turn-2",
+            room_id="session-1",
+            game_type="shiritori",
+            used_words=[],
+            last_char="힣",
+            condition={"last_char": "힣"},
+        )
+    )
+
+    assert result.answer is None
+    assert result.status == "no_candidate"
+    assert result.reason == "no_available_word"
 
 
 @pytest.mark.parametrize(
@@ -90,3 +173,7 @@ def test_agent_client_settings_normalizes_url_and_rejects_empty_url() -> None:
 
 def test_agent_health_path_contract_remains_versioned() -> None:
     assert AGENT_HEALTH_PATH == "/api/v1/health"
+
+
+def test_agent_answer_path_contract_remains_versioned() -> None:
+    assert AGENT_ANSWER_PATH == "/api/v1/agent/answer"

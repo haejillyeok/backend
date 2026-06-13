@@ -551,11 +551,7 @@ def test_be_openapi_documents_game_contract_enums():
     participant_schema = schema["components"]["schemas"][
         participant_ref.removeprefix("#/components/schemas/")
     ]
-    participant_type_ref = participant_schema["properties"]["participant_type"]["$ref"]
-    participant_type_schema = schema["components"]["schemas"][
-        participant_type_ref.removeprefix("#/components/schemas/")
-    ]
-    assert participant_type_schema["enum"] == ["user", "ai"]
+    assert set(participant_schema["properties"]) == {"display_name", "seat_number"}
 
 
 def test_be_openapi_description_links_websocket_api_docs():

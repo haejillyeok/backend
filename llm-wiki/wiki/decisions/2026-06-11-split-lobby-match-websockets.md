@@ -1,7 +1,7 @@
 ---
 title: Split Lobby and Match WebSockets
 type: decision
-updated: 2026-06-12
+updated: 2026-06-13
 audience: ai
 ---
 
@@ -12,7 +12,7 @@ audience: ai
 해질녘 게임의 실제 실시간 통신은 처음부터 로비와 매치를 분리한 WebSocket endpoint로 설계한다.
 
 - `/ws/realtime`: ping/pong과 WebSocket 연결 테스트용 endpoint
-- `/ws/lobby/rooms/{room_public_id}`: 참여가 허용된 객실의 대기방, 준비 상태, 시작 handoff, 방 채팅
+- `/ws/lobby/rooms/{room_public_id}`: 참여가 허용된 객실의 대기방, 설정 변경, 시작 handoff. 준비 상태와 방 채팅은 확장 후보
 - `/ws/match`: 게임 세션, 라운드, 턴, 단어 제출, 점수, 투표, 결과
 
 `/ws/realtime`은 실제 게임 상태를 소유하거나 브로드캐스트하지 않는다.

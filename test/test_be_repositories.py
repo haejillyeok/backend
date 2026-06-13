@@ -3,7 +3,8 @@ from types import SimpleNamespace
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
-from app.be.models.game import GameSession, Room, RoomMember, SessionParticipant
+from app.be.models.game import GameSession, Room, RoomMember, SessionParticipant, SessionPhase
+from app.be.models.game import WordTurn
 from app.be.models.user import User
 from app.be.models.user_session import UserSession
 from app.be.repository.auth import AuthRepository
@@ -163,6 +164,7 @@ def build_room(*, owner_user_id) -> Room:
         game_type="shiritori",
         status="waiting",
         max_players=4,
+        rule_config={"max_rounds": 8, "turn_time_seconds": 10},
     )
 
 
@@ -210,8 +212,29 @@ async def test_game_repository_creates_waiting_room_record() -> None:
     assert room.owner_user_id == owner_user_id
     assert room.name == "첫 객실"
     assert room.status == "waiting"
+    assert room.rule_config == {"max_rounds": 8, "turn_time_seconds": 10}
     assert isinstance(db_session.added[0], Room)
+    assert db_session.added[0].rule_config == {"max_rounds": 8, "turn_time_seconds": 10}
     assert db_session.flush_count == 1
+
+
+async def test_game_repository_updates_waiting_room_settings() -> None:
+    room = build_room(owner_user_id=uuid4())
+    repository = GameRepository(FakeDbSession([FakeResult(scalar=room)]))
+
+    result = await repository.update_room_settings(
+        room_id=room.id,
+        name="수정된 객실",
+        max_players=5,
+        rule_config={"max_rounds": 6, "turn_time_seconds": 9},
+    )
+
+    assert result.room_public_id == room.public_id
+    assert result.name == "수정된 객실"
+    assert result.max_players == 5
+    assert result.rule_config == {"max_rounds": 6, "turn_time_seconds": 9}
+    assert room.name == "수정된 객실"
+    assert room.rule_config == {"max_rounds": 6, "turn_time_seconds": 9}
 
 
 async def test_game_repository_gets_room_without_lock_for_lobby_connection() -> None:
@@ -235,7 +258,7 @@ async def test_game_repository_returns_active_session_with_participant_snapshot(
         room_id=room.id,
         game_type="shiritori",
         status="starting",
-        rule_config={},
+        rule_config={"max_rounds": 8, "turn_time_seconds": 10},
     )
     participant = SessionParticipant(
         id=uuid4(),
@@ -419,16 +442,17 @@ async def test_game_repository_creates_game_session_and_participant_snapshot() -
                     game_session_public_id=game_session_public_id,
                     user_id=owner_id,
                     participant_type="user",
-                    display_name="방장",
+                    display_name="1번 손님",
                     seat_number=1,
                     is_uninvited_guest=False,
+                    original_nickname="방장",
                 ),
                 GameSessionParticipantRecord(
                     participant_id=None,
                     game_session_public_id=game_session_public_id,
                     user_id=None,
                     participant_type="ai",
-                    display_name="수상한 손님",
+                    display_name="2번 손님",
                     seat_number=2,
                     is_uninvited_guest=True,
                 ),
@@ -444,8 +468,68 @@ async def test_game_repository_creates_game_session_and_participant_snapshot() -
         "방장",
         None,
     ]
-    assert db_session.flush_count == 2
+    assert db_session.flush_count == 1
     assert db_session.committed is True
+
+
+async def test_game_repository_creates_initial_shiritori_turn_with_session() -> None:
+    owner_id = uuid4()
+    room = build_room(owner_user_id=owner_id)
+    game_session_public_id = uuid4()
+    db_session = FakeDbSession([FakeResult(scalar=room)])
+    repository = GameRepository(db_session)
+
+    await repository.create_game_session(
+        session=GameSessionStartResult(
+            game_session_public_id=game_session_public_id,
+            room_public_id=room.public_id,
+            game_type="shiritori",
+            status="starting",
+            rule_config={"max_rounds": 8, "turn_time_seconds": 10},
+            participants=[
+                GameSessionParticipantRecord(
+                    participant_id=None,
+                    game_session_public_id=game_session_public_id,
+                    user_id=owner_id,
+                    participant_type="user",
+                    display_name="1번 손님",
+                    seat_number=1,
+                    is_uninvited_guest=False,
+                    original_nickname="방장",
+                ),
+                GameSessionParticipantRecord(
+                    participant_id=None,
+                    game_session_public_id=game_session_public_id,
+                    user_id=None,
+                    participant_type="ai",
+                    display_name="2번 손님",
+                    seat_number=2,
+                    is_uninvited_guest=True,
+                ),
+            ],
+        )
+    )
+
+    game_session = db_session.added[0]
+    initial_phase = db_session.added[1]
+    initial_turn = db_session.added[2]
+    first_participant = db_session.added_batches[0][0]
+    assert isinstance(game_session, GameSession)
+    assert isinstance(initial_phase, SessionPhase)
+    assert isinstance(initial_turn, WordTurn)
+    assert game_session.current_phase_id == initial_phase.id
+    assert initial_phase.session_id == game_session.id
+    assert initial_phase.phase_type == "turn"
+    assert initial_phase.phase_number == 1
+    assert initial_phase.actor_participant_id == first_participant.id
+    assert initial_phase.condition_payload == {"required_start_char": None}
+    assert initial_phase.time_limit_seconds == 10
+    assert initial_phase.deadline_at - initial_phase.started_at == timedelta(seconds=10)
+    assert initial_turn.phase_id == initial_phase.id
+    assert initial_turn.participant_id == first_participant.id
+    assert initial_turn.round_number == 1
+    assert initial_turn.turn_number == 1
+    assert initial_turn.condition_payload == {"required_start_char": None}
 
 
 async def test_game_repository_resolves_user_participant_for_session_entry() -> None:

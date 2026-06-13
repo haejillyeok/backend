@@ -1,4 +1,4 @@
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from typing import Protocol
 from uuid import UUID
@@ -16,6 +16,12 @@ AI_DISPLAY_NAME = "수상한 손님"
 GAME_SESSION_TOKEN_TTL = timedelta(hours=3)
 STARTING_STATUS = GameSessionStatus.STARTING.value
 WAITING_ROOM_STATUS = RoomStatus.WAITING.value
+DEFAULT_ROOM_RULE_CONFIG = {"max_rounds": 8, "turn_time_seconds": 10}
+
+
+def default_room_rule_config() -> dict[str, int]:
+    """새 room과 기존 설정 누락 room에 적용할 단어 게임 기본 룰을 반환합니다."""
+    return dict(DEFAULT_ROOM_RULE_CONFIG)
 
 
 @dataclass(frozen=True)
@@ -27,6 +33,7 @@ class GameRoomRecord:
     game_type: str
     status: str
     max_players: int
+    rule_config: dict[str, int] = field(default_factory=default_room_rule_config)
     created_at: datetime | None = None
 
 
@@ -69,6 +76,16 @@ class RoomCreateResult:
     max_players: int
     member_count: int
     created_at: datetime
+
+
+@dataclass(frozen=True)
+class RoomUpdateResult:
+    room_public_id: UUID
+    name: str
+    game_type: str
+    status: str
+    max_players: int
+    rule_config: dict[str, int]
 
 
 @dataclass(frozen=True)
@@ -131,6 +148,7 @@ class GameSessionParticipantRecord:
     display_name: str
     seat_number: int
     is_uninvited_guest: bool
+    original_nickname: str | None = None
     resume_token_expires_at: datetime | None = None
 
 
@@ -141,6 +159,7 @@ class GameSessionStartResult:
     game_type: str
     status: str
     participants: list[GameSessionParticipantRecord]
+    rule_config: dict[str, int] = field(default_factory=default_room_rule_config)
     game_session_token: str = ""
     game_session_token_expires_at: datetime | None = None
 
@@ -219,6 +238,16 @@ class GameRepositoryProtocol(Protocol):
     async def close_room(self, *, room_id: UUID, closed_at: datetime) -> None:
         """활성 멤버가 없는 room을 더 이상 사용할 수 없도록 닫습니다."""
 
+    async def update_room_settings(
+        self,
+        *,
+        room_id: UUID,
+        name: str,
+        max_players: int,
+        rule_config: dict[str, int],
+    ) -> RoomUpdateResult:
+        """대기 room의 표시 정보와 게임 시작 전 룰 설정을 갱신합니다."""
+
     async def create_game_session(
         self, *, session: GameSessionStartResult
     ) -> GameSessionStartResult:
@@ -282,6 +311,20 @@ class GameRoomNotJoinableError(AppException):
         super().__init__(code=ErrorCode.GAME_ROOM_NOT_JOINABLE)
 
 
+class GameRoomUpdateForbiddenError(AppException):
+    """방장이 아닌 유저가 room 설정 변경을 요청할 때 발생합니다."""
+
+    def __init__(self) -> None:
+        super().__init__(code=ErrorCode.GAME_ROOM_UPDATE_FORBIDDEN)
+
+
+class GameRoomNotUpdateableError(AppException):
+    """room 상태가 설정 변경을 허용하지 않을 때 발생합니다."""
+
+    def __init__(self) -> None:
+        super().__init__(code=ErrorCode.GAME_ROOM_NOT_UPDATEABLE)
+
+
 class GameRoomEntryForbiddenError(AppException):
     """room 활성 멤버가 아닌 유저가 room 로비에 진입하려 할 때 발생합니다."""
 
@@ -299,6 +342,11 @@ class GameSessionEntryForbiddenError(AppException):
 def build_lobby_websocket_path(room_public_id: UUID) -> str:
     """REST 응답에서 클라이언트가 같은 origin으로 연결할 로비 WebSocket path를 만듭니다."""
     return f"/ws/lobby/rooms/{room_public_id}"
+
+
+def build_anonymous_display_name(seat_number: int) -> str:
+    """게임 진행 중 참가자 정체를 숨기기 위해 좌석 번호 기반 표시명을 만듭니다."""
+    return f"{seat_number}번 손님"
 
 
 class GameService:
@@ -376,6 +424,39 @@ class GameService:
             member_count=1,
             created_at=room.created_at,
         )
+
+    async def update_room(
+        self,
+        *,
+        room_public_id: UUID,
+        user: CurrentUser,
+        name: str,
+        max_players: int,
+        rule_config: dict[str, int],
+    ) -> RoomUpdateResult:
+        """방장이 대기 중인 객실의 게임 시작 전 설정을 수정합니다.
+
+        room row lock 안에서 방장, 상태, 현재 활성 멤버 수를 검증하고 DB 설정만 확정합니다.
+        WebSocket 동기화는 API endpoint가 commit 이후 별도로 수행합니다.
+        """
+        room = await self.repository.get_room_by_public_id_for_update(room_public_id)
+        if room is None:
+            raise GameRoomNotFoundError
+        if room.owner_user_id != user.id:
+            raise GameRoomUpdateForbiddenError
+        if room.status != WAITING_ROOM_STATUS:
+            raise GameRoomNotUpdateableError
+        members = await self.repository.list_active_room_members(room.id)
+        if len(members) > max_players:
+            raise GameRoomNotUpdateableError
+        result = await self.repository.update_room_settings(
+            room_id=room.id,
+            name=name,
+            max_players=max_players,
+            rule_config=rule_config,
+        )
+        await self.repository.commit()
+        return result
 
     async def authorize_room_lobby_connection(
         self,
@@ -581,20 +662,22 @@ class GameService:
                 game_session_public_id=game_session_public_id,
                 user_id=member.user_id,
                 participant_type=ParticipantType.USER.value,
-                display_name=member.nickname,
+                display_name=build_anonymous_display_name(index),
                 seat_number=index,
                 is_uninvited_guest=False,
+                original_nickname=member.nickname,
             )
             for index, member in enumerate(members, start=1)
         ]
+        ai_seat_number = len(participants) + 1
         participants.append(
             GameSessionParticipantRecord(
                 participant_id=None,
                 game_session_public_id=game_session_public_id,
                 user_id=None,
                 participant_type=ParticipantType.AI.value,
-                display_name=AI_DISPLAY_NAME,
-                seat_number=len(participants) + 1,
+                display_name=build_anonymous_display_name(ai_seat_number),
+                seat_number=ai_seat_number,
                 is_uninvited_guest=True,
             )
         )
@@ -606,6 +689,7 @@ class GameService:
                 game_type=room.game_type,
                 status=STARTING_STATUS,
                 participants=participants,
+                rule_config=room.rule_config,
             )
         )
         credential = await self._issue_game_session_credential(

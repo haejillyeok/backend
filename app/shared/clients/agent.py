@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
@@ -9,14 +9,54 @@ from app.shared.core.observability import start_span
 
 AGENT_API_KEY_HEADER = "X-Agent-API-Key"
 AGENT_HEALTH_PATH = "/api/v1/health"
+AGENT_ANSWER_PATH = "/api/v1/agent/answer"
 DEFAULT_AGENT_TIMEOUT_SECONDS = 3.0
 AGENT_HEALTH_SPAN_NAME = "AgentHealthClient.get_health"
+AGENT_ANSWER_SPAN_NAME = "AgentAnswerClient.get_answer"
 
 
 class AgentHealthStatus(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     status: str
+
+
+class AgentAnswerCondition(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    last_char: str | None = None
+    chosung: str | None = None
+    contains_word: str | None = None
+
+
+class AgentAnswerPolicy(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    allow_fake_mistake: bool = False
+    allow_reuse_word: bool = False
+
+
+class AgentAnswerRequest(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    request_id: str | None = None
+    room_id: str
+    game_type: Literal["shiritori", "chosung", "contains"]
+    used_words: list[str]
+    last_char: str | None = None
+    condition: AgentAnswerCondition | dict[str, str | None] | None = None
+    ai_policy: AgentAnswerPolicy = Field(default_factory=AgentAnswerPolicy)
+
+
+class AgentAnswerResult(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    request_id: str | None
+    room_id: str
+    game_type: Literal["shiritori", "chosung", "contains"]
+    answer: str | None
+    status: Literal["ok", "no_candidate"]
+    reason: str | None = None
 
 
 class AgentClientSettings(BaseSettings):
@@ -105,13 +145,74 @@ class AgentHealthClient:
         return AgentHealthStatus.model_validate(_extract_health_payload(response))
 
 
+class AgentAnswerClient:
+    """Agent answer API를 호출해 AI 턴에 사용할 후보 단어 응답을 반환합니다."""
+
+    def __init__(
+        self,
+        *,
+        settings: AgentClientSettings,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ) -> None:
+        self._settings = settings
+        self._transport = transport
+
+    async def get_answer(self, payload: AgentAnswerRequest) -> AgentAnswerResult:
+        """Agent `/api/v1/agent/answer`를 호출하고 단어 후보 결과로 매핑합니다.
+
+        요청에는 현재 게임에서 이미 사용된 단어 목록과 끝말잇기 조건을 포함합니다. 네트워크 오류,
+        timeout, 4xx/5xx 응답은 `AgentClientError`로 변환합니다.
+        """
+        try:
+            async with httpx.AsyncClient(
+                base_url=self._settings.agent_url,
+                headers={
+                    AGENT_API_KEY_HEADER: self._settings.k3s_agent_key.get_secret_value(),
+                },
+                timeout=httpx.Timeout(self._settings.timeout_seconds),
+                transport=self._transport,
+            ) as client:
+                with start_span(
+                    AGENT_ANSWER_SPAN_NAME,
+                    attributes={
+                        "app.layer": "client",
+                        "peer.service": "haejillyeok-agent",
+                        "http.request.method": "POST",
+                        "url.path": AGENT_ANSWER_PATH,
+                    },
+                ) as span:
+                    response = await client.post(
+                        AGENT_ANSWER_PATH,
+                        json=payload.model_dump(mode="json"),
+                    )
+                    if hasattr(span, "set_attribute"):
+                        span.set_attribute("http.response.status_code", response.status_code)
+        except httpx.TimeoutException as exc:
+            raise AgentClientError("agent answer request timed out") from exc
+        except httpx.HTTPError as exc:
+            raise AgentClientError("agent answer request failed") from exc
+
+        if response.status_code >= 400:
+            raise AgentClientError(
+                "agent answer request failed",
+                status_code=response.status_code,
+            )
+
+        return AgentAnswerResult.model_validate(_extract_agent_payload(response, "agent answer"))
+
+
 def _extract_health_payload(response: httpx.Response) -> dict[str, Any]:
     """Agent health 응답이 plain 또는 envelope여도 상태 모델 입력으로 줄입니다."""
+    return _extract_agent_payload(response, "agent health check")
+
+
+def _extract_agent_payload(response: httpx.Response, label: str) -> dict[str, Any]:
+    """Agent 응답이 plain 또는 envelope여도 service 모델 입력으로 줄입니다."""
     try:
         payload = response.json()
     except ValueError as exc:
         raise AgentClientError(
-            "agent health check returned invalid json",
+            f"{label} returned invalid json",
             status_code=response.status_code,
         ) from exc
 
@@ -124,6 +225,6 @@ def _extract_health_payload(response: httpx.Response) -> dict[str, Any]:
         return payload
 
     raise AgentClientError(
-        "agent health check returned invalid payload",
+        f"{label} returned invalid payload",
         status_code=response.status_code,
     )

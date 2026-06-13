@@ -1,12 +1,14 @@
+from datetime import timedelta
 from uuid import UUID
 
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
-from app.be.models.game import GameSession, Room, RoomMember, SessionParticipant
+from app.be.models.game import GameSession, Room, RoomMember, SessionParticipant, SessionPhase
+from app.be.models.game import WordTurn
 from app.be.models.user import User
-from app.be.schemas.game_enum import GameSessionStatus, RoomStatus
+from app.be.schemas.game_enum import GameSessionStatus, GameType, RoomStatus
 from app.be.services.game import (
     GameRoomListItem,
     GameRoomRecord,
@@ -14,6 +16,8 @@ from app.be.services.game import (
     GameSessionStartResult,
     RoomLeaveResult,
     RoomMemberRecord,
+    RoomUpdateResult,
+    default_room_rule_config,
 )
 from app.shared.core.identifiers import generate_uuid_v7
 from app.shared.core.observability import traced_method
@@ -115,6 +119,7 @@ class GameRepository:
             game_type=game_type,
             status=status,
             max_players=max_players,
+            rule_config=default_room_rule_config(),
             created_at=now,
             updated_at=now,
         )
@@ -372,6 +377,48 @@ class GameRepository:
         room.updated_at = closed_at
         await self.db_session.flush()
 
+    async def update_room_settings(
+        self,
+        *,
+        room_id: UUID,
+        name: str,
+        max_players: int,
+        rule_config: dict[str, int],
+    ) -> RoomUpdateResult:
+        """대기 room의 설정을 수정하고 WebSocket event용 record를 반환합니다."""
+        return await self._update_room_settings(
+            room_id=room_id,
+            name=name,
+            max_players=max_players,
+            rule_config=rule_config,
+        )
+
+    @traced_method("GameRepository.update_room_settings", layer="repository")
+    async def _update_room_settings(
+        self,
+        *,
+        room_id: UUID,
+        name: str,
+        max_players: int,
+        rule_config: dict[str, int],
+    ) -> RoomUpdateResult:
+        """room 설정 update 실행 시간을 trace span으로 기록합니다."""
+        result = await self.db_session.execute(select(Room).where(Room.id == room_id))
+        room = result.scalar_one()
+        room.name = name
+        room.max_players = max_players
+        room.rule_config = rule_config
+        room.updated_at = kst_now()
+        await self.db_session.flush()
+        return RoomUpdateResult(
+            room_public_id=room.public_id,
+            name=room.name,
+            game_type=room.game_type,
+            status=room.status,
+            max_players=room.max_players,
+            rule_config=room.rule_config,
+        )
+
     async def create_game_session(
         self,
         *,
@@ -391,35 +438,76 @@ class GameRepository:
             select(Room).where(Room.public_id == session.room_public_id)
         )
         room = room_result.scalar_one()
+        game_session_id = generate_uuid_v7()
         game_session = GameSession(
+            id=game_session_id,
             public_id=session.game_session_public_id,
             room_id=room.id,
             game_type=session.game_type,
             status=session.status,
-            rule_config={},
+            rule_config=session.rule_config,
+            started_at=kst_now(),
         )
         self.db_session.add(game_session)
-        await self.db_session.flush()
-
-        self.db_session.add_all(
-            [
-                SessionParticipant(
-                    session_id=game_session.id,
-                    user_id=participant.user_id,
-                    participant_type=participant.participant_type,
-                    display_name=participant.display_name,
-                    original_nickname=participant.display_name
-                    if participant.participant_type == "user"
-                    else None,
-                    seat_number=participant.seat_number,
-                    is_uninvited_guest=participant.is_uninvited_guest,
+        participant_rows = [
+            SessionParticipant(
+                id=generate_uuid_v7(),
+                session_id=game_session.id,
+                user_id=participant.user_id,
+                participant_type=participant.participant_type,
+                display_name=participant.display_name,
+                original_nickname=participant.original_nickname,
+                seat_number=participant.seat_number,
+                is_uninvited_guest=participant.is_uninvited_guest,
+            )
+            for participant in session.participants
+        ]
+        self.db_session.add_all(participant_rows)
+        if session.game_type == GameType.SHIRITORI.value and participant_rows:
+            initial_phase = self._build_initial_word_turn_phase(
+                game_session=game_session,
+                first_participant=min(
+                    participant_rows, key=lambda participant: participant.seat_number
+                ),
+                rule_config=session.rule_config,
+            )
+            game_session.current_phase_id = initial_phase.id
+            self.db_session.add(initial_phase)
+            self.db_session.add(
+                WordTurn(
+                    phase_id=initial_phase.id,
+                    participant_id=initial_phase.actor_participant_id,
+                    round_number=1,
+                    turn_number=1,
+                    condition_payload=initial_phase.condition_payload,
                 )
-                for participant in session.participants
-            ]
-        )
+            )
         room.status = session.status
         await self.db_session.flush()
         return session
+
+    def _build_initial_word_turn_phase(
+        self,
+        *,
+        game_session: GameSession,
+        first_participant: SessionParticipant,
+        rule_config: dict[str, int],
+    ) -> SessionPhase:
+        """끝말잇기 세션 시작 직후 첫 번째 턴 phase를 만듭니다."""
+        now = kst_now()
+        turn_time_seconds = int(rule_config.get("turn_time_seconds", 10))
+        condition_payload = {"required_start_char": None}
+        return SessionPhase(
+            id=generate_uuid_v7(),
+            session_id=game_session.id,
+            phase_type="turn",
+            phase_number=1,
+            actor_participant_id=first_participant.id,
+            condition_payload=condition_payload,
+            time_limit_seconds=turn_time_seconds,
+            started_at=now,
+            deadline_at=now + timedelta(seconds=turn_time_seconds),
+        )
 
     async def get_user_participant_for_session(
         self,
@@ -571,5 +659,6 @@ class GameRepository:
             game_type=room.game_type,
             status=room.status,
             max_players=room.max_players,
+            rule_config=room.rule_config or default_room_rule_config(),
             created_at=room.created_at,
         )

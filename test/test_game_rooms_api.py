@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi.testclient import TestClient
 
+from app.be.api.endpoints import game as game_endpoint
 from app.be.dependencies.services import get_current_user, get_game_service
 from app.be.main import create_app
 from app.be.services.auth import CurrentUser
@@ -13,6 +14,7 @@ from app.be.services.game import (
     GameRoomListResult,
     RoomCreateResult,
     RoomLeaveResult,
+    RoomUpdateResult,
 )
 
 
@@ -209,3 +211,100 @@ def test_leave_game_room_returns_leave_state_for_authenticated_member() -> None:
         "new_owner_nickname": "다음방장",
         "room_closed": False,
     }
+
+
+def test_update_game_room_returns_updated_settings_for_owner() -> None:
+    user = current_user()
+    room_public_id = uuid4()
+
+    class FakeGameService:
+        async def update_room(self, *, room_public_id, user, name, max_players, rule_config):
+            assert room_public_id == room_public_id_override
+            assert user == user_override
+            assert name == "수정된 객실"
+            assert max_players == 5
+            assert rule_config == {"max_rounds": 8, "turn_time_seconds": 10}
+            return RoomUpdateResult(
+                room_public_id=room_public_id,
+                name=name,
+                game_type="shiritori",
+                status="waiting",
+                max_players=max_players,
+                rule_config=rule_config,
+            )
+
+    user_override = user
+    room_public_id_override = room_public_id
+    app = create_app()
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_game_service] = lambda: FakeGameService()
+    client = TestClient(app)
+
+    response = client.patch(
+        f"/api/v1/game/rooms/{room_public_id}",
+        json={
+            "name": "수정된 객실",
+            "max_players": 5,
+            "rule_config": {"max_rounds": 8, "turn_time_seconds": 10},
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"] == {
+        "room_public_id": str(room_public_id),
+        "name": "수정된 객실",
+        "game_type": "shiritori",
+        "status": "waiting",
+        "max_players": 5,
+        "rule_config": {"max_rounds": 8, "turn_time_seconds": 10},
+    }
+
+
+def test_update_game_room_broadcasts_updated_settings_to_lobby_subscribers(monkeypatch) -> None:
+    user = current_user()
+    room_public_id = uuid4()
+    broadcast_calls: list[tuple[object, dict]] = []
+
+    class FakeGameService:
+        async def update_room(self, *, room_public_id, user, name, max_players, rule_config):
+            return RoomUpdateResult(
+                room_public_id=room_public_id,
+                name=name,
+                game_type="shiritori",
+                status="waiting",
+                max_players=max_players,
+                rule_config=rule_config,
+            )
+
+    async def record_broadcast(room_public_id, message):
+        broadcast_calls.append((room_public_id, message))
+
+    monkeypatch.setattr(
+        game_endpoint.lobby_connection_manager,
+        "broadcast_room",
+        record_broadcast,
+    )
+    app = create_app()
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_game_service] = lambda: FakeGameService()
+    client = TestClient(app)
+
+    response = client.patch(
+        f"/api/v1/game/rooms/{room_public_id}",
+        json={
+            "name": "수정된 객실",
+            "max_players": 5,
+            "rule_config": {"max_rounds": 8, "turn_time_seconds": 10},
+        },
+    )
+
+    assert response.status_code == 200
+    assert broadcast_calls == [
+        (
+            room_public_id,
+            {
+                "type": "lobby.room.updated",
+                "payload": response.json()["data"],
+            },
+        )
+    ]

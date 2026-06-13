@@ -4,6 +4,108 @@
 코드 변경 상세는 Git history, PR, issue에서 확인하고, 이 파일에는 위키 페이지의 지식, 계약, 정책,
 컨벤션이 어떻게 바뀌었는지만 남깁니다.
 
+## [2026-06-13] maintenance | Align current match MVP docs with implementation
+
+- 끝말잇기 현재 Backend MVP 규칙을 단어 성공/거절, 실패/timeout 라운드 종료, 투표 점수 기준으로 정리하고, Cycle 시간 감소와 시간/길이 보너스는 확장 후보로 분리했다.
+- `/ws/match` 현재 client command에 `vote.submit`을 포함하도록 WebSocket 계약 지식을 정정했다.
+- 로비 준비 상태, 채팅, 빠른 시작, 결과 후 대기방 복귀는 현재 public API/로직이 아니라 확장 후보라는 기준으로 도메인 설명을 정리했다.
+- 로비/매치 WebSocket 분리 결정 문서의 로비 범위를 현재 구현된 설정 변경/start handoff와 확장 후보인 준비/채팅으로 구분했다.
+- 서버 간 Agent HTTP client가 `app/shared/clients/agent.py`에 자리잡았다는 현재 상태 기준을 반영했다.
+
+## [2026-06-13] maintenance | Add late AI answer timeout contract
+
+- AI가 성공 답변을 가져왔더라도 서버 deadline이 이미 지난 경우 단어 제출로 저장하지 않고 `turn_timeout` 확정 경로로 처리한다는 기준을 추가했다.
+
+## [2026-06-13] maintenance | Add stale AI turn idempotency contract
+
+- Agent 호출 대기 중 서버 timeout 등으로 phase가 이미 종료된 경우, 뒤늦게 도착한 AI 성공/실패는 추가 action/event 없이 무시한다는 기준을 추가했다.
+
+## [2026-06-13] maintenance | Add stale vote timeout idempotency contract
+
+- 여러 match 연결이 같은 voting deadline을 감지할 수 있으므로, 이미 `result` 상태가 된 세션의 stale vote timeout 시도는 추가 event 없이 무시한다는 기준을 추가했다.
+
+## [2026-06-13] maintenance | Clarify late vote submit timeout contract
+
+- 투표 deadline 이후 도착한 `vote.submit`은 저장하지 않고 WebSocket 연결 오류도 내지 않으며, `match.vote.timeout`과 `match.result.published`로 동기화한다는 기준을 추가했다.
+- 투표 timeout은 서버 `voting_deadline_at`과 DB voting phase deadline을 기준으로 확정한다는 계약을 기록했다.
+
+## [2026-06-13] maintenance | Clarify late word submit timeout contract
+
+- 현재 턴 deadline 이후 도착한 `word.submit`은 WebSocket 연결 오류가 아니라 서버 timeout 확정 경로로 처리해 `match.turn.timeout`을 broadcast한다는 기준을 추가했다.
+- timeout 판정 이후에도 연결을 유지하고, 다음 상태 동기화는 timeout event payload와 snapshot으로 복구한다는 계약을 기록했다.
+
+## [2026-06-13] maintenance | Add match result snapshot contract
+
+- 결과 확정 이후 재접속한 client가 `match.snapshot.results`로 `SessionResult` 기반 최종 결과를 복구한다는 계약을 추가했다.
+- snapshot 결과 항목은 익명 참가자 정보, 공개 participant type, 최종 점수, 순위, 우승 여부, vote score delta, `is_me`를 포함한다는 기준을 기록했다.
+
+## [2026-06-13] maintenance | Add match word rejection event contract
+
+- 시작 글자 불일치와 중복 단어 같은 게임 규칙상 단어 제출 거절은 WebSocket 연결 오류가 아니라 `match.word.rejected` broadcast로 동기화한다는 계약을 추가했다.
+- 단어 거절은 `word_reject` action, score ledger, `word.rejected` event로 저장하고 현재 턴을 유지한다는 기준을 기록했다.
+
+## [2026-06-13] maintenance | Add voting deadline timeout contract
+
+- 끝말잇기 마지막 판 종료 후 `phase_type=voting` phase를 만들고 `voting_deadline_at`을 snapshot/event로 복구한다는 기준을 추가했다.
+- `/ws/match` loop가 투표 deadline을 서버 기준으로 감지해 `match.vote.timeout`과 `match.result.published`를 broadcast하고, 미투표자는 투표 점수 0점으로 남긴다는 계약을 기록했다.
+
+## [2026-06-13] maintenance | Add match voting and result event contract
+
+- `voting` 상태의 `/ws/match` command를 `vote.submit`으로 정리하고, 익명성을 위해 target participant UUID가 아니라 `target_seat_number`를 받는 기준을 추가했다.
+- 투표 저장 후 `match.vote.accepted`는 target을 숨기고 제출 현황만 broadcast하며, 모든 실제 유저 투표 완료 후 `match.result.published`에서 `revealed_participant_type`을 공개한다는 계약을 기록했다.
+
+## [2026-06-13] maintenance | Add match snapshot phase id and timeout wait contract
+
+- `/ws/match` snapshot의 `current_turn.phase_id`를 client가 `word.submit.phase_id`로 되돌려 보내는 현재 턴 식별자로 명시했다.
+- `/ws/match` loop가 heartbeat 대기 시간과 현재 턴 deadline 중 더 이른 시점까지만 기다리고, deadline 도달 시 서버 기준 timeout 확정을 시도한다는 기준을 추가했다.
+
+## [2026-06-13] maintenance | Add round-end transition payload contract
+
+- `match.turn.timeout`과 `match.turn.failed`가 끝말잇기 한판 종료를 확정할 때 남은 판이면 `next_turn`, 모든 판이 끝났으면 `next_status=voting`을 함께 보낸다는 계약을 추가했다.
+- Agent API timeout, 네트워크 오류, invalid payload처럼 답변이 돌아오지 않는 경우도 Backend가 AI 실패 event로 확정하고 같은 전환 규칙을 적용한다는 기준을 명확히 했다.
+
+## [2026-06-13] maintenance | Add automatic AI turn trigger contract
+
+- `/ws/match`의 사용자 `word.submit` 성공 후 다음 phase가 AI actor이면 Agent answer 설정이 있을 때 AI 턴을 이어서 실행한다는 기준을 추가했다.
+- Agent 설정이 없더라도 match 연결과 사용자 제출은 계속 동작하고, AI 자동 실행만 비활성화한다는 운영 기준을 남겼다.
+
+## [2026-06-13] maintenance | Add AI turn Agent answer flow contract
+
+- AI 턴은 DB에서 현재 AI actor, 사용 단어, 시작 글자를 조회한 뒤 Agent answer API를 호출한다는 기준을 추가했다.
+- Agent 응답 성공은 기존 단어 제출 확정 경로로, `no_candidate`와 Agent client 오류는 기존 AI 실패 확정 경로로 처리한다는 계약을 정리했다.
+
+## [2026-06-13] maintenance | Add word submit progress event contract
+
+- `/ws/match`의 `word.submit` command와 `match.word.accepted` broadcast 계약을 추가했다.
+- 단어 제출 성공 시 제출 action, submission, used word, score ledger, accepted event, 다음 turn phase를 저장하고 commit 이후 broadcast한다는 기준을 정리했다.
+
+## [2026-06-13] maintenance | Add server turn timeout event contract
+
+- 턴 시간 초과는 클라이언트 타이머가 아니라 서버 `deadline_at` 기준으로 확정한다는 기준을 명확히 했다.
+- timeout 확정 시 `turn_timeout` action/event를 저장하고 commit 이후 `/ws/match`에 `match.turn.timeout`을 broadcast한다는 계약을 추가했다.
+
+## [2026-06-13] maintenance | Add initial match turn snapshot contract
+
+- 끝말잇기 게임 시작 transaction에서 첫 번째 턴 phase와 `word_game.turns` row를 생성하고 `game_sessions.current_phase_id`로 연결한다는 기준을 추가했다.
+- `/ws/match` snapshot은 current phase를 기반으로 `current_turn`을 복구하고, 첫 턴은 `required_start_char=null`이라는 계약을 정리했다.
+
+## [2026-06-13] maintenance | Add match turn failure event contract
+
+- `/ws/match` 연결, snapshot, ping, `match.turn.failed` 기준을 WebSocket 계약 지식에 추가했다.
+- Agent 단어 응답 timeout, 오류, `no_candidate`는 Backend가 `ai_answer_failed` action/event로 확정하고 commit 이후 broadcast한다는 기준을 남겼다.
+
+## [2026-06-13] maintenance | Add room settings and anonymous start payload contract
+
+- 방장이 `PATCH /api/v1/game/rooms/{room_public_id}`로 대기 객실 설정을 수정하고 `lobby.room.updated`로 동기화한다는 계약을 추가했다.
+- 게임 시작 시 room `rule_config`를 `game_sessions.rule_config`로 snapshot 고정한다는 기준을 정리했다.
+- 게임 시작과 세션 진입 public participant payload는 `display_name`, `seat_number`만 포함하고 AI 여부와 원래 닉네임은 숨긴다는 익명화 기준을 반영했다.
+
+## [2026-06-13] maintenance | Clarify shiritori round and cycle terms
+
+- `sunset-game-domain.md`에서 Round를 끝말잇기 한판으로 고정하고, 모든 참가자가 한 번씩 턴을 가진 한 바퀴는 Cycle로 분리했다.
+- `max_rounds=8`은 전체 참가자 1회전 수가 아니라 끝말잇기 판 수라는 기준을 정리했다.
+- `sunset-game-database-design.md`의 `word_game.turns.round_number`와 `turn_number` 설명에 Round와 Cycle 구분을 반영했다.
+
 ## [2026-06-13] maintenance | Clarify auth access IP record semantics
 
 - `2026-06-05-auth-session-login.md`에 `last_access_ip`는 보안 판정용 식별자가 아니라 best-effort 접속 기록이라는 기준을 추가했다.
