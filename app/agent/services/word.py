@@ -7,10 +7,6 @@ class WordService:
     def prepare_payloads(
         self,
         words: list[str],
-        game_types: list[str],
-        *,
-        is_valid: bool,
-        is_banned: bool,
     ) -> list[dict]:
         """단어 목록을 중복 제거한 Qdrant payload 목록으로 변환합니다."""
         deduplicated: dict[str, str] = {}
@@ -19,10 +15,4 @@ class WordService:
             if word_norm:
                 deduplicated.setdefault(word_norm, word)
 
-        payloads = []
-        for word in deduplicated.values():
-            payload = build_word_payload(word, game_types)
-            payload["is_valid"] = is_valid
-            payload["is_banned"] = is_banned
-            payloads.append(payload)
-        return payloads
+        return [build_word_payload(word) for word in deduplicated.values()]

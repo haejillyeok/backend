@@ -13,7 +13,7 @@ class StackJob:
     job_id: str
     payloads: tuple[dict, ...]
     overwrite_existing: bool
-    preserve_ai_used_count: bool
+    preserve_used_count: bool
 
 
 @dataclass(frozen=True)
@@ -37,13 +37,7 @@ class StackService:
 
     async def accept(self, request: DataStackRequest) -> StackExecution:
         """적재 요청을 정규화하고 중복 요청에는 새 background job을 만들지 않습니다."""
-        game_types = [game_type.value for game_type in request.game_types]
-        payloads = self._word_service.prepare_payloads(
-            request.words,
-            game_types,
-            is_valid=request.options.is_valid,
-            is_banned=request.options.is_banned,
-        )
+        payloads = self._word_service.prepare_payloads(request.words)
         key_hash = self._request_hash(request, payloads)
         key = f"stack:{request.request_id or key_hash}"
 
@@ -52,7 +46,7 @@ class StackService:
                 job_id=f"job-{key_hash[:8]}",
                 payloads=tuple(payloads),
                 overwrite_existing=request.options.overwrite_existing,
-                preserve_ai_used_count=request.options.preserve_ai_used_count,
+                preserve_used_count=request.options.preserve_used_count,
             )
 
         job, created = await self._idempotency_store.get_or_create(key, create_job)
@@ -68,7 +62,7 @@ class StackService:
         await self._repository.upsert_words(
             job.payloads,
             overwrite_existing=job.overwrite_existing,
-            preserve_ai_used_count=job.preserve_ai_used_count,
+            preserve_used_count=job.preserve_used_count,
         )
 
     @staticmethod

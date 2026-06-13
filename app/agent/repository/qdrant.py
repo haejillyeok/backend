@@ -20,10 +20,10 @@ class WordRepository(Protocol):
         payloads: Sequence[dict],
         *,
         overwrite_existing: bool,
-        preserve_ai_used_count: bool,
+        preserve_used_count: bool,
     ) -> int: ...
 
-    async def increment_ai_used_count(self, word_norm: str) -> None: ...
+    async def increment_used_count(self, word: str) -> None: ...
 
 
 class QdrantWordRepository:
@@ -49,16 +49,13 @@ class QdrantWordRepository:
                 ),
             )
         indexes = {
-            "word_norm": models.PayloadSchemaType.KEYWORD,
-            "game_types": models.PayloadSchemaType.KEYWORD,
+            "word": models.PayloadSchemaType.KEYWORD,
             "start_word": models.PayloadSchemaType.KEYWORD,
             "end_word": models.PayloadSchemaType.KEYWORD,
             "chosung": models.PayloadSchemaType.KEYWORD,
             "syllables": models.PayloadSchemaType.KEYWORD,
             "length": models.PayloadSchemaType.INTEGER,
-            "ai_used_count": models.PayloadSchemaType.INTEGER,
-            "is_valid": models.PayloadSchemaType.BOOL,
-            "is_banned": models.PayloadSchemaType.BOOL,
+            "used_count": models.PayloadSchemaType.INTEGER,
         }
         for field_name, field_schema in indexes.items():
             await self._client.create_payload_index(
@@ -92,13 +89,13 @@ class QdrantWordRepository:
         payloads: Sequence[dict],
         *,
         overwrite_existing: bool,
-        preserve_ai_used_count: bool,
+        preserve_used_count: bool,
     ) -> int:
         """결정적 point ID로 단어를 적재하고 필요하면 기존 사용 횟수를 보존합니다."""
         if not payloads:
             return 0
 
-        point_ids = [point_id_for_word(payload["word_norm"]) for payload in payloads]
+        point_ids = [point_id_for_word(payload["word"]) for payload in payloads]
         existing_records = await self._client.retrieve(
             collection_name=self._collection_name,
             ids=point_ids,
@@ -114,8 +111,14 @@ class QdrantWordRepository:
                 continue
 
             payload = dict(original_payload)
-            if existing and preserve_ai_used_count:
-                payload["ai_used_count"] = int((existing.payload or {}).get("ai_used_count", 0))
+            if existing and preserve_used_count:
+                existing_payload = existing.payload or {}
+                payload["used_count"] = int(
+                    existing_payload.get(
+                        "used_count",
+                        existing_payload.get("ai_used_count", 0),
+                    )
+                )
             points.append(
                 models.PointStruct(
                     id=point_id,
@@ -133,9 +136,9 @@ class QdrantWordRepository:
         return len(points)
 
     @traced_method(layer="repository")
-    async def increment_ai_used_count(self, word_norm: str) -> None:
+    async def increment_used_count(self, word: str) -> None:
         """AI가 반환한 단어의 사용 횟수를 read-modify-write 방식으로 증가시킵니다."""
-        point_id = point_id_for_word(word_norm)
+        point_id = point_id_for_word(word)
         records = await self._client.retrieve(
             collection_name=self._collection_name,
             ids=[point_id],
@@ -145,12 +148,13 @@ class QdrantWordRepository:
         if not records:
             return
 
-        current_count = int((records[0].payload or {}).get("ai_used_count", 0))
+        payload = records[0].payload or {}
+        current_count = int(payload.get("used_count", payload.get("ai_used_count", 0)))
         # 여러 Agent Pod가 동시에 갱신하면 일부 증가분이 유실될 수 있습니다.
         # UsageService는 향후 Redis INCR 구현으로 교체하기 위한 경계입니다.
         await self._client.set_payload(
             collection_name=self._collection_name,
-            payload={"ai_used_count": current_count + 1},
+            payload={"used_count": current_count + 1},
             points=[point_id],
             wait=True,
         )

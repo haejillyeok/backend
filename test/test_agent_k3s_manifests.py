@@ -21,8 +21,10 @@ def test_agent_deployment_uses_monorepo_image_and_api_key_secret() -> None:
     env_by_name = {item["name"]: item for item in container["env"]}
 
     assert pod_spec["nodeSelector"] == {"shiritori-role": "agent-storage"}
-    assert container["image"] == "haejillyeok-backend:0.1.0"
+    assert container["image"] == "haejillyeok-backend:0.3.0"
     assert env_by_name["APP_MODULE"]["value"] == "agent"
+    assert env_by_name["USE_VLLM"]["value"] == "true"
+    assert env_by_name["CANDIDATE_SHORTLIST_SIZE"]["value"] == "10"
     assert env_by_name["AGENT_API_KEY"]["valueFrom"]["secretKeyRef"] == {
         "name": "agent-api-auth",
         "key": "api-key",

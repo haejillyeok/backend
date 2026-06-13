@@ -546,7 +546,7 @@ X-Agent-API-Key: <shared-secret>
 
 ### POST `/api/v1/agent/answer`
 
-Backend가 처리한 게임 상태를 받아 Qdrant의 검증된 후보 중 하나를 반환합니다. Agent는 턴, 라운드,
+Backend가 처리한 게임 상태를 받아 Qdrant 후보를 우선 반환합니다. Agent는 턴, 라운드,
 사람 입력 유효성, 투표, 마피아 규칙을 처리하지 않습니다.
 
 ```json
@@ -563,7 +563,8 @@ Backend가 처리한 게임 상태를 받아 Qdrant의 검증된 후보 중 하�
 }
 ```
 
-후보가 있으면:
+Qdrant 후보가 있으면 `used_words`를 제외한 후보 중 최대 10개를 무작위로 추리고, 그중 하나를
+무작위로 반환합니다.
 
 ```json
 {
@@ -576,7 +577,12 @@ Backend가 처리한 게임 상태를 받아 Qdrant의 검증된 후보 중 하�
 }
 ```
 
-후보가 없으면:
+끝말잇기 Qdrant 후보가 없으면 vLLM을 한 번 호출해 `last_char`로 시작하는 완성형 한글
+2~4글자 단어를 생성합니다. 생성 결과가 시작 글자, 길이, 한글 형식, `used_words` 제외 조건을
+모두 통과하면 동일한 `status=ok` 응답으로 반환합니다. 생성 단어는 자동으로 Qdrant에 적재하지
+않습니다.
+
+vLLM이 비활성화됐거나, 호출에 실패했거나, 생성 결과가 검증을 통과하지 못하면:
 
 ```json
 {
@@ -591,7 +597,8 @@ Backend가 처리한 게임 상태를 받아 Qdrant의 검증된 후보 중 하�
 
 `game_type`은 `shiritori`, `chosung`, `contains`를 지원합니다. `condition.last_char`,
 `condition.chosung`, `condition.contains_word`를 각각 사용하며, 끝말잇기는 기존 호환을 위해
-root `last_char`도 허용합니다.
+root `last_char`도 허용합니다. Qdrant 후보가 없으면 세 game type 모두 각각의 조건을 검증하는
+vLLM 생성 fallback을 한 번 호출합니다.
 
 ## Agent Data Stack
 
@@ -603,16 +610,33 @@ root `last_char`도 허용합니다.
 {
   "request_id": "stack-20260610-0001",
   "source": "manual",
-  "game_types": ["shiritori", "chosung", "contains"],
   "words": ["사과", "고구마밭", "줄넘기"],
   "options": {
-    "is_valid": true,
-    "is_banned": false,
     "overwrite_existing": false,
-    "preserve_ai_used_count": true
+    "preserve_used_count": true
   }
 }
 ```
+
+검증 완료 단어만 적재하며 Qdrant payload는 다음 필드만 사용합니다.
+
+```json
+{
+  "word": "사과",
+  "start_word": "사",
+  "end_word": "과",
+  "chosung": "ㅅㄱ",
+  "syllables": ["사", "과"],
+  "length": 2,
+  "used_count": 0
+}
+```
+
+기존 client의 `game_types`, `is_valid`, `is_banned` 입력은 무시하며
+`preserve_ai_used_count`는 `preserve_used_count`의 호환 입력으로 허용합니다.
+
+검증 완료 JSONL을 직접 적재할 때는 `scripts/seed_word_payloads.py`를 사용합니다. 파일을
+스트리밍 검증하고 기본 500개 단위로 Qdrant에 upsert합니다.
 
 응답 status는 `202 Accepted`입니다.
 

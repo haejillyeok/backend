@@ -167,7 +167,9 @@ QDRANT_URL=http://qdrant:6333
 QDRANT_COLLECTION=game_words
 VLLM_BASE_URL=http://vllm:8000
 VLLM_MODEL_NAME=shiritori-llm
-USE_VLLM=false
+USE_VLLM=true
+CANDIDATE_SHORTLIST_SIZE=10
+VLLM_TIMEOUT_SECONDS=10
 USE_REDIS_COUNTER=false
 AGENT_API_KEY=<32자 이상 공유 키>
 ```
@@ -211,7 +213,7 @@ kubectl apply -k deploy/k3s
 ```
 
 Agent image는 단일 저장소 image를 사용하며 manifest 기본값은
-`haejillyeok-backend:0.1.0`, `APP_MODULE=agent`, `PORT=8001`입니다. 실제 registry tag를 쓰는
+`haejillyeok-backend:0.2.0`, `APP_MODULE=agent`, `PORT=8001`입니다. 실제 registry tag를 쓰는
 환경에서는 배포 전 kustomize image override로 교체합니다. Qdrant 초기화는 Agent Pod에서
 실행할 수 있습니다.
 

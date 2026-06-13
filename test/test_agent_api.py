@@ -6,8 +6,7 @@ from pydantic import SecretStr
 from app.agent.core.config import AgentSettings
 from app.agent.core.security import verify_api_key
 from app.agent.main import create_app
-from app.agent.prompts import get_prompt
-from app.agent.schemas.request.answer import GameType
+from app.agent.prompts import get_shiritori_fallback_prompt
 
 
 def test_health_does_not_require_api_key() -> None:
@@ -56,8 +55,9 @@ def test_api_key_validation_fails_closed() -> None:
     assert error.value.status_code == 503
 
 
-def test_all_game_types_have_variable_prompts() -> None:
-    for game_type in GameType:
-        prompt = get_prompt(game_type)
-        assert "{candidates}" in prompt
-        assert "후보 밖의 단어" in prompt
+def test_shiritori_fallback_prompt_is_variable_based() -> None:
+    prompt = get_shiritori_fallback_prompt()
+
+    assert "{start_char}" in prompt
+    assert "{used_words}" in prompt
+    assert "2글자 이상 4글자 이하" in prompt

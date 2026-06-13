@@ -25,7 +25,8 @@ def test_shiritori_filter_uses_fallback_and_excludes_used_words() -> None:
     query_filter = ShiritoriHandler().build_filter(request, {"줄넘기"})
 
     assert filter_values(query_filter)["start_word"] == "줄"
-    assert query_filter.must_not[0].key == "word_norm"
+    assert set(filter_values(query_filter)) == {"start_word"}
+    assert query_filter.must_not[0].key == "word"
     assert query_filter.must_not[0].match.any == ["줄넘기"]
 
 

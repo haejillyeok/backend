@@ -49,6 +49,7 @@ class AgentServiceContainer:
             CandidateService(
                 repository,
                 candidate_limit=settings.candidate_limit,
+                shortlist_size=settings.candidate_shortlist_size,
             ),
             build_handler_registry(),
             idempotency_store,

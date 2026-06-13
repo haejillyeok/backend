@@ -39,7 +39,7 @@ spec:
                     app: agent
       containers:
         - name: agent
-          image: haejillyeok-backend:0.1.0
+          image: haejillyeok-backend:0.3.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -64,7 +64,11 @@ spec:
             - name: VLLM_MODEL_NAME
               value: shiritori-llm
             - name: USE_VLLM
-              value: "false"
+              value: "true"
+            - name: CANDIDATE_SHORTLIST_SIZE
+              value: "10"
+            - name: VLLM_TIMEOUT_SECONDS
+              value: "10"
             - name: USE_REDIS_COUNTER
               value: "false"
             - name: EXPOSE_DOCS
