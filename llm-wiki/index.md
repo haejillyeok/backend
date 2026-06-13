@@ -19,9 +19,10 @@
 | [wiki/runtime-configuration.md](wiki/runtime-configuration.md) | 서버 `.env`에서 관리하는 KST timezone, HTTP port, BE-to-Agent client 설정, OpenTelemetry exporter, Docker build/push/runtime/deploy 기준 |
 | [wiki/openapi-swagger.md](wiki/openapi-swagger.md) | FastAPI OpenAPI schema, Swagger UI, operation_id, metadata 관리 기준 |
 | [wiki/observability-stack.md](wiki/observability-stack.md) | OpenTelemetry, Prometheus, Tempo, Loki/Promtail, Grafana 기반 로컬 관측 스택과 metric/log 기준 |
-| [wiki/realtime-websocket.md](wiki/realtime-websocket.md) | BE `/ws/realtime` WebSocket endpoint, `/ws-docs` 문서 라우터, WSS 노출 기준, JSON envelope 계약 |
+| [wiki/realtime-websocket.md](wiki/realtime-websocket.md) | BE `/ws/realtime` 연결 테스트용 WebSocket endpoint, `/ws-docs` 문서 라우터, WSS 노출 기준, JSON envelope 계약 |
 | [wiki/database-migrations.md](wiki/database-migrations.md) | Alembic 기반 DB migration 형상관리와 운영 기준 |
 | [wiki/database-schema-conventions.md](wiki/database-schema-conventions.md) | UUID v7, PostgreSQL text, 내부/외부 관리번호, join 기준 등 DB schema 규칙 |
+| [wiki/sunset-game-database-design.md](wiki/sunset-game-database-design.md) | 해질녘 게임 플랫폼 공통 DB, 게임군 확장 table, Mermaid ERD, UUID v7/int 번호 구분 기준 |
 | [wiki/code-conventions.md](wiki/code-conventions.md) | Python 코드 스타일, 주석/docstring, 레이어 책임, 테스트, 커밋 메시지 기준 |
 | [wiki/backend-guidelines-summary.md](wiki/backend-guidelines-summary.md) | FastAPI, WebSocket, 서버 간 HTTP client, 코드 컨벤션의 빠른 요약 |
 
@@ -29,6 +30,7 @@
 
 | Page | Summary |
 | --- | --- |
+| [wiki/sunset-game-domain.md](wiki/sunset-game-domain.md) | 해질녘 게임의 로비, 객실, 게임 세션, 턴, 점수, 투표, WebSocket 상태 관리 기준 |
 | [wiki/concepts/karpathy-llm-wiki.md](wiki/concepts/karpathy-llm-wiki.md) | Karpathy LLM Wiki 패턴을 이 레포에 적용하는 방식 |
 
 ## Decisions
@@ -44,6 +46,7 @@
 | [wiki/decisions/2026-06-05-request-audit-logging.md](wiki/decisions/2026-06-05-request-audit-logging.md) | HTTP 요청 시작, 완료, 실패를 shared 감사 로그 포맷으로 기록하는 AOP 관측 결정. gRPC 감사 기준은 2026-06-09 결정으로 대체됨 |
 | [wiki/decisions/2026-06-09-remove-application-grpc.md](wiki/decisions/2026-06-09-remove-application-grpc.md) | 애플리케이션 gRPC를 제거하고 FastAPI HTTP와 OTLP HTTP만 사용하기로 한 결정 |
 | [wiki/decisions/2026-06-11-agent-qdrant-mvp.md](wiki/decisions/2026-06-11-agent-qdrant-mvp.md) | Qdrant 후보 검색 기반 Agent MVP와 k3s/Azure reverse tunnel 운영 경계 결정 |
+| [wiki/decisions/2026-06-11-split-lobby-match-websockets.md](wiki/decisions/2026-06-11-split-lobby-match-websockets.md) | `/ws/realtime`은 연결 테스트용으로 두고 실제 게임 통신은 room 로비 WebSocket과 `/ws/match`로 분리하는 결정 |
 
 ## Sources
 

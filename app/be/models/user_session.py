@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import DateTime, ForeignKey, Text
@@ -6,8 +6,9 @@ from sqlalchemy.dialects.postgresql import UUID as PostgreSQLUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.be.models.base import Base
-from app.be.models.user import USER_SCHEMA, utc_now
+from app.be.models.user import USER_SCHEMA
 from app.shared.core.identifiers import generate_uuid_v7
+from app.shared.core.timezone import kst_now
 
 
 SESSION_TTL = timedelta(days=7)
@@ -35,17 +36,17 @@ class UserSession(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=utc_now,
+        default=kst_now,
     )
     last_seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=utc_now,
+        default=kst_now,
     )
     expires_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(UTC) + SESSION_TTL,
+        default=lambda: kst_now() + SESSION_TTL,
     )
     revoked_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),

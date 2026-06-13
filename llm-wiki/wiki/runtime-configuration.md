@@ -16,8 +16,8 @@ audience: ai
 `app/shared/core/config/app.py`는 공통 앱 설정을 읽는다. 서버 프로세스의 기본 타임존은
 KST(`Asia/Seoul`)이며, `APP_TIMEZONE` 환경변수로 명시한다. 값이 없으면 코드 기본값
 `Asia/Seoul`을 사용한다. 앱 시작 시 이 값을 `TZ` 환경변수와 C runtime timezone 상태에 적용하므로
-logging formatter의 로컬 시각도 KST를 따른다. DB 저장/비교용 timestamp는 별도 변경이 없는 한
-timezone-aware UTC 기준을 유지한다.
+logging formatter의 로컬 시각도 KST를 따른다. DB 저장/비교용 timestamp와 public API/WebSocket
+payload의 서버 생성 timestamp도 KST timezone-aware datetime을 기준으로 한다.
 
 `app/shared/core/config/http.py`는 앱 이름에서 서비스 prefix를 만든 뒤 서버 HTTP 포트 값을 읽는다.
 HTTP host는 `127.0.0.1`로 고정한다.

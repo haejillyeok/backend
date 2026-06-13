@@ -1,7 +1,7 @@
 ---
 title: OpenAPI and Swagger
 type: guide
-updated: 2026-06-09
+updated: 2026-06-13
 audience: ai
 ---
 
@@ -33,6 +33,7 @@ audience: ai
 - 성공 응답 문서는 `SuccessResponse[T]`, 실패 응답 문서는 `ErrorResponse`를 사용해 ReDoc sample이 성공 응답에는 `error`를 표시하지 않고 실패 응답에만 error object를 보여주게 한다.
 - FastAPI가 OpenAPI example의 `None` 값을 제거하는 경우 `install_openapi_schema(app)` 후처리로 error example의 `data: null`, `details: null`을 복원한다.
 - request/response field 설명이 필요한 경우 Pydantic `Field(description=..., examples=[...])`를 사용한다.
+- `game_type`, `status`, `participant_type`처럼 공개 API에서 허용 값이 닫힌 문자열은 `str`이 아니라 Pydantic이 인식하는 enum type으로 선언해 Swagger에 enum 목록이 보이게 한다.
 - 내부 ORM model을 response model로 직접 노출하지 않는다.
 
 ## Current Exposure
@@ -52,6 +53,31 @@ audience: ai
 FastAPI WebSocket route는 OpenAPI path operation으로 자동 문서화되지 않는다. BE 서버는
 `app/be/main.py`의 `FastAPI(description=...)`에 `[WebSocket API 문서](/ws-docs)` 링크를 넣어
 Swagger 상단 설명에서 WebSocket API 문서 페이지로 이동할 수 있게 한다.
+
+## Postman Collection
+
+로컬 Postman import용 JSON은 `mise run generate-postman`으로 생성한다. 이 task는
+`scripts/generate_postman.py`를 실행한다.
+
+- 산출물은 HTTP API용 `postman/haejillyeok-be.postman_collection.json`과 공통 environment용
+  `postman/haejillyeok-local.postman_environment.json`이다.
+- HTTP 요청은 BE `create_app().openapi()` schema에서 생성한다.
+- Agent 서버 OpenAPI는 생성 대상이 아니며, BE의 `/api/v1/agent/*` proxy endpoint도 Postman
+  collection에서는 제외한다.
+- Postman environment에는 `baseUrl`, `baseWs`, `sessionToken`, `accountId`, `password`,
+  `nickname`, `roomName`, `gameType`, `maxPlayers`, `roomPublicId`, `gameSessionPublicId`,
+  `sessionPublicId`를 둔다. WebSocket base URL은 로컬 `ws://127.0.0.1:8000`과 운영
+  `wss://...`를 같은 변수로 전환할 수 있도록 host/port로 쪼개지 않고 `baseWs` 하나로 관리한다.
+- Postman file import가 인식하는 collection v2.1 JSON은 `request` item을 HTTP 요청으로 import한다.
+  `request.url`이 `ws://`여도 WebSocket request UI로 생성되지 않으며, Postman의 내부
+  `ws-raw-request` 리소스 JSON은 일반 import 창에서 지원 포맷으로 인식되지 않는다.
+- 따라서 이 스크립트는 WebSocket 전용 Postman collection JSON을 생성하지 않는다. WebSocket 요청은
+  Postman UI에서 WebSocket request로 직접 만들고 URL은 `{{baseWs}}/ws/realtime`,
+  `{{baseWs}}/ws/lobby/rooms/{{roomPublicId}}`를 사용한다. 인증이 필요한 WebSocket 요청은
+  header에 `Cookie: session_token={{sessionToken}}`를 넣어 로그인/회원가입 test script가 저장한
+  session token을 재사용한다.
+- 로그인과 회원가입 요청은 Postman test script에서 응답 `Set-Cookie`의 `session_token`을 읽어
+  environment `sessionToken` 변수에 저장한다.
 
 ## OpenAPI Generator Readiness
 

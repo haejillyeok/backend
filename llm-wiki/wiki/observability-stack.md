@@ -50,6 +50,12 @@ FastAPI HTTP metric은 OpenTelemetry Meter API로 기록한다.
 - `http.server.errors`: 5xx error counter
 - `http.server.request.duration`: latency histogram, unit `s`
 - HTTP latency histogram은 5ms부터 10s까지의 explicit bucket boundary를 사용한다.
+- `websocket.connections.active`: 현재 열린 WebSocket connection up-down counter
+- `websocket.connections.total`: 수락된 WebSocket connection counter
+- `websocket.messages.total`: message type과 방향별 WebSocket message counter
+- `websocket.errors.total`: WebSocket protocol/application error counter
+- `websocket.disconnects.total`: close code별 WebSocket disconnect counter
+- `websocket.connection.duration`: WebSocket connection duration histogram, unit `s`
 
 Prometheus exporter는 OpenTelemetry metric과 attribute 이름을 Prometheus label/name으로 변환한다.
 Grafana dashboard는 다음 Prometheus 이름을 기준으로 query한다.
@@ -65,7 +71,10 @@ Grafana dashboard는 다음 Prometheus 이름을 기준으로 query한다.
 - 404처럼 route가 매칭되지 않는 요청은 `http_route="unmatched"`로 집계한다.
 - 기본 label은 `service_name`, `http_request_method`, `http_route`,
   `http_response_status_code`로 Prometheus에 노출되는 것을 전제로 한다.
-- path parameter, request body, cookie, authorization header, session token은 metric label에 넣지 않는다.
+- WebSocket label은 `service_name`, `ws_route`, `ws_endpoint`, `ws_message_type`,
+  `ws_message_direction`, `ws_close_code`, `ws_error_type`처럼 낮은 cardinality 값만 사용한다.
+- path parameter, request body, cookie, authorization header, session token, user id, room id 원문은
+  metric label에 넣지 않는다.
 
 ## Object-Level Tracing
 
@@ -74,8 +83,10 @@ Grafana dashboard는 다음 Prometheus 이름을 기준으로 query한다.
 - `app/shared/core/observability.py`의 `@traced_method(span_name, layer=...)`를 service,
   repository, external client wrapper 같은 의미 있는 경계에 붙인다.
 - span attribute는 `app.object`, `app.layer`, `code.namespace`, `code.function`을 포함한다.
-- 인증 흐름은 `AuthService.login_or_register`와 `AuthRepository.*` 메서드에 span을 붙여
-  요청 trace waterfall에서 service/repository별 시간을 볼 수 있게 한다.
+- service/repository/client 계층 span은 `app.layer` attribute로 구분해 trace dashboard에서 도메인에
+  고정되지 않고 layer별로 조회한다.
+- WebSocket endpoint는 `WebSocket.<endpoint>.connect`, `WebSocket.<endpoint>.message`,
+  `WebSocket.<endpoint>.disconnect`, `WebSocket.<endpoint>.grace_leave` 같은 수동 span을 남긴다.
 - password, token, request body, cookie, authorization header 값은 span attribute에 넣지 않는다.
 
 ## Local Commands
@@ -99,11 +110,24 @@ Grafana metric dashboard는 `Haejillyeok FastAPI APM` 제목으로 provision 된
 - p99 latency: `histogram_quantile(0.99, rate(http_server_request_duration_seconds_bucket[...]))`
 - Throughput by Status: status code별 request rate
 
+Dashboard 간 이동 링크는 `type: link`와 `/d/<dashboard_uid>` URL을 사용한다. `type: dashboards`는
+tag 기준 dashboard 목록을 펼치는 링크이므로, 빈 `tags`와 함께 쓰면 현재 provision된 dashboard가
+반복 표시된다.
+
+Grafana WebSocket metric dashboard는 `Haejillyeok WebSocket APM` 제목으로 provision 된다.
+
+- Active Connections: route/endpoint별 현재 WebSocket 연결 수
+- Connection Rate: 연결 수락 rate
+- Message Rate: endpoint, message type, 방향별 message rate
+- Error Rate: endpoint, error type별 error rate
+- Disconnect Rate by Close Code: close code별 disconnect rate
+- Connection Duration: WebSocket 연결 지속 시간 p95/p99
+
 Grafana trace dashboard는 `Haejillyeok FastAPI Traces` 제목으로 provision 된다.
 
 - Recent Request Traces: 요청 span 검색
-- Auth Service Spans: `AuthService.*` span 검색
-- Auth Repository Spans: `AuthRepository.*` span 검색
+- Service Layer Spans: `app.layer="service"` span 검색
+- Repository Layer Spans: `app.layer="repository"` span 검색
 - Selected Object Span Search: 선택한 service/repository span 검색
 
 Trace 상세 waterfall은 dashboard table에서 trace를 열거나 Grafana Explore의 Tempo datasource에서 확인한다.

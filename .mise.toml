@@ -29,6 +29,11 @@ description = "Python 테스트를 실행합니다"
 depends = ["install"]
 run = ".venv/bin/python -m pytest"
 
+[tasks.generate-postman]
+description = "BE Postman collection과 local environment JSON을 생성합니다"
+depends = ["venv"]
+run = ".venv/bin/python scripts/generate_postman.py"
+
 [tasks.format]
 description = "Python 코드 포맷을 적용합니다"
 depends = ["install"]

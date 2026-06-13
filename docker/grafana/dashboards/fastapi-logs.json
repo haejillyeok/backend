@@ -29,8 +29,8 @@
       "targetBlank": false,
       "title": "FastAPI APM Metrics",
       "tooltip": "Open the Prometheus metric dashboard.",
-      "type": "dashboards",
-      "uid": "haejillyeok-fastapi-apm"
+      "type": "link",
+      "url": "/d/haejillyeok-fastapi-apm"
     },
     {
       "asDropdown": false,
@@ -41,8 +41,8 @@
       "targetBlank": false,
       "title": "FastAPI Trace Dashboard",
       "tooltip": "Open the Tempo trace dashboard.",
-      "type": "dashboards",
-      "uid": "haejillyeok-fastapi-traces"
+      "type": "link",
+      "url": "/d/haejillyeok-fastapi-traces"
     }
   ],
   "liveNow": false,

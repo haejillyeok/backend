@@ -29,8 +29,20 @@
       "targetBlank": false,
       "title": "FastAPI Trace Dashboard",
       "tooltip": "Open the Tempo trace dashboard.",
-      "type": "dashboards",
-      "uid": "haejillyeok-fastapi-traces"
+      "type": "link",
+      "url": "/d/haejillyeok-fastapi-traces"
+    },
+    {
+      "asDropdown": false,
+      "icon": "dashboard",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "WebSocket APM",
+      "tooltip": "Open the WebSocket Prometheus metric dashboard.",
+      "type": "link",
+      "url": "/d/haejillyeok-websocket-apm"
     },
     {
       "asDropdown": false,
@@ -41,8 +53,8 @@
       "targetBlank": false,
       "title": "FastAPI Logs",
       "tooltip": "Open the Loki log dashboard.",
-      "type": "dashboards",
-      "uid": "haejillyeok-fastapi-logs"
+      "type": "link",
+      "url": "/d/haejillyeok-fastapi-logs"
     }
   ],
   "liveNow": false,

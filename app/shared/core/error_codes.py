@@ -6,11 +6,18 @@ class ErrorCode(StrEnum):
     """프로토콜 경계에서 클라이언트에 노출하는 공통 에러 코드입니다."""
 
     INVALID_CREDENTIALS = "INVALID_CREDENTIALS"
+    AUTH_USER_CONFLICT = "AUTH_USER_CONFLICT"
     SESSION_EXPIRED = "SESSION_EXPIRED"
     VALIDATION_ERROR = "VALIDATION_ERROR"
     HTTP_ERROR = "HTTP_ERROR"
     AGENT_CLIENT_NOT_CONFIGURED = "AGENT_CLIENT_NOT_CONFIGURED"
     AGENT_HEALTH_UNAVAILABLE = "AGENT_HEALTH_UNAVAILABLE"
+    GAME_ROOM_NOT_FOUND = "GAME_ROOM_NOT_FOUND"
+    GAME_ROOM_START_FORBIDDEN = "GAME_ROOM_START_FORBIDDEN"
+    GAME_ROOM_NOT_STARTABLE = "GAME_ROOM_NOT_STARTABLE"
+    GAME_ROOM_NOT_JOINABLE = "GAME_ROOM_NOT_JOINABLE"
+    GAME_ROOM_ENTRY_FORBIDDEN = "GAME_ROOM_ENTRY_FORBIDDEN"
+    GAME_SESSION_ENTRY_FORBIDDEN = "GAME_SESSION_ENTRY_FORBIDDEN"
 
 
 class ErrorType(StrEnum):
@@ -63,6 +70,13 @@ ERROR_DEFINITIONS: dict[ErrorCode, ErrorDefinition] = {
         http_status_code=401,
         websocket_close_code=1008,
     ),
+    ErrorCode.AUTH_USER_CONFLICT: ErrorDefinition(
+        code=ErrorCode.AUTH_USER_CONFLICT,
+        type=ErrorType.CONFLICT,
+        message="이미 사용 중인 계정 ID 또는 닉네임입니다.",
+        http_status_code=409,
+        websocket_close_code=1008,
+    ),
     ErrorCode.SESSION_EXPIRED: ErrorDefinition(
         code=ErrorCode.SESSION_EXPIRED,
         type=ErrorType.AUTHENTICATION,
@@ -97,6 +111,48 @@ ERROR_DEFINITIONS: dict[ErrorCode, ErrorDefinition] = {
         message="Agent health check failed.",
         http_status_code=502,
         websocket_close_code=1011,
+    ),
+    ErrorCode.GAME_ROOM_NOT_FOUND: ErrorDefinition(
+        code=ErrorCode.GAME_ROOM_NOT_FOUND,
+        type=ErrorType.NOT_FOUND,
+        message="객실을 찾을 수 없습니다.",
+        http_status_code=404,
+        websocket_close_code=1008,
+    ),
+    ErrorCode.GAME_ROOM_START_FORBIDDEN: ErrorDefinition(
+        code=ErrorCode.GAME_ROOM_START_FORBIDDEN,
+        type=ErrorType.AUTHORIZATION,
+        message="게임을 시작할 권한이 없습니다.",
+        http_status_code=403,
+        websocket_close_code=1008,
+    ),
+    ErrorCode.GAME_ROOM_NOT_STARTABLE: ErrorDefinition(
+        code=ErrorCode.GAME_ROOM_NOT_STARTABLE,
+        type=ErrorType.CONFLICT,
+        message="현재 객실 상태에서는 게임을 시작할 수 없습니다.",
+        http_status_code=409,
+        websocket_close_code=1008,
+    ),
+    ErrorCode.GAME_ROOM_NOT_JOINABLE: ErrorDefinition(
+        code=ErrorCode.GAME_ROOM_NOT_JOINABLE,
+        type=ErrorType.CONFLICT,
+        message="현재 객실 상태에서는 참여할 수 없습니다.",
+        http_status_code=409,
+        websocket_close_code=1008,
+    ),
+    ErrorCode.GAME_ROOM_ENTRY_FORBIDDEN: ErrorDefinition(
+        code=ErrorCode.GAME_ROOM_ENTRY_FORBIDDEN,
+        type=ErrorType.AUTHORIZATION,
+        message="이 객실에 진입할 수 없습니다.",
+        http_status_code=403,
+        websocket_close_code=1008,
+    ),
+    ErrorCode.GAME_SESSION_ENTRY_FORBIDDEN: ErrorDefinition(
+        code=ErrorCode.GAME_SESSION_ENTRY_FORBIDDEN,
+        type=ErrorType.AUTHORIZATION,
+        message="이 게임 세션에 진입할 수 없습니다.",
+        http_status_code=403,
+        websocket_close_code=1008,
     ),
 }
 

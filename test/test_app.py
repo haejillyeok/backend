@@ -5,9 +5,11 @@ import tomllib
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
 from app.agent.main import create_app as create_agent_app
+from app.be.dependencies.services import get_current_user
 from app.be.main import create_app as create_be_app
 from app.shared.core import logging_config
 from app.shared.core.config import AppSettings, configure_app_timezone
@@ -37,6 +39,15 @@ def test_configure_app_timezone_sets_process_timezone(monkeypatch):
     configure_app_timezone("Asia/Seoul")
 
     assert os.environ["TZ"] == "Asia/Seoul"
+
+
+def test_shared_kst_clock_returns_timezone_aware_kst_datetime():
+    from app.shared.core.timezone import KST, kst_now
+
+    now = kst_now()
+
+    assert now.tzinfo == KST
+    assert now.utcoffset().total_seconds() == 9 * 60 * 60
 
 
 def test_log_file_settings_read_environment(monkeypatch, tmp_path):
@@ -261,6 +272,39 @@ def test_be_agent_health_endpoint_maps_agent_failure_to_bad_gateway():
     }
 
 
+def test_be_game_routes_use_router_level_session_authentication():
+    app = create_be_app()
+    game_route = _find_api_route(app, "/api/v1/game/rooms/{room_public_id}/start")
+
+    assert any(
+        dependency.call is get_current_user and dependency.name is None
+        for dependency in game_route.dependant.dependencies
+    )
+
+
+def test_be_public_routes_do_not_use_router_level_session_authentication():
+    app = create_be_app()
+
+    for path in (
+        "/api/v1/auth/login",
+        "/api/v1/auth/signup",
+        "/api/v1/health",
+        "/api/v1/agent/health",
+    ):
+        route = _find_api_route(app, path)
+        assert all(
+            not (dependency.call is get_current_user and dependency.name is None)
+            for dependency in route.dependant.dependencies
+        )
+
+
+def _find_api_route(app, path: str) -> APIRoute:
+    for route in app.routes:
+        if isinstance(route, APIRoute) and route.path == path:
+            return route
+    raise AssertionError(f"route not found: {path}")
+
+
 def test_be_custom_exception_returns_common_error_response():
     app = create_be_app()
 
@@ -436,6 +480,7 @@ def test_shared_openapi_groups_error_codes_by_http_status():
 def test_be_openapi_documents_success_and_error_envelopes():
     schema = create_be_app().openapi()
     login_operation = schema["paths"]["/api/v1/auth/login"]["post"]
+    signup_operation = schema["paths"]["/api/v1/auth/signup"]["post"]
 
     success_schema_ref = login_operation["responses"]["200"]["content"]["application/json"][
         "schema"
@@ -452,6 +497,65 @@ def test_be_openapi_documents_success_and_error_envelopes():
     assert invalid_credentials_example["data"] is None
     assert invalid_credentials_example["error"]["code"] == "INVALID_CREDENTIALS"
     assert invalid_credentials_example["error"]["details"] is None
+
+    login_request_ref = login_operation["requestBody"]["content"]["application/json"]["schema"][
+        "$ref"
+    ]
+    login_request_schema = schema["components"]["schemas"][
+        login_request_ref.removeprefix("#/components/schemas/")
+    ]
+    assert set(login_request_schema["properties"]) == {"account_id", "password"}
+
+    signup_conflict_example = signup_operation["responses"]["409"]["content"]["application/json"][
+        "examples"
+    ]["auth_user_conflict"]["value"]
+    assert signup_conflict_example["success"] is False
+    assert signup_conflict_example["data"] is None
+    assert signup_conflict_example["error"]["code"] == "AUTH_USER_CONFLICT"
+
+
+def test_be_openapi_documents_game_contract_enums():
+    schema = create_be_app().openapi()
+
+    create_room_operation = schema["paths"]["/api/v1/game/rooms"]["post"]
+    create_room_request_ref = create_room_operation["requestBody"]["content"]["application/json"][
+        "schema"
+    ]["$ref"]
+    create_room_request = schema["components"]["schemas"][
+        create_room_request_ref.removeprefix("#/components/schemas/")
+    ]
+    game_type_ref = create_room_request["properties"]["game_type"]["$ref"]
+    game_type_schema = schema["components"]["schemas"][
+        game_type_ref.removeprefix("#/components/schemas/")
+    ]
+    assert game_type_schema["enum"] == ["shiritori", "chosung", "contains"]
+
+    start_operation = schema["paths"]["/api/v1/game/rooms/{room_public_id}/start"]["post"]
+    start_response_ref = start_operation["responses"]["200"]["content"]["application/json"][
+        "schema"
+    ]["$ref"]
+    start_response = schema["components"]["schemas"][
+        start_response_ref.removeprefix("#/components/schemas/")
+    ]
+    start_data_ref = start_response["properties"]["data"]["$ref"]
+    start_data = schema["components"]["schemas"][
+        start_data_ref.removeprefix("#/components/schemas/")
+    ]
+    session_status_ref = start_data["properties"]["status"]["$ref"]
+    session_status_schema = schema["components"]["schemas"][
+        session_status_ref.removeprefix("#/components/schemas/")
+    ]
+    assert session_status_schema["enum"] == ["starting", "playing", "voting", "result", "aborted"]
+
+    participant_ref = start_data["properties"]["participants"]["items"]["$ref"]
+    participant_schema = schema["components"]["schemas"][
+        participant_ref.removeprefix("#/components/schemas/")
+    ]
+    participant_type_ref = participant_schema["properties"]["participant_type"]["$ref"]
+    participant_type_schema = schema["components"]["schemas"][
+        participant_type_ref.removeprefix("#/components/schemas/")
+    ]
+    assert participant_type_schema["enum"] == ["user", "ai"]
 
 
 def test_be_openapi_description_links_websocket_api_docs():

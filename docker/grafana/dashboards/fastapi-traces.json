@@ -29,8 +29,20 @@
       "targetBlank": false,
       "title": "FastAPI APM Metrics",
       "tooltip": "Open the Prometheus metric dashboard.",
-      "type": "dashboards",
-      "uid": "haejillyeok-fastapi-apm"
+      "type": "link",
+      "url": "/d/haejillyeok-fastapi-apm"
+    },
+    {
+      "asDropdown": false,
+      "icon": "dashboard",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "WebSocket APM",
+      "tooltip": "Open the WebSocket Prometheus metric dashboard.",
+      "type": "link",
+      "url": "/d/haejillyeok-websocket-apm"
     },
     {
       "asDropdown": false,
@@ -41,8 +53,8 @@
       "targetBlank": false,
       "title": "FastAPI Logs",
       "tooltip": "Open the Loki log dashboard.",
-      "type": "dashboards",
-      "uid": "haejillyeok-fastapi-logs"
+      "type": "link",
+      "url": "/d/haejillyeok-fastapi-logs"
     }
   ],
   "liveNow": false,
@@ -167,12 +179,12 @@
             "uid": "tempo"
           },
           "limit": 20,
-          "query": "{resource.service.name=~\"$service\" && name=~\"AuthService.*\"}",
+          "query": "{resource.service.name=~\"$service\" && app.layer=\"service\"}",
           "queryType": "traceql",
           "refId": "A"
         }
       ],
-      "title": "Auth Service Spans",
+      "title": "Service Layer Spans",
       "type": "table"
     },
     {
@@ -218,12 +230,12 @@
             "uid": "tempo"
           },
           "limit": 20,
-          "query": "{resource.service.name=~\"$service\" && name=~\"AuthRepository.*\"}",
+          "query": "{resource.service.name=~\"$service\" && app.layer=\"repository\"}",
           "queryType": "traceql",
           "refId": "A"
         }
       ],
-      "title": "Auth Repository Spans",
+      "title": "Repository Layer Spans",
       "type": "table"
     },
     {
@@ -319,8 +331,8 @@
       {
         "current": {
           "selected": false,
-          "text": "POST /api/v1/auth/login",
-          "value": "POST /api/v1/auth/login"
+          "text": ".*",
+          "value": ".*"
         },
         "hide": 0,
         "includeAll": false,
@@ -330,24 +342,29 @@
         "options": [
           {
             "selected": true,
-            "text": "POST /api/v1/auth/login",
-            "value": "POST /api/v1/auth/login"
+            "text": ".*",
+            "value": ".*"
           },
           {
             "selected": false,
-            "text": ".*",
-            "value": ".*"
+            "text": "GET .*",
+            "value": "GET .*"
+          },
+          {
+            "selected": false,
+            "text": "POST .*",
+            "value": "POST .*"
           }
         ],
-        "query": "POST /api/v1/auth/login,.*",
+        "query": ".*,GET .*,POST .*,WebSocket.*",
         "skipUrlSync": false,
         "type": "custom"
       },
       {
         "current": {
           "selected": false,
-          "text": "AuthService.login_or_register",
-          "value": "AuthService.login_or_register"
+          "text": ".*",
+          "value": ".*"
         },
         "hide": 0,
         "includeAll": false,
@@ -357,31 +374,31 @@
         "options": [
           {
             "selected": true,
-            "text": "AuthService.login_or_register",
-            "value": "AuthService.login_or_register"
+            "text": ".*",
+            "value": ".*"
           },
           {
             "selected": false,
-            "text": "AuthRepository.get_user_by_account_id",
-            "value": "AuthRepository.get_user_by_account_id"
+            "text": ".*Service.*",
+            "value": ".*Service.*"
           },
           {
             "selected": false,
-            "text": "AuthRepository.create_user",
-            "value": "AuthRepository.create_user"
+            "text": ".*Repository.*",
+            "value": ".*Repository.*"
           },
           {
             "selected": false,
-            "text": "AuthRepository.create_user_session",
-            "value": "AuthRepository.create_user_session"
+            "text": "WebSocket.*",
+            "value": "WebSocket.*"
           },
           {
             "selected": false,
-            "text": "AuthRepository.commit",
-            "value": "AuthRepository.commit"
+            "text": ".*Client.*",
+            "value": ".*Client.*"
           }
         ],
-        "query": "AuthService.login_or_register,AuthRepository.get_user_by_account_id,AuthRepository.get_user_by_nickname,AuthRepository.create_user,AuthRepository.create_user_session,AuthRepository.commit",
+        "query": ".*,.*Service.*,.*Repository.*,WebSocket.*,.*Client.*",
         "skipUrlSync": false,
         "type": "custom"
       }

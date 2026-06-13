@@ -4,6 +4,131 @@
 코드 변경 상세는 Git history, PR, issue에서 확인하고, 이 파일에는 위키 페이지의 지식, 계약, 정책,
 컨벤션이 어떻게 바뀌었는지만 남깁니다.
 
+## [2026-06-13] maintenance | Align timestamps on KST
+
+- `runtime-configuration.md`의 DB timestamp 기준을 UTC가 아니라 KST timezone-aware datetime으로 정정했다.
+- 서버가 생성해 public API와 WebSocket payload로 내보내는 timestamp도 KST offset을 포함한다는 기준을 정리했다.
+
+## [2026-06-13] maintenance | Add lobby room snapshot contract
+
+- `realtime-websocket.md`와 `sunset-game-domain.md`에 `/ws/lobby/rooms/{room_public_id}` 연결 성공 직후 `lobby.room.snapshot`으로 현재 활성 멤버 목록을 초기화한다는 계약을 추가했다.
+- Snapshot 이후 멤버 변경은 `lobby.room.joined`, `lobby.room.left` event로 반영한다는 클라이언트 상태 관리 기준을 정리했다.
+
+## [2026-06-13] maintenance | Complete lobby leave contract
+
+- `realtime-websocket.md`와 `sunset-game-domain.md`에 로비 목록의 현재 유저 active membership 응답, REST room leave, 방장 승계, 마지막 멤버 퇴장 시 room 폐쇄 기준을 반영했다.
+- `lobby.room.left` event가 REST 퇴장과 WebSocket grace leave 모두에서 같은 퇴장 결과 payload를 전달한다는 기준을 정리했다.
+
+## [2026-06-13] maintenance | Clarify Postman WebSocket collection format
+
+- `openapi-swagger.md`에 Postman file import의 collection v2.1 JSON은 `ws://` URL도 HTTP
+  request로 import하고, 내부 `ws-raw-request` JSON은 일반 import 포맷으로 인식되지 않는다는
+  기준을 추가했다.
+- 이 스크립트는 WebSocket 전용 Postman collection JSON을 생성하지 않고, WebSocket 요청은
+  Postman UI에서 직접 만들며 `sessionToken` environment 변수를 `Cookie` header로 재사용한다는
+  기준을 정리했다.
+- 로컬과 운영 WebSocket URL을 같은 변수로 전환할 수 있도록 WebSocket base URL은 host/port로 쪼개지
+  않고 `baseWs` 하나로 관리한다는 기준을 반영했다.
+
+## [2026-06-13] maintenance | Clarify game session public ID naming
+
+- `sunset-game-domain.md`와 API 문서 기준에서 게임 한 판의 공개 식별자는 `session_public_id`가 아니라 `game_session_public_id`로 부른다는 명명 기준을 반영했다.
+- `game_session_public_id`는 라운드 ID가 아니며, 라운드/턴은 같은 game session 안의 phase 또는 round number로 관리한다는 구분을 명확히 했다.
+
+## [2026-06-13] maintenance | Separate match resume token from login session
+
+- `sunset-game-domain.md`에 `game_session_public_id`는 게임 세션 공개 식별자이고, `game_session_token`은 현재 실제 유저 참가자에게만 발급되는 match 복구 credential이라는 기준을 추가했다.
+- `sunset-game-database-design.md`에 `game.session_participants.resume_token_hash`, `resume_token_expires_at` 컬럼과 partial index 기준을 추가했다.
+- 로그인 `session_token` 만료는 진행 중 match를 즉시 끊지 않고, `/ws/match` 재연결은 `game_session_token`으로 participant identity를 복원할 수 있다는 기준을 남겼다.
+
+## [2026-06-13] maintenance | Add BE Postman generation policy
+
+- `openapi-swagger.md`에 Postman import용 JSON은 BE OpenAPI schema와 명시 WebSocket 정의에서 생성하고, HTTP API collection과 WebSocket collection을 별도 파일로 관리하며, Agent 서버와 BE `/api/v1/agent/*` proxy endpoint는 제외한다는 기준을 추가했다.
+- Postman environment에서 `baseUrl`, `baseWs`, 인증/session, room/session 예시 변수를 관리하고, 로그인/회원가입 응답의 `session_token` 쿠키를 `sessionToken` 변수에 저장한다는 기준을 남겼다.
+
+## [2026-06-12] maintenance | Add game API enum contract
+
+- `sunset-game-domain.md`와 `openapi-swagger.md`에 `game_type`, room/session `status`, `participant_type` 같은 공개 API의 닫힌 문자열 값은 enum으로 관리하고 Swagger에 enum 목록을 노출한다는 기준을 추가했다.
+
+## [2026-06-12] maintenance | Split signup and login auth contract
+
+- `backend-guidelines.md`와 `2026-06-05-auth-session-login.md`에 `POST /api/v1/auth/signup`은 신규 계정 생성, `POST /api/v1/auth/login`은 기존 계정 인증만 담당한다는 기준을 반영했다.
+- 로그인 request는 `account_id`, `password`만 받고, 회원가입 중복 계정/닉네임은 `409 AUTH_USER_CONFLICT`로 처리한다는 계약을 남겼다.
+
+## [2026-06-12] maintenance | Clarify Grafana dashboard link policy
+
+- `observability-stack.md`에 Grafana dashboard 간 이동은 `type: link`와 `/d/<dashboard_uid>` URL을 사용하고, `type: dashboards`는 tag 기반 목록 확장용이라 빈 tag와 함께 쓰지 않는다는 기준을 추가했다.
+
+## [2026-06-12] maintenance | Add generic WebSocket APM observability
+
+- `observability-stack.md`에 WebSocket 연결, 메시지, 오류, 종료, 연결 지속 시간 metric과 낮은 cardinality label 기준을 추가했다.
+- Grafana trace dashboard는 Auth 도메인 고정 패널이 아니라 service/repository layer 기준으로 조회하고, WebSocket APM dashboard는 별도 범용 dashboard로 관리한다는 기준을 남겼다.
+
+## [2026-06-12] maintenance | Add room lobby heartbeat and grace leave policy
+
+- `realtime-websocket.md`에 room 로비 WebSocket은 client `ping`을 heartbeat로 보고, 45초 timeout 후 연결을 닫으며, 90초 grace time 안에 재연결하지 않으면 DB 퇴장 처리한다는 기준을 추가했다.
+- `sunset-game-domain.md`에 grace 퇴장 확정 시 `game.room_members.left_at`을 기록하고 같은 room 연결에 `lobby.room.left`를 broadcast한다는 기준을 남겼다.
+
+## [2026-06-12] maintenance | Add REST room APIs and path-based lobby WebSocket
+
+- `realtime-websocket.md`에 객실 목록 조회, 객실 생성, 객실 참여는 REST API가 담당하고 `/ws/lobby/rooms/{room_public_id}`는 활성 room member만 연결하는 path 기반 room 로비 WebSocket이라는 기준을 반영했다.
+- `sunset-game-domain.md`에 room 생성 시 방장을 첫 room member로 등록하고, join 성공 후 같은 room WebSocket 연결에 `lobby.room.joined`를 broadcast한다는 현재 계약을 정리했다.
+
+## [2026-06-12] maintenance | Restructure websocket docs format
+
+- `realtime-websocket.md`에 `/ws-docs`는 한국어 사용자가 읽는 endpoint matrix, 공통 envelope, message direction, endpoint별 contract, error/close code 중심의 WebSocket reference 형식으로 관리한다는 기준을 추가했다.
+- WebSocket message heading은 `요청(Request)`, `응답(Response)`, `이벤트(Event)`처럼 한국어를 우선하고, 목차는 큰 섹션만 보여주며, 유저 플로우는 작은 Mermaid sequence diagram 여러 개로 나누어 관리한다는 기준을 남겼다.
+
+## [2026-06-12] maintenance | Add lobby websocket and room join contract
+
+- `realtime-websocket.md`에 `/ws/lobby`의 세션 쿠키 인증, room 구독 메시지, `lobby.room.joined` broadcast 기준을 추가했다.
+- `sunset-game-domain.md`에 room 참여는 REST API가 DB `game.room_members`에 저장하고, lobby WebSocket은 연결과 구독 상태만 process memory에 보관한다는 기준을 추가했다.
+
+## [2026-06-12] maintenance | Add test coverage threshold
+
+- `code-conventions.md`에 `pytest`가 전체 `app` package coverage를 측정하고 총 coverage 90% 이상을 유지한다는 테스트 기준을 추가했다.
+
+## [2026-06-12] maintenance | Add BE protected router session policy
+
+- `backend-guidelines.md`에 BE REST API는 public router와 protected router를 분리하고, protected router에서 `session_token` 기반 `get_current_user` dependency를 공통 적용한다는 기준을 추가했다.
+- 로그인과 health 계열 API만 public router에 두고, 새 BE API는 기본적으로 protected router에 등록한다는 운영 기준을 남겼다.
+
+## [2026-06-12] maintenance | Add WebSocket docs TOC and Mermaid flow
+
+- `realtime-websocket.md`에 `/ws-docs` 렌더러가 heading 기반 자동 목차와 Mermaid code block 렌더링을 지원한다는 문서 운영 기준을 추가했다.
+- `ws-api.md`에는 게임 시작 REST gate, lobby broadcast, match 연결 권한 확인 흐름을 Mermaid sequence diagram으로 유지한다는 기준을 남겼다.
+
+## [2026-06-11] maintenance | Add game session REST gate contract
+
+- `sunset-game-domain.md`에 게임 진행 WebSocket 전 단계로 REST 기반 게임 시작과 세션 진입 권한 확인 기준을 추가했다.
+- 로그인 `session_token`으로 현재 유저를 확인하고, 게임 시작 시 고정된 `session_participants`만 세션 진입을 허용하는 기준을 남겼다.
+- `/ws/realtime`은 계속 연결 테스트용이며 이후 `/ws/lobby`, `/ws/match`가 같은 참가자 권한 기준을 재사용해야 한다고 정리했다.
+- REST handler에서 lobby WebSocket 알림이 필요하면 connection manager 또는 서버 간 event bus로 이미 열린 연결에 broadcast하고, match 연결 후에는 `game_session_id + participant_id + user_id` identity를 기준으로 진행한다는 기준을 추가했다.
+- start API는 room row lock으로 같은 room의 동시 요청을 직렬화하고, active session이 이미 있으면 기존 `game_session_public_id`를 반환하는 멱등 기준을 추가했다.
+
+## [2026-06-11] maintenance | Add Sunset game DB design draft
+
+- `sunset-game-database-design.md`에 해질녘 게임 플랫폼의 결과/복구 중심 DB 저장 범위와 table 초안을 정리했다.
+- UUID v7은 row 식별자와 외부 노출 식별자에 쓰고, 게임 안 순서/번호/점수/개수는 integer로 둔다는 기준을 추가했다.
+- `session_phases`, `participant_actions`, `state_snapshots`, `game_events`를 공통 진행 기록으로 두고 단어 게임은 `word_game` 확장 table로 분리하는 기준과 Mermaid ERD를 추가했다.
+
+## [2026-06-11] maintenance | Split lobby and match WebSocket direction
+
+- `realtime-websocket.md`에서 `/ws/realtime`을 실제 게임 상태가 아닌 ping/pong 연결 테스트용 endpoint로 정리했다.
+- `sunset-game-domain.md`와 결정 기록에 실제 게임 통신은 `/ws/lobby`, `/ws/match`로 처음부터 분리한다는 기준을 반영했다.
+- 기획 점검 결과 투표 시점을 라운드 종료가 아니라 게임/모든 라운드 종료 이후로 정리하고, AI 우승/보상, 점수 구간, 라운드 단위는 열린 질문으로 남겼다.
+
+## [2026-06-11] ingest | Add Kkutu reference takeaways
+
+- `sunset-game-domain.md`에 Kkutu 분석에서 참고할 빠른 시작 상태 머신, lobby/match WebSocket 관심사 분리, command-response와 broadcast 분리 기준을 반영했다.
+- 로비/객실/매치 snapshot, 재접속 복구, 경기 화면 상태 분리, 게스트 플레이 여부를 향후 결정 지점으로 정리했다.
+
+## [2026-06-11] ingest | Add Sunset game domain model
+
+- `sunset-game-domain.md`에 해질녘 게임의 로비, 객실, 게임 세션, 라운드, 턴, 점수, 투표 도메인 기준을 정리했다.
+- WebSocket은 BE가 권위 있는 게임 상태를 유지하고 snapshot/event로 클라이언트를 동기화하는 방향으로 정리했다.
+- Agent는 AI 손님의 단어 후보만 제공하고 게임 상태, 점수, 투표 계산은 Backend가 소유한다는 경계를 명시했다.
+
 ## [2026-06-11] maintenance | Simplify Agent word payload
 
 - Backend의 `game_type`은 handler 선택에 사용하고 Qdrant payload에는 저장하지 않는 기준을
@@ -33,8 +158,6 @@
 - 회사 NodePort `31080`에서 Azure localhost로 이어지는 SSH reverse tunnel과 Azure Nginx를 외부 연결 경계로 기록했다.
 - Agent API, 한국어 처리, Qdrant 중복 적재, k3s manifest 테스트를 추가했다.
 
-## [2026-06-10] maintenance | Add Loki log dashboard
-=======
 ## [2026-06-11] maintenance | Separate socket router from API router
 
 - `realtime-websocket.md`에 WebSocket endpoint는 REST API router 밖의 `/ws/realtime`, 문서 페이지는 `/ws-docs`로 둔다는 계약을 반영했다.

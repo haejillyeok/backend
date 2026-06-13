@@ -20,7 +20,23 @@ class LoginRequest(SchemaModel):
         min_length=MIN_ACCOUNT_ID_LENGTH,
         max_length=MAX_ACCOUNT_ID_LENGTH,
         pattern=ACCOUNT_ID_PATTERN,
-        description="가입 또는 로그인에 사용할 계정 ID입니다.",
+        description="로그인에 사용할 계정 ID입니다.",
+        examples=["player_001"],
+    )
+    password: str = Field(
+        min_length=MIN_PASSWORD_LENGTH,
+        max_length=MAX_PASSWORD_LENGTH,
+        description="계정 ID에 연결된 비밀번호입니다.",
+        examples=["secret-password"],
+    )
+
+
+class SignupRequest(SchemaModel):
+    account_id: str = Field(
+        min_length=MIN_ACCOUNT_ID_LENGTH,
+        max_length=MAX_ACCOUNT_ID_LENGTH,
+        pattern=ACCOUNT_ID_PATTERN,
+        description="회원가입에 사용할 계정 ID입니다.",
         examples=["player_001"],
     )
     nickname: str = Field(

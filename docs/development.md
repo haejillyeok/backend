@@ -59,6 +59,8 @@ Collector metrics:    http://localhost:9464/metrics
 환경변수로 port 값을 바꿉니다. Docker Compose 인프라 포트는 서버 `.env` 관리 대상이 아닙니다.
 서버 프로세스의 기본 타임존은 KST(`Asia/Seoul`)이며, `APP_TIMEZONE=Asia/Seoul`을 앱 설정 기본값으로
 사용합니다.
+DB에 저장하는 서버 생성 timestamp와 public API/WebSocket payload timestamp도 KST timezone-aware
+datetime을 기준으로 합니다.
 
 | Target | Default |
 | --- | --- |
@@ -95,15 +97,24 @@ Grafana metric dashboard는 `docker/grafana/dashboards/fastapi-apm.json`에서 p
 주요 panel은 throughput, 5xx error rate, p95 latency, p99 latency, status별 throughput입니다.
 Prometheus metric은 route template label을 사용해 `/items/{item_id}`처럼 집계하며,
 개별 path parameter 값은 label에 넣지 않습니다.
+Dashboard 간 이동 링크는 특정 dashboard URL인 `/d/<uid>`를 가리키는 `type: link`로 둡니다.
+`type: dashboards`는 tag 기반 dashboard 목록을 펼치므로 빈 tag와 함께 쓰면 같은 dashboard 링크가
+반복 표시될 수 있습니다.
+
+WebSocket metric dashboard는 `docker/grafana/dashboards/websocket-apm.json`에서 provision 됩니다.
+`websocket.connections.active`, `websocket.connections.total`, `websocket.messages.total`,
+`websocket.errors.total`, `websocket.disconnects.total`, `websocket.connection.duration` 기반으로
+active connection, 연결률, message rate, error rate, close code별 disconnect, 연결 지속 시간을
+확인합니다. label은 `service_name`, `ws_route`, `ws_endpoint`, `ws_message_type`, `ws_close_code`처럼
+route template과 낮은 cardinality 값만 사용합니다.
 
 객체별 실행 시간은 trace span으로 확인합니다. FastAPI 요청 span 아래에 service/repository span을
 수동으로 붙이려면 `app/shared/core/observability.py`의 `@traced_method`를 사용합니다.
-예를 들어 인증 흐름은 `AuthService.login_or_register`,
-`AuthRepository.get_user_by_account_id`, `AuthRepository.get_user_by_nickname`,
-`AuthRepository.create_user_session` 같은 child span을
-Tempo에 저장합니다. Grafana trace dashboard는
+service/repository/client 계층 child span을 Tempo에 저장합니다. WebSocket endpoint는
+`WebSocket.<endpoint>.connect`, `WebSocket.<endpoint>.message`, `WebSocket.<endpoint>.disconnect`,
+`WebSocket.<endpoint>.grace_leave` 같은 수동 span으로 Tempo에 기록합니다. Grafana trace dashboard는
 `docker/grafana/dashboards/fastapi-traces.json`에서 provision 됩니다. Dashboard 이름은
-`Haejillyeok FastAPI Traces`이며, request trace와 service/repository object span search panel을
+`Haejillyeok FastAPI Traces`이며, request trace와 service/repository layer span search panel을
 포함합니다.
 
 ### Migration
@@ -169,6 +180,9 @@ HTTP host는 `127.0.0.1`로 고정하고, port는 서버 `.env`의 에이전트 
 ```bash
 mise run test
 ```
+
+테스트는 `pytest-cov`로 전체 `app` package coverage를 측정하며, 총 coverage가 90% 미만이면
+실패합니다.
 
 ## Format
 
