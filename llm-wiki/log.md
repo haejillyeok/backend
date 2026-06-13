@@ -4,6 +4,17 @@
 코드 변경 상세는 Git history, PR, issue에서 확인하고, 이 파일에는 위키 페이지의 지식, 계약, 정책,
 컨벤션이 어떻게 바뀌었는지만 남깁니다.
 
+## [2026-06-13] maintenance | Clarify auth access IP record semantics
+
+- `2026-06-05-auth-session-login.md`에 `last_access_ip`는 보안 판정용 식별자가 아니라 best-effort 접속 기록이라는 기준을 추가했다.
+- 로그인과 회원가입에서는 `Forwarded`, `X-Forwarded-For`, `X-Real-IP`, ASGI peer 순서로 유효한 IP를 기록한다는 현재 계약을 정리했다.
+
+## [2026-06-13] ingest | Add server-authoritative submission validation policy
+
+- frontend `d573890`의 kkutu 입력 검증 분석에서 가져온 단어 제출 검증 경계를 `sunset-game-domain.md`에 반영했다.
+- 클라이언트 검증은 UX 보조이고, 차례/시간/조건/중복/사전 존재/점수/패널티 판정은 Backend match domain이 최종 결정한다는 기준을 추가했다.
+- 실패한 제출도 WebSocket event로 패널티와 선택적 후보 힌트를 내려줄 수 있다는 정책을 정리했다.
+
 ## [2026-06-13] maintenance | Clarify repeated lobby join event
 
 - `realtime-websocket.md`와 `sunset-game-domain.md`에 반복 room join 요청은 REST 응답만 반환하고

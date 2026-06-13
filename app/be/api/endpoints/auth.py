@@ -7,6 +7,7 @@ from app.be.dependencies.services import get_auth_service
 from app.be.schemas.request.auth import LoginRequest, SignupRequest
 from app.be.schemas.response.auth import AuthUserResponse, LoginResponse, SignupResponse
 from app.be.services.auth import AuthService
+from app.shared.core.client_ip import resolve_best_effort_client_ip
 from app.shared.core.config import AppSettings
 from app.shared.core.error_codes import ErrorCode
 from app.shared.core.openapi import error_responses_by_status
@@ -42,7 +43,10 @@ async def login(
     result = await auth_service.login(
         account_id=payload.account_id,
         password=payload.password,
-        last_access_ip=request.client.host if request.client else None,
+        last_access_ip=resolve_best_effort_client_ip(
+            request.headers,
+            peer_host=request.client.host if request.client else None,
+        ),
         user_agent=request.headers.get("user-agent"),
     )
 
@@ -83,7 +87,10 @@ async def signup(
         account_id=payload.account_id,
         nickname=payload.nickname,
         password=payload.password,
-        last_access_ip=request.client.host if request.client else None,
+        last_access_ip=resolve_best_effort_client_ip(
+            request.headers,
+            peer_host=request.client.host if request.client else None,
+        ),
         user_agent=request.headers.get("user-agent"),
     )
 

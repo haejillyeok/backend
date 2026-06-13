@@ -1,7 +1,7 @@
 ---
 title: Auth Session Signup Login
 type: decision
-updated: 2026-06-12
+updated: 2026-06-13
 audience: ai
 ---
 
@@ -33,6 +33,13 @@ PoC 인증은 회원가입과 로그인을 별도 API로 처리한다. `POST /ap
 - 세션 토큰 저장값: `token_hash` `text`, unique, not null
 - 부가 정보: `user_agent`, `last_access_ip`
 - 시각 정보: `created_at`, `last_seen_at`, `expires_at`, `revoked_at`
+
+## Access IP Record
+
+`last_access_ip`는 보안 판정용 신뢰 식별자가 아니라 접속 경향을 남기는 best-effort 기록이다.
+로그인과 회원가입 경계에서는 `Forwarded`, `X-Forwarded-For`, `X-Real-IP` 순서로 유효한 IP를 찾고,
+없거나 형식이 깨진 값이면 ASGI peer host를 저장한다. 신뢰 프록시 allowlist를 두지 않으므로 이 값만으로
+차단, rate limit, 이상징후 판정을 하지 않는다.
 
 ## Cookie Rules
 

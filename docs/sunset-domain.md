@@ -76,6 +76,9 @@ Game Session 상태가 최종 사실이어야 합니다.
 
 Guest가 Turn 중 제출한 단어입니다. 단어는 게임 종류별 규칙에 따라 검증됩니다. 예를 들어 끝말잇기는
 이전 단어의 마지막 글자와 제출 단어의 첫 글자가 이어져야 하고, 이미 사용된 단어는 감점됩니다.
+클라이언트는 시작 글자, 글자 수, 입력 가능 차례 같은 UX 검증을 할 수 있지만 최종 검증 경계가
+아닙니다. 서버는 제출된 단어를 기준으로 차례, 제한 시간, 게임 조건, 중복 사용, 사전 존재 여부를
+권위 있게 판단하고, 실패/패널티와 필요 시 추천 후보를 WebSocket event로 내려줍니다.
 
 ### Score Ledger
 
@@ -152,6 +155,7 @@ WebSocket은 사용자-facing 실시간 통신의 중심입니다. 서버는 다
 - 게임 시작과 AI 손님 추가
 - 라운드 시작, 턴 시작, 타이머 진행
 - 단어 제출 성공/실패와 점수 변경
+- 유효하지 않은 단어 입력의 패널티와 필요 시 추천 단어 후보
 - 라운드 종료
 - 투표 시작, 투표 제출, 투표 종료
 - 최종 결과와 대기방 복귀
@@ -171,6 +175,7 @@ ping/pong 연결 테스트용으로만 두고, 실제 게임 진행은 처음부
 있어야 합니다.
 
 참고: [kkutu-analysis.md](https://github.com/haejillyeok/frontend/blob/dev/docs/kkutu-analysis.md)
+참고 변경: [frontend d573890](https://github.com/haejillyeok/frontend/commit/d573890e69e3211aa873957980bcb2a843c7201d)
 
 ## Backend and Agent Boundary
 

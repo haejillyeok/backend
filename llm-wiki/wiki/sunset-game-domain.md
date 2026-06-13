@@ -182,6 +182,23 @@ lobby
 - 제한 시간 초과: `-10`
 - 중복 단어 입력: `-1`
 
+## Submission Validation Policy
+
+2026-06-12 frontend 레퍼런스 조사에서 kkutu는 클라이언트가 시작 글자 등 일부 조건을 알 수 있어도
+최종 단어 제출을 서버로 보내고, 서버가 단어 인정 여부와 실패/패널티를 authoritative하게 broadcast하는
+흐름으로 확인됐다.
+
+해질녘도 단어 입력 검증의 최종 경계를 Backend에 둔다.
+
+- 클라이언트는 입력 가능 턴, 시작 글자, 글자 수 같은 빠른 UX 검증을 할 수 있지만 보안/점수 경계가 아니다.
+- `/ws/match`는 클라이언트가 보낸 최종 `Submission`을 받아 서버 상태 기준으로 차례, 제한 시간,
+  게임 종류별 조건, 중복 사용, 사전 존재 여부를 검증한다.
+- 시작 글자 불일치, 사전 미등재, 중복 단어처럼 실패가 예상되는 입력도 서버까지 도달할 수 있다고 보고
+  handler를 설계한다.
+- 단어 인정 여부, 점수 변화, 패널티, 추천/대체 단어 후보가 필요하면 서버 event로 내려준다.
+- Agent는 후보 단어 제공을 맡고, 실제 사용자 제출의 인정/실패와 점수 반영은 Backend match domain이
+  결정한다.
+
 ### Expansion Rules
 
 - 글자 수 고정: 2자, 3자, 4자 이상
@@ -242,6 +259,7 @@ Server event 후보:
 - timer tick 또는 deadline
 - submission accepted/rejected
 - score updated
+- invalid submission with penalty and optional candidate hints
 - voting started/finished
 - result published
 

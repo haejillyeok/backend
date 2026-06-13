@@ -223,7 +223,7 @@ def test_login_endpoint_sets_session_cookie_for_auth_success():
         return FakeAuthService()
 
     app.dependency_overrides[get_auth_service] = override_get_auth_service
-    client = TestClient(app)
+    client = TestClient(app, client=("127.0.0.1", 50000))
 
     response = client.post(
         "/api/v1/auth/login",
@@ -241,6 +241,53 @@ def test_login_endpoint_sets_session_cookie_for_auth_success():
     assert "error" not in body
     assert response.cookies.get("session_token") == "plain-session-token"
     assert "httponly" in response.headers["set-cookie"].lower()
+
+
+def test_login_endpoint_prefers_forwarded_client_ip_for_access_record():
+    app = create_app()
+    captured: dict[str, str | None] = {}
+
+    class FakeAuthService:
+        async def login(
+            self,
+            *,
+            account_id: str,
+            password: str,
+            last_access_ip: str | None,
+            user_agent: str | None,
+        ):
+            captured["last_access_ip"] = last_access_ip
+            return type(
+                "AuthResult",
+                (),
+                {
+                    "user": type(
+                        "AuthUser",
+                        (),
+                        {"public_id": uuid4(), "account_id": account_id, "nickname": "초보자"},
+                    )(),
+                    "session_token": "plain-session-token",
+                    "expires_at": datetime.now(KST) + timedelta(days=1),
+                },
+            )()
+
+    async def override_get_auth_service(request: Request) -> FakeAuthService:
+        return FakeAuthService()
+
+    app.dependency_overrides[get_auth_service] = override_get_auth_service
+    client = TestClient(app, client=("10.0.0.12", 50000))
+
+    response = client.post(
+        "/api/v1/auth/login",
+        json={
+            "account_id": "player_001",
+            "password": "secret-password",
+        },
+        headers={"x-forwarded-for": "203.0.113.7, 10.0.0.12"},
+    )
+
+    assert response.status_code == 200
+    assert captured["last_access_ip"] == "203.0.113.7"
 
 
 def test_login_endpoint_returns_401_for_wrong_password():
@@ -372,7 +419,7 @@ def test_signup_endpoint_sets_session_cookie_for_auth_success():
         return FakeAuthService()
 
     app.dependency_overrides[get_auth_service] = override_get_auth_service
-    client = TestClient(app)
+    client = TestClient(app, client=("127.0.0.1", 50000))
 
     response = client.post(
         "/api/v1/auth/signup",
