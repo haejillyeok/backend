@@ -647,6 +647,13 @@ def test_shared_package_does_not_expose_schemas():
     assert importlib.util.find_spec("app.shared.schemas") is None
 
 
+def test_match_service_postpones_annotations_for_python_311_imports():
+    """Python 3.11 컨테이너에서 annotation 이름 누락으로 앱 import가 깨지지 않게 고정합니다."""
+    source = Path("app/be/services/match.py").read_text(encoding="utf-8")
+
+    assert source.startswith("from __future__ import annotations\n")
+
+
 def test_server_layer_packages_are_owned_by_each_server():
     for module_name in (
         "app.be.dependencies",

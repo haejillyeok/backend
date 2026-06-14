@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Protocol
@@ -9,7 +11,7 @@ from starlette.websockets import WebSocketDisconnect
 
 from app.be.services.game import GameSessionParticipantRecord
 from app.be.services.match_ai import MatchAiTurnService
-from app.be.services.match_progress import MatchProgressService
+from app.be.services.match_progress import MatchBroadcastEvent, MatchProgressService
 from app.be.services.match_vote import MatchVoteService
 from app.be.services.realtime import parse_realtime_message
 from app.shared.core.error_codes import ErrorCode
