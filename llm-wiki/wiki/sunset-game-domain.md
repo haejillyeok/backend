@@ -62,7 +62,7 @@ Backend가 소유하는 게임 상태, WebSocket event, Agent 경계를 우선�
 
 - `GET /api/v1/game/rooms`
   - `session_token` 쿠키로 현재 유저를 인증한다.
-  - 닫히지 않은 room 목록, 활성 room member 수, 현재 유저가 active member인지 여부를 반환한다.
+  - 닫히지 않았고 활성 room member가 1명 이상인 room 목록, 활성 room member 수, 현재 유저가 active member인지 여부를 반환한다.
   - 현재 유저가 유효한 대기 로비에 이미 참여 중이면 `current_membership`에 room 요약과 `/ws/lobby/rooms/{room_public_id}` 연결 path를 함께 반환한다.
   - 목록 조회는 snapshot이고, 특정 room의 실시간 이벤트는 room 참여 후 WebSocket으로 받는다.
 - `POST /api/v1/game/rooms`

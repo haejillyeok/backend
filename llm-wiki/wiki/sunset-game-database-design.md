@@ -45,8 +45,9 @@ DB는 게임의 최종 사실과 복구 가능한 기록을 저장한다.
   닉네임, 세션 token hash는 unique index 또는 unique constraint로 관리한다.
 - `session_participants.resume_token_hash`는 match 재접속 credential이므로 null이 아닌 값만 대상으로 하는
   partial unique index를 둔다.
-- 로비 목록은 닫히지 않은 방만 `created_at DESC`로 조회하므로 `rooms(created_at DESC) WHERE closed_at IS
-  NULL` partial index를 둔다.
+- 로비 목록은 닫히지 않았고 활성 멤버가 1명 이상인 방만 `created_at DESC`로 조회한다. room 쪽 조건은
+  `rooms(created_at DESC) WHERE closed_at IS NULL` partial index로, 활성 멤버 집계는 아래 room member
+  partial index로 뒷받침한다.
 - 활성 room member 목록은 `room_id`, `left_at IS NULL`, `joined_at ASC` 패턴이므로
   `room_members(room_id, joined_at) WHERE left_at IS NULL` partial index를 둔다. 활성 멤버 단건 중복 방지는
   `room_members(room_id, user_id) WHERE left_at IS NULL` partial unique index가 담당한다.

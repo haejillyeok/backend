@@ -17,6 +17,7 @@
 | [wiki/llm-wiki-maintenance.md](wiki/llm-wiki-maintenance.md) | LLM Wiki에 남길 지식과 남기지 않을 코드 변경 이력의 경계, log.md 운영 기준 |
 | [wiki/backend-guidelines.md](wiki/backend-guidelines.md) | FastAPI, WebSocket, 서버 간 HTTP client 구현 시 AI가 따라야 하는 작업 기준 |
 | [wiki/runtime-configuration.md](wiki/runtime-configuration.md) | 서버 `.env`에서 관리하는 KST timezone, HTTP port, BE-to-Agent client 설정, OpenTelemetry exporter, Docker build/push/runtime/deploy 기준 |
+| [wiki/test-page-harness.md](wiki/test-page-harness.md) | 현재 BE/Agent REST와 WebSocket 기능을 브라우저에서 직접 확인하는 `test-page/` 정적 harness 기준 |
 | [wiki/openapi-swagger.md](wiki/openapi-swagger.md) | FastAPI OpenAPI schema, Swagger UI, operation_id, metadata 관리 기준 |
 | [wiki/observability-stack.md](wiki/observability-stack.md) | OpenTelemetry, Prometheus, Tempo, Loki/Promtail, Grafana 기반 로컬 관측 스택과 metric/log 기준 |
 | [wiki/realtime-websocket.md](wiki/realtime-websocket.md) | BE `/ws/realtime` 연결 테스트용 WebSocket endpoint, `/ws-docs` 문서 라우터, WSS 노출 기준, JSON envelope 계약 |

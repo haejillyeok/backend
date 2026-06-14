@@ -21,6 +21,8 @@ class FakeAuthRepository:
     def __init__(self) -> None:
         self.users: dict[str, User] = {}
         self.sessions: list[dict[str, object]] = []
+        self.active_session_result: tuple[User, object] | None = None
+        self.touched_session: object | None = None
         self.committed = False
 
     async def get_user_by_account_id(self, account_id: str) -> User | None:
@@ -66,6 +68,17 @@ class FakeAuthRepository:
                 "user_agent": user_agent,
             }
         )
+
+    async def get_active_session_user(
+        self,
+        *,
+        token_hash: str,
+        now: datetime,
+    ) -> tuple[User, object] | None:
+        return self.active_session_result
+
+    async def touch_user_session(self, session: object, *, now: datetime) -> None:
+        self.touched_session = session
 
     async def commit(self) -> None:
         self.committed = True
@@ -133,6 +146,32 @@ def test_auth_service_login_does_not_register_unknown_account_id():
 
     assert repository.users == {}
     assert repository.sessions == []
+    assert repository.committed is False
+
+
+def test_auth_service_returns_login_required_message_when_session_cookie_missing():
+    repository = FakeAuthRepository()
+    service = AuthService(repository)
+
+    with pytest.raises(AppException) as exc_info:
+        asyncio.run(service.authenticate_session(None))
+
+    assert exc_info.value.code == "SESSION_EXPIRED"
+    assert exc_info.value.message == "로그인이 필요합니다."
+    assert exc_info.value.http_status_code == 401
+    assert repository.committed is False
+
+
+def test_auth_service_returns_expired_message_when_session_cookie_is_inactive():
+    repository = FakeAuthRepository()
+    service = AuthService(repository)
+
+    with pytest.raises(AppException) as exc_info:
+        asyncio.run(service.authenticate_session("inactive-session-token"))
+
+    assert exc_info.value.code == "SESSION_EXPIRED"
+    assert exc_info.value.message == "세션이 만료되었습니다."
+    assert exc_info.value.http_status_code == 401
     assert repository.committed is False
 
 

@@ -1,7 +1,7 @@
 ---
 title: Auth Session Signup Login
 type: decision
-updated: 2026-06-13
+updated: 2026-06-14
 audience: ai
 ---
 
@@ -47,6 +47,13 @@ PoC 인증은 회원가입과 로그인을 별도 API로 처리한다. `POST /ap
 - cookie는 항상 `HttpOnly`, `SameSite=Lax`로 설정한다.
 - `prod` 환경에서는 `Secure`를 켠다.
 - local/dev 환경에서는 로컬 HTTP 테스트를 위해 `Secure`를 끈다.
+
+## Session Error Message Rules
+
+- 보호 API와 인증이 필요한 WebSocket에서 `session_token` cookie가 없으면 `401 SESSION_EXPIRED`를 유지하되
+  message는 `로그인이 필요합니다.`로 반환한다.
+- `session_token` cookie는 있지만 DB에서 활성 세션을 찾지 못하면 만료, 폐기, 잘못된 token을 같은
+  `401 SESSION_EXPIRED`로 처리하고 message는 `세션이 만료되었습니다.`로 반환한다.
 
 ## Rationale
 

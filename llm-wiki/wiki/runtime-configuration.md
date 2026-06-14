@@ -34,8 +34,9 @@ lifespan에서 gRPC 서버를 함께 시작하지 않는다.
 
 `app/shared/core/cors.py`는 브라우저에서 직접 호출되는 `be` 서버의 CORS middleware 설정을 둔다.
 현재 `be` 허용 origin은 `http://localhost:3000`, `https://haejillyeok.com`,
-`https://agent.haejillyeok.com`, `https://www.haejillyeok.com`이다. method/header는 모두
-허용하고, 세션 쿠키 기반 API 요청을 막지 않도록 `allow_credentials=True`도 함께 둔다.
+`https://agent.haejillyeok.com`, `https://www.haejillyeok.com`이다. `localhost:3000`은 repo-local
+테스트 페이지와 기존 프론트엔드 개발 origin으로 유지한다. method/header는 모두 허용하고,
+세션 쿠키 기반 API 요청을 막지 않도록 `allow_credentials=True`도 함께 둔다.
 `agent` 서버는 `be`에서 서버 간 HTTP로 호출하므로 CORS middleware를 등록하지 않는다. agent 접근
 범위 제한은 CORS가 아니라 네트워크 ACL, 방화벽, 서비스 인증 같은 서버 측 제어로 다룬다.
 

@@ -611,7 +611,7 @@ def test_be_rejects_unconfigured_cors_origin_for_preflight():
     response = client.options(
         "/api/v1/health",
         headers={
-            "Origin": "https://front.example",
+            "Origin": "http://localhost:4174",
             "Access-Control-Request-Method": "GET",
         },
     )

@@ -88,7 +88,7 @@ message direction, endpoint별 message contract, error/close code를 분리해 �
 
 로비 목록 조회, 객실 생성, 객실 참여, 명시적 객실 퇴장은 REST API가 담당한다.
 
-- `GET /api/v1/game/rooms`: 닫히지 않은 객실 목록, 활성 멤버 수, 현재 유저의 active room membership 여부, 참여 중인 유효 로비의 WebSocket 연결 path를 반환한다.
+- `GET /api/v1/game/rooms`: 닫히지 않았고 활성 멤버가 1명 이상인 객실 목록, 활성 멤버 수, 현재 유저의 active room membership 여부, 참여 중인 유효 로비의 WebSocket 연결 path를 반환한다.
 - `POST /api/v1/game/rooms`: 대기 객실을 만들고 방장을 첫 활성 room member로 등록한다.
 - `PATCH /api/v1/game/rooms/{room_public_id}`: 방장이 대기 객실 설정을 수정하고, 성공 후 같은 객실 연결에 `lobby.room.updated`를 broadcast한다.
 - `POST /api/v1/game/rooms/{room_public_id}/join`: 대기 객실에 현재 유저를 활성 room member로 등록한다.

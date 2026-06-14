@@ -48,12 +48,14 @@ class FakeResult:
 class FakeDbSession:
     def __init__(self, results=None) -> None:
         self.results = list(results or [])
+        self.executed_statements = []
         self.added = []
         self.added_batches = []
         self.flush_count = 0
         self.committed = False
 
     async def execute(self, statement):
+        self.executed_statements.append(statement)
         return self.results.pop(0)
 
     def add(self, item) -> None:
@@ -194,6 +196,19 @@ async def test_game_repository_lists_rooms_with_active_member_counts() -> None:
     assert rooms[0].member_count == 2
     assert rooms[0].is_current_user_member is True
     assert rooms[0].is_current_user_owner is True
+
+
+async def test_game_repository_excludes_open_rooms_without_active_members() -> None:
+    room = build_room(owner_user_id=uuid4())
+    db_session = FakeDbSession([FakeResult(rows=[(room, 0, False)])])
+    repository = GameRepository(db_session)
+
+    await repository.list_rooms(user_id=room.owner_user_id)
+
+    statement = db_session.executed_statements[0]
+    compiled_sql = str(statement.compile(compile_kwargs={"literal_binds": True}))
+    assert "HAVING count(distinct" in compiled_sql
+    assert "> 0" in compiled_sql
 
 
 async def test_game_repository_creates_waiting_room_record() -> None:

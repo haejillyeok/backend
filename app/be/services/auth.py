@@ -81,8 +81,8 @@ class AuthLoginResult:
 class SessionExpiredError(AppException):
     """세션 쿠키가 없거나 만료/폐기된 세션일 때 발생합니다."""
 
-    def __init__(self) -> None:
-        super().__init__(code=ErrorCode.SESSION_EXPIRED)
+    def __init__(self, *, message: str | None = None) -> None:
+        super().__init__(code=ErrorCode.SESSION_EXPIRED, message=message)
 
 
 class AuthService:
@@ -128,7 +128,7 @@ class AuthService:
     async def authenticate_session(self, session_token: str | None) -> CurrentUser:
         """쿠키의 opaque 세션 토큰으로 현재 로그인 유저를 확인합니다."""
         if not session_token:
-            raise SessionExpiredError
+            raise SessionExpiredError(message="로그인이 필요합니다.")
         return await self._authenticate_session(session_token)
 
     @traced_method("AuthService.authenticate_session", layer="service")

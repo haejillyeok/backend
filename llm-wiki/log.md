@@ -4,6 +4,30 @@
 코드 변경 상세는 Git history, PR, issue에서 확인하고, 이 파일에는 위키 페이지의 지식, 계약, 정책,
 컨벤션이 어떻게 바뀌었는지만 남깁니다.
 
+## [2026-06-14] maintenance | Clarify session auth error messages
+
+- `2026-06-05-auth-session-login.md`에 `SESSION_EXPIRED` 코드는 유지하되 세션 쿠키가 없을 때는 `로그인이 필요합니다.`, 쿠키가 있지만 활성 세션이 아닐 때는 `세션이 만료되었습니다.` 메시지를 반환한다는 기준을 추가했다.
+- `docs/api.md`의 error code 표에도 같은 message 분기 기준을 반영했다.
+
+## [2026-06-14] maintenance | Switch test page port to 3000
+
+- `test-page/` 기본 dev/preview port 기준을 `http://localhost:3000`으로 변경했다.
+- BE CORS allowlist 기준에서 repo-local 테스트 페이지 origin을 `http://localhost:3000`으로 통일하고, 이전 테스트 페이지 포트는 더 이상 허용 origin으로 남기지 않는다.
+
+## [2026-06-14] maintenance | Clarify lobby room list visibility
+
+- `sunset-game-domain.md`, `realtime-websocket.md`, `sunset-game-database-design.md`에 로비 목록은 닫히지 않았고 활성 멤버가 1명 이상인 객실만 노출한다는 기준을 명시했다.
+- public API 설명도 같은 기준으로 맞춰 0명 객실이 목록에 보이지 않아야 한다는 계약을 정리했다.
+
+## [2026-06-14] maintenance | Add test page harness knowledge
+
+- `test-page/`를 현재 BE/Agent REST와 WebSocket 기능 확인용 정적 harness로 기록했다.
+- 테스트 페이지 기본 origin과 BE CORS allowlist 기준을 함께 관리한다는 원칙을 정리했다.
+- 이후 테스트 페이지 기준을 BE-only 연결과 체크인 → 로비 → 객실 → 게임 진행 페이지 흐름으로 정정했다.
+- 이후 구현을 React/Vite로 전환하고, 요청 URL은 Vite 환경변수, 앱 상태는 `useReducer` store 기준으로 관리한다는 기준을 추가했다.
+- 보호 REST API 요청은 JS가 HttpOnly `session_token`을 직접 읽지 않고 `credentials: "include"`로 쿠키를 포함하며, 숨김 운영 노트에서 protected API 세션 확인을 제공한다는 기준을 추가했다.
+- 기본 UI는 사용자-facing 게임 플로우로 유지하고, 서버 선택/health/문서/원본 로그/Realtime ping은 숨김 운영 노트로 분리한다는 기준을 추가했다.
+
 ## [2026-06-14] maintenance | Clarify WebSocket error code contract
 
 - `/ws-docs`의 WebSocket error/close code 표는 lobby, realtime, match 공개 경로 기준으로 6개 코드를 노출한다는 기준을 정리했다.

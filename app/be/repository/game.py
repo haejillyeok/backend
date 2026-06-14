@@ -45,10 +45,11 @@ class GameRepository:
         """room 목록 조회 query 실행 시간을 trace span으로 기록합니다."""
         active_member = aliased(RoomMember)
         current_member = aliased(RoomMember)
+        active_member_count = func.count(func.distinct(active_member.id))
         statement = (
             select(
                 Room,
-                func.count(func.distinct(active_member.id)),
+                active_member_count,
                 func.count(func.distinct(current_member.id)) > 0,
             )
             .outerjoin(
@@ -65,6 +66,7 @@ class GameRepository:
             )
             .where(Room.closed_at.is_(None))
             .group_by(Room.id)
+            .having(active_member_count > 0)
             .order_by(Room.created_at.desc())
         )
         result = await self.db_session.execute(statement)

@@ -58,7 +58,7 @@ router에 등록합니다. endpoint 본문에서 유저 ID가 필요하면 같�
 | --- | --- | --- | --- | --- |
 | `INVALID_CREDENTIALS` | `AUTHENTICATION` | `401` | `1008` | 계정 ID가 없거나 비밀번호가 일치하지 않음 |
 | `AUTH_USER_CONFLICT` | `CONFLICT` | `409` | `1008` | 회원가입 계정 ID 또는 닉네임 중복 |
-| `SESSION_EXPIRED` | `AUTHENTICATION` | `401` | `1008` | 세션 만료 |
+| `SESSION_EXPIRED` | `AUTHENTICATION` | `401` | `1008` | 세션 쿠키 없음 또는 세션 만료/폐기. 쿠키가 없으면 `로그인이 필요합니다.`, 쿠키는 있지만 활성 세션이 아니면 `세션이 만료되었습니다.` 메시지를 반환 |
 | `VALIDATION_ERROR` | `VALIDATION` | `422` | `1008` | 요청 body validation 실패 |
 | `HTTP_ERROR` | `INTERNAL` | `500` | `1011` | FastAPI `HTTPException` fallback |
 | `AGENT_CLIENT_NOT_CONFIGURED` | `INTERNAL` | `503` | `1011` | BE의 Agent client 설정 누락 |
@@ -236,8 +236,8 @@ connection identity는 `game_session_id + participant_id + user_id`로 고정합
 
 ### GET `/api/v1/game/rooms`
 
-로그인 유저가 로비에서 선택할 수 있는 닫히지 않은 객실 목록을 조회합니다. 이 API는 목록 snapshot만
-반환합니다. 특정 객실의 실시간 이벤트는 참여가 허용된 뒤
+로그인 유저가 로비에서 선택할 수 있는 닫히지 않았고 활성 멤버가 1명 이상인 객실 목록을 조회합니다.
+이 API는 목록 snapshot만 반환합니다. 특정 객실의 실시간 이벤트는 참여가 허용된 뒤
 `/ws/lobby/rooms/{room_public_id}`로 연결해 수신합니다.
 
 Response:
