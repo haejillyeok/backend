@@ -36,6 +36,7 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 _SDK_CONFIGURED = False
+_FASTAPI_ROUTE_DETAILS_FALLBACK_WARNED = False
 P = ParamSpec("P")
 R = TypeVar("R")
 HTTP_DURATION_BUCKET_SECONDS = (
@@ -287,6 +288,7 @@ def add_observability(
     if FastAPIInstrumentor is None:
         logger.warning("OpenTelemetry FastAPI instrumentation package is not installed.")
         return
+    _install_fastapi_route_details_fallback()
     FastAPIInstrumentor().instrument_app(app)
 
 
@@ -324,6 +326,44 @@ def start_span(span_name: str, attributes: dict[str, Any] | None = None):
     if trace is None:
         return _NoopSpan()
     return trace.get_tracer(__name__).start_as_current_span(span_name, attributes=attributes)
+
+
+def _install_fastapi_route_details_fallback() -> None:
+    """OTel FastAPI route 조회 버그가 실제 요청을 500으로 만들지 않게 보호합니다."""
+    try:
+        import opentelemetry.instrumentation.fastapi as fastapi_instrumentation
+    except ImportError:
+        return
+
+    original_get_route_details = getattr(fastapi_instrumentation, "_get_route_details", None)
+    if original_get_route_details is None:
+        return
+    if getattr(original_get_route_details, "_haejillyeok_safe_fallback", False):
+        return
+
+    def safe_get_route_details(scope: dict[str, Any]):
+        return _safe_fastapi_route_details(scope, original_get_route_details)
+
+    safe_get_route_details._haejillyeok_safe_fallback = True
+    fastapi_instrumentation._get_route_details = safe_get_route_details
+
+
+def _safe_fastapi_route_details(
+    scope: dict[str, Any],
+    get_route_details: Callable[[dict[str, Any]], str | None],
+) -> str | None:
+    """OTel route matcher가 router 중간 객체에서 실패하면 원 요청 path를 span route로 사용합니다."""
+    global _FASTAPI_ROUTE_DETAILS_FALLBACK_WARNED
+    try:
+        return get_route_details(scope)
+    except AttributeError as exc:
+        if not _FASTAPI_ROUTE_DETAILS_FALLBACK_WARNED:
+            logger.warning(
+                "OpenTelemetry FastAPI route lookup failed; falling back to request path: %s",
+                exc,
+            )
+            _FASTAPI_ROUTE_DETAILS_FALLBACK_WARNED = True
+        return scope.get("path")
 
 
 def configure_observability_sdk(

@@ -4,6 +4,10 @@
 코드 변경 상세는 Git history, PR, issue에서 확인하고, 이 파일에는 위키 페이지의 지식, 계약, 정책,
 컨벤션이 어떻게 바뀌었는지만 남깁니다.
 
+## [2026-06-14] maintenance | Add OTel route lookup fallback policy
+
+- `observability-stack.md`에 FastAPI/Starlette/OTel route detail 조회가 router 중간 객체에서 실패해도 실제 요청은 500으로 만들지 않고 request path로 fallback한다는 운영 기준을 추가했다.
+
 ## [2026-06-14] maintenance | Clarify initial phase FK insert order
 
 - `sunset-game-domain.md`와 `sunset-game-database-design.md`에 `game_sessions.current_phase_id` FK와 `session_phases.session_id` FK의 원형 참조를 고려해 세션 시작 transaction의 staged flush 순서를 명시했다.

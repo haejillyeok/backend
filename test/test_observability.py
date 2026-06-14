@@ -6,6 +6,7 @@ from app.shared.core.observability import (
     HttpServerMetricsMiddleware,
     ObservabilitySettings,
     WebSocketServerMetrics,
+    _safe_fastapi_route_details,
     add_observability,
     configure_observability_sdk,
     resolve_otlp_http_endpoint,
@@ -79,6 +80,18 @@ def test_otlp_endpoint_resolution_keeps_tenant_query_and_signal_path() -> None:
         )
         == "http://localhost:4318/custom/v1/traces"
     )
+
+
+def test_safe_fastapi_route_details_falls_back_when_instrumentation_route_breaks() -> None:
+    def raise_included_router_error(scope):
+        raise AttributeError("'_IncludedRouter' object has no attribute 'path'")
+
+    route = _safe_fastapi_route_details(
+        {"path": "/api/v1/auth/login"},
+        raise_included_router_error,
+    )
+
+    assert route == "/api/v1/auth/login"
 
 
 async def test_http_metrics_middleware_records_request_error_metrics() -> None:

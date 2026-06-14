@@ -18,6 +18,9 @@ FastAPI app -> logs/*.log* -> Promtail -> Loki -> Grafana
 
 - `app/shared/core/observability.py`는 FastAPI 앱에 OpenTelemetry trace instrumentation과
   HTTP metric middleware를 등록한다.
+- FastAPI/Starlette/OTel 조합에 따라 router 중간 객체가 route detail 조회 중 `.path`를 제공하지
+  않을 수 있으므로, OTel FastAPI route lookup 실패는 request path fallback으로 처리하고 실제 요청을
+  500으로 만들지 않는다.
 - `be`와 `agent` 앱은 `create_app()`에서 `add_observability()`를 호출한다.
 - 앱 코드는 기본적으로 APM exporter를 연결하고, 별도 설정이 없으면 `http://localhost:4318`로
   OTLP HTTP를 보낸다. Docker 배포에서는 backend 컨테이너를 collector와 같은 user-defined
