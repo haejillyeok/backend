@@ -4,6 +4,12 @@
 코드 변경 상세는 Git history, PR, issue에서 확인하고, 이 파일에는 위키 페이지의 지식, 계약, 정책,
 컨벤션이 어떻게 바뀌었는지만 남깁니다.
 
+## [2026-06-15] maintenance | Expand lobby move cleanup policy
+
+- `sunset-game-domain.md`에 새 객실 생성/다른 객실 입장 전 기존 active room membership을 정리한다는 기준을 `waiting` room 밖으로 확장했다.
+- 기존 room이 이미 시작됐고 실제 유저가 현재 유저 1명뿐이면 active game session을 `aborted`로 마감하고 room을 `closed`로 닫는 기준을 추가했다.
+- 종료 세션은 entry token 발급과 `game_session_token` 복구 대상에서 제외한다는 기준을 추가했다.
+
 ## [2026-06-14] maintenance | Clarify single active waiting room membership
 
 - `sunset-game-domain.md`와 `realtime-websocket.md`에 한 유저는 하나의 `waiting` room에만 active member로 남는다는 불변식을 추가했다.

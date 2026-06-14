@@ -234,6 +234,23 @@ async def test_game_repository_lists_active_waiting_room_public_ids_for_user() -
     assert "rooms.closed_at IS NULL" in compiled_sql
 
 
+async def test_game_repository_lists_active_room_public_ids_for_user() -> None:
+    user_id = uuid4()
+    room_public_id = uuid4()
+    db_session = FakeDbSession([FakeResult(scalars=[room_public_id])])
+    repository = GameRepository(db_session)
+
+    room_public_ids = await repository.list_active_room_public_ids_for_user(user_id=user_id)
+
+    statement = db_session.executed_statements[0]
+    compiled_sql = str(statement.compile(compile_kwargs={"literal_binds": True}))
+    assert room_public_ids == [room_public_id]
+    assert "room_members.user_id" in compiled_sql
+    assert "room_members.left_at IS NULL" in compiled_sql
+    assert "rooms.closed_at IS NULL" in compiled_sql
+    assert "rooms.status = 'waiting'" not in compiled_sql
+
+
 async def test_game_repository_locks_waiting_room_membership_by_user() -> None:
     user_id = uuid4()
     db_session = FakeDbSession([FakeResult()])
@@ -474,6 +491,28 @@ async def test_game_repository_closes_room() -> None:
     assert db_session.flush_count == 1
 
 
+async def test_game_repository_aborts_active_session_for_room() -> None:
+    room_id = uuid4()
+    ended_at = datetime(2026, 6, 12, tzinfo=KST)
+    game_session = GameSession(
+        id=uuid4(),
+        public_id=uuid4(),
+        room_id=room_id,
+        game_type="shiritori",
+        status="starting",
+        rule_config={"max_rounds": 8, "turn_time_seconds": 10},
+    )
+    db_session = FakeDbSession([FakeResult(scalar=game_session)])
+    repository = GameRepository(db_session)
+
+    await repository.abort_active_session_for_room(room_id=room_id, ended_at=ended_at)
+
+    assert game_session.status == "aborted"
+    assert game_session.ended_at == ended_at
+    assert game_session.updated_at == ended_at
+    assert db_session.flush_count == 1
+
+
 async def test_game_repository_creates_game_session_and_participant_snapshot() -> None:
     owner_id = uuid4()
     room = build_room(owner_user_id=owner_id)
@@ -620,6 +659,9 @@ async def test_game_repository_resolves_user_participant_for_session_entry() -> 
     assert record.participant_id == participant.id
     assert record.display_name == "참가자"
     assert missing is None
+    compiled_sql = str(db_session.executed_statements[0].compile(compile_kwargs={"literal_binds": True}))
+    assert "game_sessions.ended_at IS NULL" in compiled_sql
+    assert "game_sessions.status NOT IN ('result', 'aborted')" in compiled_sql
 
 
 async def test_game_repository_saves_game_session_token_hash_for_user_participant() -> None:
@@ -649,6 +691,9 @@ async def test_game_repository_saves_game_session_token_hash_for_user_participan
     assert participant.resume_token_hash == "hashed-token"
     assert participant.resume_token_expires_at == expires_at
     assert db_session.flush_count == 1
+    compiled_sql = str(db_session.executed_statements[0].compile(compile_kwargs={"literal_binds": True}))
+    assert "game_sessions.ended_at IS NULL" in compiled_sql
+    assert "game_sessions.status NOT IN ('result', 'aborted')" in compiled_sql
 
 
 async def test_game_repository_resolves_participant_by_active_game_session_token() -> None:
@@ -688,3 +733,6 @@ async def test_game_repository_resolves_participant_by_active_game_session_token
     assert record.participant_id == participant.id
     assert record.resume_token_expires_at == participant.resume_token_expires_at
     assert missing is None
+    compiled_sql = str(db_session.executed_statements[0].compile(compile_kwargs={"literal_binds": True}))
+    assert "game_sessions.ended_at IS NULL" in compiled_sql
+    assert "game_sessions.status NOT IN ('result', 'aborted')" in compiled_sql

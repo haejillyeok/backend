@@ -16,6 +16,7 @@ AI_DISPLAY_NAME = "수상한 손님"
 GAME_SESSION_TOKEN_TTL = timedelta(hours=3)
 STARTING_STATUS = GameSessionStatus.STARTING.value
 WAITING_ROOM_STATUS = RoomStatus.WAITING.value
+SOLO_ABORTABLE_ROOM_STATUSES = (RoomStatus.STARTING.value, RoomStatus.PLAYING.value)
 DEFAULT_ROOM_RULE_CONFIG = {"max_rounds": 8, "turn_time_seconds": 10}
 
 
@@ -189,6 +190,9 @@ class GameRepositoryProtocol(Protocol):
     async def list_active_waiting_room_public_ids_for_user(self, *, user_id: UUID) -> list[UUID]:
         """유저가 현재 active member로 남아 있는 대기 room public_id 목록을 조회합니다."""
 
+    async def list_active_room_public_ids_for_user(self, *, user_id: UUID) -> list[UUID]:
+        """유저가 현재 active member로 남아 있는 닫히지 않은 room public_id 목록을 조회합니다."""
+
     async def create_room(
         self,
         *,
@@ -243,6 +247,9 @@ class GameRepositoryProtocol(Protocol):
 
     async def close_room(self, *, room_id: UUID, closed_at: datetime) -> None:
         """활성 멤버가 없는 room을 더 이상 사용할 수 없도록 닫습니다."""
+
+    async def abort_active_session_for_room(self, *, room_id: UUID, ended_at: datetime) -> None:
+        """room의 active 게임 세션을 중단 상태로 닫습니다."""
 
     async def update_room_settings(
         self,
@@ -404,7 +411,7 @@ class GameService:
         `room_members` 행을 기준으로 연결 권한을 확인합니다.
         """
         await self.repository.lock_waiting_room_membership_for_user(user_id=owner.id)
-        await self._leave_existing_waiting_rooms(user=owner)
+        await self._leave_existing_rooms_for_lobby_move(user=owner)
         room = await self.repository.create_room(
             owner_user_id=owner.id,
             name=name,
@@ -532,7 +539,7 @@ class GameService:
         if len(members) >= room.max_players:
             raise GameRoomNotJoinableError
 
-        await self._leave_existing_waiting_rooms(
+        await self._leave_existing_rooms_for_lobby_move(
             user=user,
             excluded_room_public_id=room.public_id,
         )
@@ -606,6 +613,24 @@ class GameService:
             if ignore_inactive_member:
                 return None
             raise GameRoomNotJoinableError
+        return await self._leave_locked_waiting_room(
+            room=room,
+            user=user,
+            left_at=left_at,
+            ignore_inactive_member=ignore_inactive_member,
+            commit=commit,
+        )
+
+    async def _leave_locked_waiting_room(
+        self,
+        *,
+        room: GameRoomRecord,
+        user: CurrentUser,
+        left_at: datetime,
+        ignore_inactive_member: bool,
+        commit: bool,
+    ) -> RoomLeaveResult | None:
+        """이미 lock을 잡은 대기 room의 퇴장, 방장 승계, 폐쇄를 처리합니다."""
         result = await self.repository.mark_room_member_left(
             room_id=room.id,
             user_id=user.id,
@@ -640,31 +665,71 @@ class GameService:
             room_closed=room_closed,
         )
 
-    async def _leave_existing_waiting_rooms(
+    async def _leave_existing_rooms_for_lobby_move(
         self,
         *,
         user: CurrentUser,
         excluded_room_public_id: UUID | None = None,
     ) -> None:
-        """새 대기방 생성/입장 전 유저가 남아 있던 다른 대기방 membership을 정리합니다.
+        """새 대기방 생성/입장 전 유저가 남아 있던 다른 room membership을 정리합니다.
 
-        한 유저가 여러 대기방에 동시에 active member로 남으면 로비 목록에 유령 객실이 누적됩니다.
-        그래서 새 대기방으로 이동하는 유스케이스는 기존 대기방을 REST 퇴장과 같은 규칙으로 먼저
-        정리합니다. 같은 room 반복 입장은 기존 membership을 그대로 반환해야 하므로 제외합니다.
+        한 유저가 여러 room에 동시에 active member로 남으면 로비 목록에 유령 객실이 누적됩니다.
+        대기 room은 REST 퇴장과 같은 규칙으로 정리하고, 이미 시작됐지만 실제 유저가 현재 유저
+        한 명뿐인 세션은 다른 유저에게 영향이 없으므로 abort 후 room을 닫습니다. 같은 room 반복
+        입장은 기존 membership을 그대로 반환해야 하므로 제외합니다.
         """
-        room_public_ids = await self.repository.list_active_waiting_room_public_ids_for_user(
+        room_public_ids = await self.repository.list_active_room_public_ids_for_user(
             user_id=user.id,
         )
         for room_public_id in room_public_ids:
             if room_public_id == excluded_room_public_id:
                 continue
-            await self._leave_waiting_room(
-                room_public_id=room_public_id,
-                user=user,
-                left_at=kst_now(),
-                ignore_inactive_member=True,
-                commit=False,
-            )
+            room = await self.repository.get_room_by_public_id_for_update(room_public_id)
+            if room is None:
+                continue
+            left_at = kst_now()
+            if room.status == WAITING_ROOM_STATUS:
+                await self._leave_locked_waiting_room(
+                    room=room,
+                    user=user,
+                    left_at=left_at,
+                    ignore_inactive_member=True,
+                    commit=False,
+                )
+                continue
+            if room.status in SOLO_ABORTABLE_ROOM_STATUSES:
+                await self._abort_solo_started_room(room=room, user=user, left_at=left_at)
+
+    async def _abort_solo_started_room(
+        self,
+        *,
+        room: GameRoomRecord,
+        user: CurrentUser,
+        left_at: datetime,
+    ) -> None:
+        """실제 유저가 1명뿐인 started room을 새 로비 이동 전 안전하게 닫습니다."""
+        active_session = await self.repository.get_active_session_by_room_id(room.id)
+        if active_session is None or not self._is_solo_user_session(active_session, user.id):
+            return
+        leave_result = await self.repository.mark_room_member_left(
+            room_id=room.id,
+            user_id=user.id,
+            left_at=left_at,
+        )
+        if leave_result is None:
+            return
+        await self.repository.abort_active_session_for_room(room_id=room.id, ended_at=left_at)
+        await self.repository.close_room(room_id=room.id, closed_at=left_at)
+
+    @staticmethod
+    def _is_solo_user_session(session: GameSessionStartResult, user_id: UUID) -> bool:
+        """AI 참가자를 제외했을 때 현재 유저만 남은 세션인지 확인합니다."""
+        user_participants = [
+            participant
+            for participant in session.participants
+            if participant.participant_type == ParticipantType.USER.value
+        ]
+        return len(user_participants) == 1 and user_participants[0].user_id == user_id
 
     async def start_session(self, *, room_public_id: UUID, user_id: UUID) -> GameSessionStartResult:
         """방장이 room의 활성 멤버를 참가자로 고정하고 게임 세션 식별자를 발급합니다.

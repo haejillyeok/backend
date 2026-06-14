@@ -78,6 +78,26 @@ class GameRepository:
         result = await self.db_session.execute(statement)
         return list(result.scalars().all())
 
+    async def list_active_room_public_ids_for_user(self, *, user_id: UUID) -> list[UUID]:
+        """유저가 active member로 남아 있는 닫히지 않은 room public_id를 조회합니다."""
+        return await self._list_active_room_public_ids_for_user(user_id=user_id)
+
+    @traced_method("GameRepository.list_active_room_public_ids_for_user", layer="repository")
+    async def _list_active_room_public_ids_for_user(self, *, user_id: UUID) -> list[UUID]:
+        """새 대기방 이동 전 정리할 기존 room 목록 조회 시간을 trace span으로 기록합니다."""
+        statement = (
+            select(Room.public_id)
+            .join(RoomMember, RoomMember.room_id == Room.id)
+            .where(
+                RoomMember.user_id == user_id,
+                RoomMember.left_at.is_(None),
+                Room.closed_at.is_(None),
+            )
+            .order_by(Room.created_at.asc())
+        )
+        result = await self.db_session.execute(statement)
+        return list(result.scalars().all())
+
     @traced_method("GameRepository.list_rooms", layer="repository")
     async def _list_rooms(self, *, user_id: UUID) -> list[GameRoomListItem]:
         """room 목록 조회 query 실행 시간을 trace span으로 기록합니다."""
@@ -417,6 +437,32 @@ class GameRepository:
         room.updated_at = closed_at
         await self.db_session.flush()
 
+    async def abort_active_session_for_room(self, *, room_id: UUID, ended_at) -> None:
+        """room의 active 게임 세션을 aborted로 마감합니다."""
+        await self._abort_active_session_for_room(room_id=room_id, ended_at=ended_at)
+
+    @traced_method("GameRepository.abort_active_session_for_room", layer="repository")
+    async def _abort_active_session_for_room(self, *, room_id: UUID, ended_at) -> None:
+        """active game_session abort update 실행 시간을 trace span으로 기록합니다."""
+        result = await self.db_session.execute(
+            select(GameSession)
+            .where(
+                GameSession.room_id == room_id,
+                GameSession.ended_at.is_(None),
+                GameSession.status.not_in(TERMINAL_SESSION_STATUSES),
+            )
+            .order_by(GameSession.started_at.desc())
+            .limit(1)
+            .with_for_update()
+        )
+        game_session = result.scalar_one_or_none()
+        if game_session is None:
+            return
+        game_session.status = GameSessionStatus.ABORTED.value
+        game_session.ended_at = ended_at
+        game_session.updated_at = ended_at
+        await self.db_session.flush()
+
     async def update_room_settings(
         self,
         *,
@@ -578,6 +624,8 @@ class GameRepository:
             .join(SessionParticipant, SessionParticipant.session_id == GameSession.id)
             .where(
                 GameSession.public_id == game_session_public_id,
+                GameSession.ended_at.is_(None),
+                GameSession.status.not_in(TERMINAL_SESSION_STATUSES),
                 SessionParticipant.user_id == user_id,
                 SessionParticipant.left_at.is_(None),
             )
@@ -619,6 +667,8 @@ class GameRepository:
             select(GameSession, SessionParticipant)
             .join(SessionParticipant, SessionParticipant.session_id == GameSession.id)
             .where(
+                GameSession.ended_at.is_(None),
+                GameSession.status.not_in(TERMINAL_SESSION_STATUSES),
                 SessionParticipant.resume_token_hash == token_hash,
                 SessionParticipant.resume_token_expires_at > now,
                 SessionParticipant.left_at.is_(None),
@@ -671,6 +721,8 @@ class GameRepository:
             .join(SessionParticipant, SessionParticipant.session_id == GameSession.id)
             .where(
                 GameSession.public_id == game_session_public_id,
+                GameSession.ended_at.is_(None),
+                GameSession.status.not_in(TERMINAL_SESSION_STATUSES),
                 SessionParticipant.user_id == user_id,
                 SessionParticipant.left_at.is_(None),
             )

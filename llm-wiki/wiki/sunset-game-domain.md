@@ -1,7 +1,7 @@
 ---
 title: Sunset Game Domain
 type: domain-model
-updated: 2026-06-14
+updated: 2026-06-15
 audience: ai
 ---
 
@@ -65,20 +65,21 @@ Backend가 소유하는 게임 상태, WebSocket event, Agent 경계를 우선�
   - 닫히지 않았고 활성 room member가 1명 이상인 room 목록, 활성 room member 수, 현재 유저가 active member인지 여부를 반환한다.
   - 현재 유저가 유효한 대기 로비에 이미 참여 중이면 `current_membership`에 room 요약과 `/ws/lobby/rooms/{room_public_id}` 연결 path를 함께 반환한다.
   - 목록 조회는 snapshot이고, 특정 room의 실시간 이벤트는 room 참여 후 WebSocket으로 받는다.
-- 대기 room membership 불변식
-  - 한 유저는 동시에 하나의 `waiting` room에만 active member로 남을 수 있다.
+- 로비 이동 membership 불변식
+  - 한 유저는 동시에 여러 열린 room에 active member로 방치되지 않아야 한다.
   - 객실 생성과 다른 객실 입장은 유저 단위 transaction lock으로 직렬화한다.
-  - 새 객실 생성 전에는 기존 active waiting membership을 REST 퇴장과 같은 규칙으로 정리한다.
-  - 다른 객실 입장은 대상 room이 `waiting`이고 정원 여유가 있을 때만 기존 active waiting membership을 정리한다.
+  - 새 객실 생성 전에는 기존 active room membership을 정리한다. 기존 room이 `waiting`이면 REST 퇴장과 같은 규칙을 적용한다.
+  - 기존 room이 이미 시작됐고 실제 유저가 현재 유저 1명뿐이면 active game session을 `aborted`로 마감하고 room을 `closed`로 닫는다. AI 참가자는 단독 여부 판단에서 제외한다.
+  - 다른 객실 입장은 대상 room이 `waiting`이고 정원 여유가 있을 때만 기존 active membership을 정리한다.
 - `POST /api/v1/game/rooms`
   - `session_token` 쿠키로 현재 유저를 인증한다.
-  - 기존 active waiting membership을 정리한 뒤 `waiting` 상태 room을 생성하고 방장을 첫 활성 `game.room_members`로 등록한다.
+  - 기존 active membership을 정리한 뒤 `waiting` 상태 room을 생성하고 방장을 첫 활성 `game.room_members`로 등록한다.
   - 성공 응답의 `room_public_id`로 `/ws/lobby/rooms/{room_public_id}`에 연결할 수 있다.
 - `POST /api/v1/game/rooms/{room_public_id}/join`
   - `session_token` 쿠키로 현재 유저를 인증한다.
   - room row를 lock한 뒤 `waiting` 상태와 정원을 확인한다.
-  - 대상 room이 참여 가능하면 기존 active waiting membership을 정리하고 대상 room에 참여한다.
-  - 대상 room이 정원 초과이면 기존 active waiting membership을 유지하고 `GAME_ROOM_NOT_JOINABLE`로 거부한다.
+  - 대상 room이 참여 가능하면 기존 active membership을 정리하고 대상 room에 참여한다.
+  - 대상 room이 정원 초과이면 기존 active membership을 유지하고 `GAME_ROOM_NOT_JOINABLE`로 거부한다.
   - 참여 정보는 DB의 `game.room_members`에 저장한다.
   - 이미 활성 room member인 유저의 반복 요청은 새 row를 만들지 않고 기존 참여 정보를 반환한다.
   - 신규 멤버가 추가된 경우(`already_member=false`) `/ws/lobby/rooms/{room_public_id}`의 같은 room
@@ -114,6 +115,7 @@ Backend가 소유하는 게임 상태, WebSocket event, Agent 경계를 우선�
 - `GET /api/v1/game/sessions/{game_session_public_id}/entry`
   - `session_token` 쿠키로 현재 유저를 인증한다.
   - 현재 유저가 해당 session의 실제 유저 참가자로 고정되어 있을 때만 `allowed=true`를 반환한다.
+  - `result`, `aborted`, `ended_at`이 기록된 종료 세션은 entry 토큰 발급과 `game_session_token` 복구 대상에서 제외한다.
   - 시작 시 확정된 참가자가 아닌 유저는 `GAME_SESSION_ENTRY_FORBIDDEN`으로 거부한다.
   - 허용된 유저에게는 `game_session_token`을 새로 발급해 이후 match 재연결에 사용할 수 있게 한다.
 

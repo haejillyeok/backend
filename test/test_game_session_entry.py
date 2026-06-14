@@ -81,6 +81,7 @@ class FakeGameRepository(GameRepositoryProtocol):
         members: list[RoomMemberRecord] | None = None,
         participant: GameSessionParticipantRecord | None = None,
         active_session: object | None = None,
+        active_room_public_ids: list[object] | None = None,
         active_waiting_room_public_ids: list[object] | None = None,
     ) -> None:
         room_records = rooms or ([room] if room is not None else [])
@@ -89,11 +90,13 @@ class FakeGameRepository(GameRepositoryProtocol):
         self.members = members or []
         self.participant = participant
         self.active_session = active_session
+        self.active_room_public_ids = active_room_public_ids or []
         self.active_waiting_room_public_ids = active_waiting_room_public_ids or []
         self.created_sessions: list[dict[str, object]] = []
         self.created_rooms: list[dict[str, object]] = []
         self.created_members: list[RoomMemberRecord] = []
         self.left_members: list[RoomLeaveResult] = []
+        self.aborted_sessions: list[dict[str, object]] = []
         self.room_summaries: list[GameRoomListItem] = []
         self.issued_credentials: list[dict[str, object]] = []
         self.new_owner_user_id = None
@@ -111,6 +114,10 @@ class FakeGameRepository(GameRepositoryProtocol):
     async def list_active_waiting_room_public_ids_for_user(self, *, user_id):
         _ = user_id
         return self.active_waiting_room_public_ids
+
+    async def list_active_room_public_ids_for_user(self, *, user_id):
+        _ = user_id
+        return self.active_room_public_ids
 
     async def lock_waiting_room_membership_for_user(self, *, user_id):
         self.locked_waiting_membership_user_ids.append(user_id)
@@ -239,6 +246,9 @@ class FakeGameRepository(GameRepositoryProtocol):
             self.rooms_by_public_id[updated.public_id] = updated
             if self.room and self.room.id == room_id:
                 self.room = updated
+
+    async def abort_active_session_for_room(self, *, room_id, ended_at):
+        self.aborted_sessions.append({"room_id": room_id, "ended_at": ended_at})
 
     async def update_room_settings(self, *, room_id, name, max_players, rule_config):
         self.updated_rooms.append(
@@ -436,7 +446,7 @@ def test_game_service_leaves_existing_waiting_room_before_joining_another_room()
                 joined_at=datetime(2026, 6, 12, tzinfo=KST),
             )
         ],
-        active_waiting_room_public_ids=[old_room_public_id],
+        active_room_public_ids=[old_room_public_id],
     )
     service = GameService(repository)
 
@@ -501,7 +511,7 @@ def test_game_service_keeps_existing_waiting_room_when_target_room_is_full():
                 joined_at=datetime(2026, 6, 12, tzinfo=KST),
             ),
         ],
-        active_waiting_room_public_ids=[old_room_public_id],
+        active_room_public_ids=[old_room_public_id],
     )
     service = GameService(repository)
 
@@ -617,7 +627,7 @@ def test_game_service_closes_existing_waiting_room_before_creating_new_room():
                 joined_at=datetime(2026, 6, 12, tzinfo=KST),
             )
         ],
-        active_waiting_room_public_ids=[old_room_public_id],
+        active_room_public_ids=[old_room_public_id],
     )
     service = GameService(repository)
 
@@ -640,6 +650,91 @@ def test_game_service_closes_existing_waiting_room_before_creating_new_room():
     assert repository.left_members[0].nickname == owner.nickname
     assert repository.created_members[-1].user_id == owner.id
     assert repository.committed is True
+    assert repository.commit_count == 1
+
+
+def test_game_service_aborts_solo_started_room_before_creating_new_room():
+    owner = CurrentUser(
+        id=uuid4(),
+        public_id=uuid4(),
+        account_id="player_001",
+        nickname="방장",
+    )
+    old_room_id = uuid4()
+    old_room_public_id = uuid4()
+    game_session_public_id = uuid4()
+    old_session = GameSessionStartResult(
+        game_session_public_id=game_session_public_id,
+        room_public_id=old_room_public_id,
+        game_type="shiritori",
+        status="starting",
+        participants=[
+            GameSessionParticipantRecord(
+                participant_id=uuid4(),
+                game_session_public_id=game_session_public_id,
+                user_id=owner.id,
+                participant_type="user",
+                display_name="1번 손님",
+                seat_number=1,
+                is_uninvited_guest=False,
+            ),
+            GameSessionParticipantRecord(
+                participant_id=uuid4(),
+                game_session_public_id=game_session_public_id,
+                user_id=None,
+                participant_type="ai",
+                display_name="2번 손님",
+                seat_number=2,
+                is_uninvited_guest=True,
+            ),
+        ],
+    )
+    repository = FakeGameRepository(
+        room=GameRoomRecord(
+            id=old_room_id,
+            public_id=old_room_public_id,
+            owner_user_id=owner.id,
+            name="이전 객실",
+            game_type="shiritori",
+            status="starting",
+            max_players=4,
+        ),
+        members=[
+            RoomMemberRecord(
+                room_id=old_room_id,
+                user_id=owner.id,
+                nickname=owner.nickname,
+                joined_at=datetime(2026, 6, 12, tzinfo=KST),
+            )
+        ],
+        active_room_public_ids=[old_room_public_id],
+        active_session=old_session,
+    )
+    service = GameService(repository)
+
+    result = asyncio.run(
+        service.create_room(
+            name="새 객실",
+            game_type="shiritori",
+            max_players=4,
+            owner=owner,
+        )
+    )
+
+    assert result.name == "새 객실"
+    assert repository.aborted_sessions == [
+        {
+            "room_id": old_room_id,
+            "ended_at": repository.left_members[0].left_at,
+        }
+    ]
+    assert repository.closed_rooms == [
+        {
+            "room_id": old_room_id,
+            "closed_at": repository.left_members[0].left_at,
+        }
+    ]
+    assert repository.created_members[-1].user_id == owner.id
     assert repository.commit_count == 1
 
 
