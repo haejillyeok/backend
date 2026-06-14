@@ -4,6 +4,11 @@
 코드 변경 상세는 Git history, PR, issue에서 확인하고, 이 파일에는 위키 페이지의 지식, 계약, 정책,
 컨벤션이 어떻게 바뀌었는지만 남깁니다.
 
+## [2026-06-14] maintenance | Clarify match progress FK write order
+
+- `sunset-game-domain.md`와 `sunset-game-database-design.md`에 단어 제출 성공/거절 저장 시 `participant_actions`, `word_game.submissions`, `session_phases`, `game_events` 사이의 FK 참조 순서에 맞춰 staged insert/flush를 수행한다는 기준을 추가했다.
+- timeout으로 다음 판 또는 투표 phase를 만들 때도 새 `session_phases` row를 먼저 확정한 뒤 `game_sessions.current_phase_id`를 갱신한다는 기준을 함께 명시했다.
+
 ## [2026-06-14] maintenance | Add OTel route lookup fallback policy
 
 - `observability-stack.md`에 FastAPI/Starlette/OTel route detail 조회가 router 중간 객체에서 실패해도 실제 요청은 500으로 만들지 않고 request path로 fallback한다는 운영 기준을 추가했다.

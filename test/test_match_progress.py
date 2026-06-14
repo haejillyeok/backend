@@ -51,17 +51,30 @@ class FakeDbSession:
     def __init__(self, results=None) -> None:
         self.results = list(results or [])
         self.added = []
+        self.flushed_item_types = []
+        self.observed_game_sessions = []
+        self.flushed_game_session_current_phase_ids = []
         self.flush_count = 0
         self.committed = False
 
     async def execute(self, statement):
-        return self.results.pop(0)
+        result = self.results.pop(0)
+        if (
+            isinstance(result.scalar, GameSession)
+            and result.scalar not in self.observed_game_sessions
+        ):
+            self.observed_game_sessions.append(result.scalar)
+        return result
 
     def add(self, item) -> None:
         self.added.append(item)
 
     async def flush(self) -> None:
         self.flush_count += 1
+        self.flushed_item_types.append([type(item).__name__ for item in self.added])
+        self.flushed_game_session_current_phase_ids.append(
+            [session.current_phase_id for session in self.observed_game_sessions]
+        )
         for item in self.added:
             if getattr(item, "id", None) is None:
                 item.id = uuid4()
@@ -741,7 +754,7 @@ async def test_match_progress_repository_records_turn_timeout_when_deadline_pass
     assert record.event_sequence == 10
     assert record.deadline_at == deadline_at
     assert record.next_status == "voting"
-    assert db_session.flush_count == 2
+    assert db_session.flush_count == 3
     assert db_session.committed is True
 
 
@@ -757,6 +770,7 @@ async def test_match_progress_repository_starts_next_round_after_timeout_before_
     deadline_at = datetime(2026, 6, 13, 0, 0, 10, tzinfo=KST)
     game_session = build_session(session_id, game_session_public_id)
     game_session.rule_config = {"max_rounds": 2, "turn_time_seconds": 10}
+    game_session.current_phase_id = phase_id
     phase = SessionPhase(
         id=phase_id,
         session_id=session_id,
@@ -830,6 +844,17 @@ async def test_match_progress_repository_starts_next_round_after_timeout_before_
     assert record.next_turn is not None
     assert record.next_turn.round_number == 2
     assert action.action_type == "turn_timeout"
+    assert db_session.flushed_item_types[0] == ["ParticipantAction"]
+    assert db_session.flushed_item_types[1] == ["ParticipantAction", "SessionPhase"]
+    assert db_session.flushed_item_types[2] == [
+        "ParticipantAction",
+        "SessionPhase",
+        "WordTurn",
+        "GameEvent",
+    ]
+    assert db_session.flushed_game_session_current_phase_ids[0] == [phase_id]
+    assert db_session.flushed_game_session_current_phase_ids[1] == [phase_id]
+    assert db_session.flushed_game_session_current_phase_ids[2] == [next_phase.id]
 
 
 async def test_match_progress_repository_moves_to_voting_after_timeout_at_max_rounds() -> None:
@@ -900,6 +925,16 @@ async def test_match_progress_repository_moves_to_voting_after_timeout_at_max_ro
     assert game_session.current_phase_id == voting_phase.id
     assert record.next_turn is None
     assert record.next_status == "voting"
+    assert db_session.flushed_item_types[0] == ["ParticipantAction"]
+    assert db_session.flushed_item_types[1] == ["ParticipantAction", "SessionPhase"]
+    assert db_session.flushed_item_types[2] == [
+        "ParticipantAction",
+        "SessionPhase",
+        "GameEvent",
+    ]
+    assert db_session.flushed_game_session_current_phase_ids[0] == [phase_id]
+    assert db_session.flushed_game_session_current_phase_ids[1] == [phase_id]
+    assert db_session.flushed_game_session_current_phase_ids[2] == [voting_phase.id]
 
 
 async def test_match_progress_repository_accepts_word_submission_and_starts_next_turn() -> None:
@@ -1007,7 +1042,24 @@ async def test_match_progress_repository_accepts_word_submission_and_starts_next
     assert game_session.status == "playing"
     assert record.next_turn.actor_seat_number == 2
     assert record.next_turn.required_start_char == "과"
-    assert db_session.flush_count == 1
+    assert db_session.flushed_item_types[0] == ["ParticipantAction"]
+    assert db_session.flushed_item_types[1] == ["ParticipantAction", "WordSubmission"]
+    assert db_session.flushed_item_types[2] == [
+        "ParticipantAction",
+        "WordSubmission",
+        "UsedWord",
+        "ScoreLedger",
+        "SessionPhase",
+    ]
+    assert db_session.flushed_item_types[3] == [
+        "ParticipantAction",
+        "WordSubmission",
+        "UsedWord",
+        "ScoreLedger",
+        "SessionPhase",
+        "WordTurn",
+        "GameEvent",
+    ]
     assert db_session.committed is True
 
 
@@ -1165,4 +1217,6 @@ async def test_match_progress_repository_records_word_rejection_without_advancin
     assert phase.finished_at is None
     assert game_session.current_phase_id == phase_id
     assert record.score_delta == -5
+    assert db_session.flushed_item_types[0] == ["ParticipantAction"]
+    assert db_session.flushed_item_types[1] == ["ParticipantAction", "ScoreLedger", "GameEvent"]
     assert db_session.committed is True

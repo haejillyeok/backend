@@ -184,6 +184,14 @@ class MatchProgressRepository:
                 now=now,
             )
         )
+        next_phases = [item for item in next_items if isinstance(item, SessionPhase)]
+        next_non_phases = [item for item in next_items if not isinstance(item, SessionPhase)]
+        for item in next_phases:
+            self.db_session.add(item)
+        if next_phases:
+            # current_phase_id와 다음 turn은 새 phase row를 참조하므로 phase를 먼저 확정합니다.
+            await self.db_session.flush()
+            game_session.current_phase_id = next_phases[-1].id
 
         event_sequence = await self._next_event_sequence(game_session.id)
         event_payload = {
@@ -207,7 +215,7 @@ class MatchProgressRepository:
             payload=event_payload,
             created_at=now,
         )
-        for item in next_items:
+        for item in next_non_phases:
             self.db_session.add(item)
         self.db_session.add(event)
         await self.db_session.flush()
@@ -306,6 +314,10 @@ class MatchProgressRepository:
             response_ms=None,
             is_valid=True,
         )
+        self.db_session.add(action)
+        # submission, event가 action_id를 참조하므로 action row를 먼저 확정합니다.
+        await self.db_session.flush()
+
         submission = WordSubmission(
             id=generate_uuid_v7(),
             action_id=action.id,
@@ -314,6 +326,10 @@ class MatchProgressRepository:
             normalized_word=normalized_word,
             dictionary_payload=None,
         )
+        self.db_session.add(submission)
+        # used_words.submission_id가 submissions.id를 참조하므로 submission row를 먼저 확정합니다.
+        await self.db_session.flush()
+
         used_word = UsedWord(
             id=generate_uuid_v7(),
             session_id=game_session.id,
@@ -333,8 +349,12 @@ class MatchProgressRepository:
 
         phase.finished_at = now
         phase.result_status = "success"
-        game_session.current_phase_id = next_phase.id
         game_session.status = GameSessionStatus.PLAYING.value
+        for item in [used_word, score, next_phase]:
+            self.db_session.add(item)
+        # current_phase_id와 next turn이 참조할 다음 phase row를 먼저 확정합니다.
+        await self.db_session.flush()
+        game_session.current_phase_id = next_phase.id
 
         event_sequence = await self._next_event_sequence(game_session.id)
         next_turn_payload = {
@@ -367,7 +387,7 @@ class MatchProgressRepository:
             created_at=now,
         )
 
-        for item in [action, submission, used_word, score, next_phase, next_turn, event]:
+        for item in [next_turn, event]:
             self.db_session.add(item)
         await self.db_session.flush()
 
@@ -441,6 +461,10 @@ class MatchProgressRepository:
             is_valid=False,
             reject_reason=reason,
         )
+        self.db_session.add(action)
+        # GameEvent.action_id가 participant_actions.id를 참조하므로 action row를 먼저 확정합니다.
+        await self.db_session.flush()
+
         score_delta = self._word_rejection_score_delta(reason)
         score = ScoreLedger(
             id=generate_uuid_v7(),
@@ -475,7 +499,7 @@ class MatchProgressRepository:
             },
             created_at=now,
         )
-        for item in [action, score, event]:
+        for item in [score, event]:
             self.db_session.add(item)
         await self.db_session.flush()
 
@@ -675,7 +699,6 @@ class MatchProgressRepository:
                 deadline_at=now + timedelta(seconds=vote_time_seconds),
             )
             game_session.status = GameSessionStatus.VOTING.value
-            game_session.current_phase_id = voting_phase.id
             return (
                 [voting_phase],
                 {
@@ -709,7 +732,6 @@ class MatchProgressRepository:
             condition_payload=next_phase.condition_payload,
         )
         game_session.status = GameSessionStatus.PLAYING.value
-        game_session.current_phase_id = next_phase.id
         next_turn_payload = {
             "phase_id": str(next_phase.id),
             "round_number": next_turn.round_number,

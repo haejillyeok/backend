@@ -169,6 +169,7 @@ MVP가 단어 게임만 구현하더라도 공통 core는 플랫폼 기준으로
 - `room_id` foreign key to `game.rooms.id`
 - 현재 migration은 `current_phase_id` foreign key to `game.session_phases.id`를 둔다.
 - `current_phase_id`와 `session_phases.session_id`가 원형 참조를 만들기 때문에 새 세션의 첫 phase를 만들 때는 `game_sessions.current_phase_id`를 `NULL`로 insert하고, `session_phases`와 `word_game.turns`를 insert한 뒤 `current_phase_id`를 update한다.
+- 진행 중 timeout/전환으로 새 phase를 만들 때도 새 `session_phases` row를 먼저 insert/flush하고 나서 `game_sessions.current_phase_id`를 update한다.
 
 ### `game.session_participants`
 
@@ -266,6 +267,7 @@ MVP가 단어 게임만 구현하더라도 공통 core는 플랫폼 기준으로
 권장 제약:
 
 - `(session_id, sequence)` unique
+- `action_id`를 포함하는 event는 참조 대상 `game.participant_actions` row를 먼저 insert/flush한 뒤 저장한다.
 - `sequence >= 1`
 - snapshot은 매 event마다 저장하지 않고 phase 전환, reconnect 기준점, 결과 확정처럼 의미 있는 순간에 저장한다.
 
