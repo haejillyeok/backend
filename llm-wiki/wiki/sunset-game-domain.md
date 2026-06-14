@@ -101,6 +101,7 @@ Backend가 소유하는 게임 상태, WebSocket event, Agent 경계를 우선�
   - public 참가자 payload는 `display_name`, `seat_number`만 포함한다. `display_name`은 `1번 손님`처럼 익명화하고, `participant_type`, `is_uninvited_guest`, 원래 닉네임은 결과 공개 전까지 노출하지 않는다.
   - 시작 시점의 room `rule_config`를 `game_sessions.rule_config`에 snapshot으로 고정한다.
   - 끝말잇기 세션 시작 시 첫 번째 턴 phase와 `word_game.turns` row를 함께 생성하고 `game_sessions.current_phase_id`로 지정한다.
+  - `game_sessions.current_phase_id`는 `session_phases.id` FK이므로 시작 transaction은 game session과 participants를 먼저 flush하고, 첫 phase와 turn을 flush한 뒤 마지막에 `current_phase_id`를 갱신한다.
   - 첫 턴은 `round_number=1`, `turn_number=1`, actor는 `seat_number=1`, `required_start_char=null`이다.
   - 응답은 `game_sessions.public_id`인 `game_session_public_id`를 반환한다. 이 값은 한 게임 세션의 공개 식별자이며 라운드 ID가 아니다.
 - `GET /api/v1/game/sessions/{game_session_public_id}/entry`

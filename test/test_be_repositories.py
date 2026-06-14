@@ -52,6 +52,7 @@ class FakeDbSession:
         self.added = []
         self.added_batches = []
         self.flush_count = 0
+        self.flushed_game_session_current_phase_ids = []
         self.committed = False
 
     async def execute(self, statement):
@@ -66,6 +67,9 @@ class FakeDbSession:
 
     async def flush(self) -> None:
         self.flush_count += 1
+        self.flushed_game_session_current_phase_ids.append(
+            [item.current_phase_id for item in self.added if isinstance(item, GameSession)]
+        )
         for item in [*self.added, *(child for batch in self.added_batches for child in batch)]:
             if getattr(item, "id", None) is None:
                 item.id = uuid4()
@@ -483,7 +487,7 @@ async def test_game_repository_creates_game_session_and_participant_snapshot() -
         "방장",
         None,
     ]
-    assert db_session.flush_count == 1
+    assert db_session.flush_count == 3
     assert db_session.committed is True
 
 
@@ -533,6 +537,9 @@ async def test_game_repository_creates_initial_shiritori_turn_with_session() -> 
     assert isinstance(initial_phase, SessionPhase)
     assert isinstance(initial_turn, WordTurn)
     assert game_session.current_phase_id == initial_phase.id
+    assert db_session.flushed_game_session_current_phase_ids[0] == [None]
+    assert db_session.flushed_game_session_current_phase_ids[1] == [None]
+    assert db_session.flushed_game_session_current_phase_ids[2] == [initial_phase.id]
     assert initial_phase.session_id == game_session.id
     assert initial_phase.phase_type == "turn"
     assert initial_phase.phase_number == 1

@@ -167,7 +167,8 @@ MVP가 단어 게임만 구현하더라도 공통 core는 플랫폼 기준으로
 
 - `public_id` unique
 - `room_id` foreign key to `game.rooms.id`
-- `current_phase_id`는 circular FK가 부담되면 migration 초기에 FK 없이 service validation으로 시작할 수 있다.
+- 현재 migration은 `current_phase_id` foreign key to `game.session_phases.id`를 둔다.
+- `current_phase_id`와 `session_phases.session_id`가 원형 참조를 만들기 때문에 새 세션의 첫 phase를 만들 때는 `game_sessions.current_phase_id`를 `NULL`로 insert하고, `session_phases`와 `word_game.turns`를 insert한 뒤 `current_phase_id`를 update한다.
 
 ### `game.session_participants`
 

@@ -4,6 +4,11 @@
 코드 변경 상세는 Git history, PR, issue에서 확인하고, 이 파일에는 위키 페이지의 지식, 계약, 정책,
 컨벤션이 어떻게 바뀌었는지만 남깁니다.
 
+## [2026-06-14] maintenance | Clarify initial phase FK insert order
+
+- `sunset-game-domain.md`와 `sunset-game-database-design.md`에 `game_sessions.current_phase_id` FK와 `session_phases.session_id` FK의 원형 참조를 고려해 세션 시작 transaction의 staged flush 순서를 명시했다.
+- 끝말잇기 첫 phase와 `word_game.turns`는 game session/participants insert 이후 만들고, `current_phase_id`는 phase insert 이후 갱신한다는 현재 DB 쓰기 기준을 정리했다.
+
 ## [2026-06-14] maintenance | Clarify session auth error messages
 
 - `2026-06-05-auth-session-login.md`에 `SESSION_EXPIRED` 코드는 유지하되 세션 쿠키가 없을 때는 `로그인이 필요합니다.`, 쿠키가 있지만 활성 세션이 아닐 때는 `세션이 만료되었습니다.` 메시지를 반환한다는 기준을 추가했다.

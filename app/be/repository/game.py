@@ -465,6 +465,10 @@ class GameRepository:
             for participant in session.participants
         ]
         self.db_session.add_all(participant_rows)
+        room.status = session.status
+        # current_phase_id와 session_phases.session_id가 원형 FK라서, 참조 대상 row를 단계별로 확정합니다.
+        await self.db_session.flush()
+
         if session.game_type == GameType.SHIRITORI.value and participant_rows:
             initial_phase = self._build_initial_word_turn_phase(
                 game_session=game_session,
@@ -473,7 +477,6 @@ class GameRepository:
                 ),
                 rule_config=session.rule_config,
             )
-            game_session.current_phase_id = initial_phase.id
             self.db_session.add(initial_phase)
             self.db_session.add(
                 WordTurn(
@@ -484,8 +487,9 @@ class GameRepository:
                     condition_payload=initial_phase.condition_payload,
                 )
             )
-        room.status = session.status
-        await self.db_session.flush()
+            await self.db_session.flush()
+            game_session.current_phase_id = initial_phase.id
+            await self.db_session.flush()
         return session
 
     def _build_initial_word_turn_phase(
