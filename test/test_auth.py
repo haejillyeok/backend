@@ -5,8 +5,10 @@ from zoneinfo import ZoneInfo
 
 import pytest
 from fastapi import Request
+from starlette.responses import Response
 from fastapi.testclient import TestClient
 
+from app.be.api.endpoints import auth as auth_endpoints
 from app.be.dependencies.services import get_auth_service
 from app.be.main import create_app
 from app.be.models.user import User
@@ -82,6 +84,48 @@ class FakeAuthRepository:
 
     async def commit(self) -> None:
         self.committed = True
+
+
+def test_session_cookie_uses_local_browser_policy_by_default(monkeypatch):
+    monkeypatch.setattr(
+        auth_endpoints,
+        "settings",
+        type("Settings", (), {"environment": None})(),
+    )
+    response = Response()
+
+    auth_endpoints._set_session_cookie(
+        response,
+        session_token="plain-session-token",
+        expires_at=datetime.now(KST) + timedelta(days=1),
+    )
+
+    set_cookie = response.headers["set-cookie"].lower()
+    assert "session_token=plain-session-token" in set_cookie
+    assert "httponly" in set_cookie
+    assert "samesite=lax" in set_cookie
+    assert "secure" not in set_cookie
+
+
+def test_session_cookie_uses_cross_site_browser_policy_in_prod(monkeypatch):
+    monkeypatch.setattr(
+        auth_endpoints,
+        "settings",
+        type("Settings", (), {"environment": "prod"})(),
+    )
+    response = Response()
+
+    auth_endpoints._set_session_cookie(
+        response,
+        session_token="plain-session-token",
+        expires_at=datetime.now(KST) + timedelta(days=1),
+    )
+
+    set_cookie = response.headers["set-cookie"].lower()
+    assert "session_token=plain-session-token" in set_cookie
+    assert "httponly" in set_cookie
+    assert "secure" in set_cookie
+    assert "samesite=none" in set_cookie
 
 
 def test_auth_service_signup_creates_user_and_session():

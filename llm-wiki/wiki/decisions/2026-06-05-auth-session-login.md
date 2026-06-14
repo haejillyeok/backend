@@ -44,9 +44,10 @@ PoC 인증은 회원가입과 로그인을 별도 API로 처리한다. `POST /ap
 ## Cookie Rules
 
 - cookie name은 `session_token`이다.
-- cookie는 항상 `HttpOnly`, `SameSite=Lax`로 설정한다.
-- `prod` 환경에서는 `Secure`를 켠다.
-- local/dev 환경에서는 로컬 HTTP 테스트를 위해 `Secure`를 끈다.
+- local/dev cookie는 `HttpOnly`, `SameSite=Lax`로 설정하고 로컬 HTTP 테스트를 위해 `Secure`를 끈다.
+- `prod` cookie는 `HttpOnly`, `SameSite=None`, `Secure`로 설정해 `localhost:3000` 테스트 페이지가
+  `https://api.haejillyeok.com`을 호출하는 cross-site credential 요청에서도 브라우저가 쿠키를 저장하고
+  전송할 수 있게 한다.
 
 ## Session Error Message Rules
 

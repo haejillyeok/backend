@@ -13,6 +13,7 @@
 
 - `test-page/` 기본 dev/preview port 기준을 `http://localhost:3000`으로 변경했다.
 - BE CORS allowlist 기준에서 repo-local 테스트 페이지 origin을 `http://localhost:3000`으로 통일하고, 이전 테스트 페이지 포트는 더 이상 허용 origin으로 남기지 않는다.
+- 운영 API를 로컬 테스트 페이지에서 호출할 때 `session_token`이 브라우저에 저장/전송되도록 prod 쿠키 정책은 `SameSite=None; Secure`, local/dev는 `SameSite=Lax`로 분리한다.
 
 ## [2026-06-14] maintenance | Clarify lobby room list visibility
 

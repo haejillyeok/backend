@@ -142,8 +142,9 @@ Response:
 }
 ```
 
-성공하면 `session_token` 쿠키를 설정합니다. 쿠키는 `HttpOnly`, `SameSite=Lax`로 발급하고,
-`prod` 환경에서는 `Secure`를 함께 사용합니다.
+성공하면 `session_token` 쿠키를 설정합니다. 로컬/dev 환경에서는 `HttpOnly`, `SameSite=Lax`로 발급하고,
+`prod` 환경에서는 로컬 테스트 페이지처럼 다른 site에서 운영 API를 호출하는 credential 요청도 허용하기
+위해 `HttpOnly`, `SameSite=None`, `Secure`를 함께 사용합니다.
 
 | Status | Meaning |
 | --- | --- |
@@ -179,8 +180,9 @@ Response:
 }
 ```
 
-성공하면 `session_token` 쿠키를 설정합니다. 쿠키는 `HttpOnly`, `SameSite=Lax`로 발급하고,
-`prod` 환경에서는 `Secure`를 함께 사용합니다.
+성공하면 `session_token` 쿠키를 설정합니다. 로컬/dev 환경에서는 `HttpOnly`, `SameSite=Lax`로 발급하고,
+`prod` 환경에서는 로컬 테스트 페이지처럼 다른 site에서 운영 API를 호출하는 credential 요청도 허용하기
+위해 `HttpOnly`, `SameSite=None`, `Secure`를 함께 사용합니다.
 
 | Status | Meaning |
 | --- | --- |

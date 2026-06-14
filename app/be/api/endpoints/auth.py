@@ -115,12 +115,15 @@ def _set_session_cookie(
 ) -> None:
     """로그인/회원가입 성공 시 공통 세션 쿠키 속성을 적용합니다."""
     cookie_expires_at = expires_at.astimezone(UTC)
+    is_prod = settings.environment == "prod"
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
         value=session_token,
         # HTTP cookie Expires는 GMT 형식만 허용하므로 저장/응답 시간 기준과 별도로 변환합니다.
         expires=cookie_expires_at,
         httponly=True,
-        secure=settings.environment == "prod",
-        samesite="lax",
+        secure=is_prod,
+        # 로컬 테스트는 HTTP라 Lax를 유지하고, 운영 API는 localhost 테스트 페이지 같은 cross-site
+        # credential 요청에서도 쿠키가 전송되도록 None+Secure 조합을 사용합니다.
+        samesite="none" if is_prod else "lax",
     )
