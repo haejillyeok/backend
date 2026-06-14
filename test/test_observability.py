@@ -143,6 +143,12 @@ def test_websocket_metrics_record_connection_message_and_disconnect() -> None:
         message_type="ping",
         direction="inbound",
     )
+    recorder.record_message_duration(
+        ws_route="/ws/lobby/rooms/{room_public_id}",
+        ws_endpoint="lobby",
+        message_type="ping",
+        duration_seconds=0.05,
+    )
     recorder.record_error(
         ws_route="/ws/lobby/rooms/{room_public_id}",
         ws_endpoint="lobby",
@@ -173,6 +179,16 @@ def test_websocket_metrics_record_connection_message_and_disconnect() -> None:
     assert active_calls[1][1] == -1
     assert meter.counters["websocket.connections.total"].calls[0][1] == 1
     assert meter.counters["websocket.messages.total"].calls[0][2]["ws.message.type"] == "ping"
+    assert meter.histograms["websocket.message.duration"].calls[0] == (
+        "record",
+        0.05,
+        {
+            "service.name": "haejillyeok-test",
+            "ws.route": "/ws/lobby/rooms/{room_public_id}",
+            "ws.endpoint": "lobby",
+            "ws.message.type": "ping",
+        },
+    )
     assert meter.counters["websocket.errors.total"].calls[0][2]["ws.error.type"] == "timeout"
     assert meter.counters["websocket.disconnects.total"].calls[0][2]["ws.close_code"] == "1001"
     assert meter.histograms["websocket.connection.duration"].calls[0][1] == 1.5

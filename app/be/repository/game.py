@@ -28,6 +28,12 @@ TERMINAL_SESSION_STATUSES = (
     GameSessionStatus.RESULT.value,
     GameSessionStatus.ABORTED.value,
 )
+ADVISORY_LOCK_KEY_MASK = (1 << 63) - 1
+
+
+def waiting_membership_lock_key(user_id: UUID) -> int:
+    """PostgreSQL advisory lock에 사용할 유저별 양수 bigint key를 만듭니다."""
+    return user_id.int & ADVISORY_LOCK_KEY_MASK
 
 
 class GameRepository:
@@ -39,6 +45,38 @@ class GameRepository:
     async def list_rooms(self, *, user_id: UUID) -> list[GameRoomListItem]:
         """닫히지 않은 room 목록, 활성 멤버 수, 현재 유저 참여 여부를 조회합니다."""
         return await self._list_rooms(user_id=user_id)
+
+    async def lock_waiting_room_membership_for_user(self, *, user_id: UUID) -> None:
+        """같은 유저의 대기 room 생성/입장 요청이 동시에 진행되지 않도록 잠급니다."""
+        await self._lock_waiting_room_membership_for_user(user_id=user_id)
+
+    @traced_method("GameRepository.lock_waiting_room_membership_for_user", layer="repository")
+    async def _lock_waiting_room_membership_for_user(self, *, user_id: UUID) -> None:
+        """PostgreSQL transaction-scoped advisory lock 획득 시간을 trace span으로 기록합니다."""
+        await self.db_session.execute(
+            select(func.pg_advisory_xact_lock(waiting_membership_lock_key(user_id)))
+        )
+
+    async def list_active_waiting_room_public_ids_for_user(self, *, user_id: UUID) -> list[UUID]:
+        """유저가 active member로 남아 있는 대기 room public_id를 조회합니다."""
+        return await self._list_active_waiting_room_public_ids_for_user(user_id=user_id)
+
+    @traced_method("GameRepository.list_active_waiting_room_public_ids_for_user", layer="repository")
+    async def _list_active_waiting_room_public_ids_for_user(self, *, user_id: UUID) -> list[UUID]:
+        """새 대기방 이동 전 정리할 기존 대기 room 목록 조회 시간을 trace span으로 기록합니다."""
+        statement = (
+            select(Room.public_id)
+            .join(RoomMember, RoomMember.room_id == Room.id)
+            .where(
+                RoomMember.user_id == user_id,
+                RoomMember.left_at.is_(None),
+                Room.status == RoomStatus.WAITING.value,
+                Room.closed_at.is_(None),
+            )
+            .order_by(Room.created_at.asc())
+        )
+        result = await self.db_session.execute(statement)
+        return list(result.scalars().all())
 
     @traced_method("GameRepository.list_rooms", layer="repository")
     async def _list_rooms(self, *, user_id: UUID) -> list[GameRoomListItem]:

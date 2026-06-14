@@ -1,7 +1,7 @@
 ---
 title: Observability Stack
 type: guide
-updated: 2026-06-10
+updated: 2026-06-14
 audience: ai
 ---
 
@@ -56,9 +56,12 @@ FastAPI HTTP metric은 OpenTelemetry Meter API로 기록한다.
 - `websocket.connections.active`: 현재 열린 WebSocket connection up-down counter
 - `websocket.connections.total`: 수락된 WebSocket connection counter
 - `websocket.messages.total`: message type과 방향별 WebSocket message counter
+- `websocket.message.duration`: 유효한 inbound WebSocket message의 서버 처리 시간 histogram, unit `s`
 - `websocket.errors.total`: WebSocket protocol/application error counter
 - `websocket.disconnects.total`: close code별 WebSocket disconnect counter
 - `websocket.connection.duration`: WebSocket connection duration histogram, unit `s`
+- WebSocket APM latency 판단은 연결 한 번의 지속 시간이 아니라 유저가 보낸 inbound message를 파싱하고
+  handler 처리가 끝날 때까지의 `websocket.message.duration`을 기준으로 한다.
 
 Prometheus exporter는 OpenTelemetry metric과 attribute 이름을 Prometheus label/name으로 변환한다.
 Grafana dashboard는 다음 Prometheus 이름을 기준으로 query한다.
@@ -124,7 +127,7 @@ Grafana WebSocket metric dashboard는 `Haejillyeok WebSocket APM` 제목으로 p
 - Message Rate: endpoint, message type, 방향별 message rate
 - Error Rate: endpoint, error type별 error rate
 - Disconnect Rate by Close Code: close code별 disconnect rate
-- Connection Duration: WebSocket 연결 지속 시간 p95/p99
+- Message Processing Duration: endpoint, message type별 inbound message 처리 시간 p95/p99
 
 Grafana trace dashboard는 `Haejillyeok FastAPI Traces` 제목으로 provision 된다.
 

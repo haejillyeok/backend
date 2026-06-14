@@ -8,7 +8,7 @@ from app.be.models.game import WordTurn
 from app.be.models.user import User
 from app.be.models.user_session import UserSession
 from app.be.repository.auth import AuthRepository
-from app.be.repository.game import GameRepository
+from app.be.repository.game import GameRepository, waiting_membership_lock_key
 from app.be.services.game import GameSessionParticipantRecord, GameSessionStartResult
 
 KST = ZoneInfo("Asia/Seoul")
@@ -213,6 +213,38 @@ async def test_game_repository_excludes_open_rooms_without_active_members() -> N
     compiled_sql = str(statement.compile(compile_kwargs={"literal_binds": True}))
     assert "HAVING count(distinct" in compiled_sql
     assert "> 0" in compiled_sql
+
+
+async def test_game_repository_lists_active_waiting_room_public_ids_for_user() -> None:
+    user_id = uuid4()
+    room_public_id = uuid4()
+    db_session = FakeDbSession([FakeResult(scalars=[room_public_id])])
+    repository = GameRepository(db_session)
+
+    room_public_ids = await repository.list_active_waiting_room_public_ids_for_user(
+        user_id=user_id,
+    )
+
+    statement = db_session.executed_statements[0]
+    compiled_sql = str(statement.compile(compile_kwargs={"literal_binds": True}))
+    assert room_public_ids == [room_public_id]
+    assert "room_members.user_id" in compiled_sql
+    assert "room_members.left_at IS NULL" in compiled_sql
+    assert "rooms.status = 'waiting'" in compiled_sql
+    assert "rooms.closed_at IS NULL" in compiled_sql
+
+
+async def test_game_repository_locks_waiting_room_membership_by_user() -> None:
+    user_id = uuid4()
+    db_session = FakeDbSession([FakeResult()])
+    repository = GameRepository(db_session)
+
+    await repository.lock_waiting_room_membership_for_user(user_id=user_id)
+
+    statement = db_session.executed_statements[0]
+    compiled_sql = str(statement.compile(compile_kwargs={"literal_binds": True}))
+    assert "pg_advisory_xact_lock" in compiled_sql
+    assert str(waiting_membership_lock_key(user_id)) in compiled_sql
 
 
 async def test_game_repository_creates_waiting_room_record() -> None:

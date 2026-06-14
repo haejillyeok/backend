@@ -368,10 +368,10 @@ async def handle_match_message(
                 )
                 if timeout_event is None:
                     return []
-                await manager.broadcast_session(
-                    timeout_event.game_session_public_id, timeout_event.message
+                broadcast_messages = await broadcast_match_event_with_round_finished(
+                    manager=manager,
+                    event=timeout_event,
                 )
-                broadcast_messages = [timeout_event.message]
                 if ai_turn_service is not None:
                     next_phase_id = _extract_next_turn_phase_id(timeout_event.message)
                     if next_phase_id is not None:
@@ -381,10 +381,12 @@ async def handle_match_message(
                             now=now,
                         )
                         if ai_event is not None:
-                            await manager.broadcast_session(
-                                ai_event.game_session_public_id, ai_event.message
+                            broadcast_messages.extend(
+                                await broadcast_match_event_with_round_finished(
+                                    manager=manager,
+                                    event=ai_event,
+                                )
                             )
-                            broadcast_messages.append(ai_event.message)
                 return broadcast_messages
             rejection = _word_rejection_from_exception(exc)
             if rejection is None:
@@ -399,10 +401,14 @@ async def handle_match_message(
                 details=details,
                 now=now,
             )
-            await manager.broadcast_session(event.game_session_public_id, event.message)
-            return [event.message]
-        await manager.broadcast_session(event.game_session_public_id, event.message)
-        broadcast_messages = [event.message]
+            return await broadcast_match_event_with_round_finished(
+                manager=manager,
+                event=event,
+            )
+        broadcast_messages = await broadcast_match_event_with_round_finished(
+            manager=manager,
+            event=event,
+        )
         if ai_turn_service is not None:
             next_phase_id = _extract_next_turn_phase_id(event.message)
             if next_phase_id is not None:
@@ -412,10 +418,12 @@ async def handle_match_message(
                     now=now,
                 )
                 if ai_event is not None:
-                    await manager.broadcast_session(
-                        ai_event.game_session_public_id, ai_event.message
+                    broadcast_messages.extend(
+                        await broadcast_match_event_with_round_finished(
+                            manager=manager,
+                            event=ai_event,
+                        )
                     )
-                    broadcast_messages.append(ai_event.message)
         return broadcast_messages
 
     if message["type"] == "vote.submit":
@@ -500,18 +508,92 @@ async def process_match_turn_timeout(
     )
     if event is None:
         return None
-    await manager.broadcast_session(event.game_session_public_id, event.message)
+    await broadcast_match_event_with_round_finished(manager=manager, event=event)
     next_timer = next_match_timer_from_message(event.message)
-    if ai_turn_service is not None and next_timer is not None:
+    if ai_turn_service is not None and isinstance(next_timer, MatchTurnTimer):
         ai_event = await ai_turn_service.play_ai_turn(
             game_session_public_id=event.game_session_public_id,
             phase_id=next_timer.phase_id,
             now=now,
         )
         if ai_event is not None:
-            await manager.broadcast_session(ai_event.game_session_public_id, ai_event.message)
+            await broadcast_match_event_with_round_finished(manager=manager, event=ai_event)
             return next_match_timer_from_message(ai_event.message)
     return next_timer
+
+
+async def broadcast_match_event_with_round_finished(
+    *,
+    manager: MatchConnectionManager,
+    event: MatchBroadcastEvent,
+) -> list[MatchMessage]:
+    """진행 event를 broadcast하고, 라운드 종료가 포함되면 별도 event를 이어서 전송합니다."""
+    await manager.broadcast_session(event.game_session_public_id, event.message)
+    messages = [event.message]
+    round_finished_message = round_finished_message_from_turn_resolved(event.message)
+    if round_finished_message is not None:
+        await manager.broadcast_session(event.game_session_public_id, round_finished_message)
+        messages.append(round_finished_message)
+    round_started_message = round_started_message_from_turn_resolved(event.message)
+    if round_started_message is not None:
+        await manager.broadcast_session(event.game_session_public_id, round_started_message)
+        messages.append(round_started_message)
+    return messages
+
+
+def round_finished_message_from_turn_resolved(message: MatchMessage) -> MatchMessage | None:
+    """턴 timeout event가 라운드 종료를 만들었을 때 공개 `match.round.finished` event로 변환합니다."""
+    if message.get("type") != "match.turn.resolved":
+        return None
+    payload = message.get("payload")
+    if not isinstance(payload, dict) or payload.get("result") != "timeout":
+        return None
+    if not isinstance(payload.get("next_turn"), dict) and payload.get("next_status") is None:
+        return None
+
+    round_number = _round_number_from_timeout_payload(payload)
+    if round_number is None:
+        return None
+
+    round_payload: dict[str, Any] = {
+        "event_sequence": payload.get("event_sequence"),
+        "phase_id": payload.get("phase_id"),
+        "round_number": round_number,
+        "result": "timeout",
+        "reason": payload.get("reason"),
+        "participant": payload.get("participant"),
+        "deadline_at": payload.get("deadline_at"),
+        "created_at": payload.get("created_at"),
+    }
+    for key in ("next_turn", "next_status", "voting_deadline_at"):
+        if key in payload:
+            round_payload[key] = payload[key]
+    return {"type": "match.round.finished", "payload": round_payload}
+
+
+def round_started_message_from_turn_resolved(message: MatchMessage) -> MatchMessage | None:
+    """다음 라운드 첫 턴이 생성된 timeout event를 공개 `match.round.started` event로 변환합니다."""
+    if message.get("type") != "match.turn.resolved":
+        return None
+    payload = message.get("payload")
+    if not isinstance(payload, dict) or payload.get("result") != "timeout":
+        return None
+    next_turn = payload.get("next_turn")
+    if not isinstance(next_turn, dict):
+        return None
+    round_number = next_turn.get("round_number")
+    if not isinstance(round_number, int) or isinstance(round_number, bool):
+        return None
+    return {
+        "type": "match.round.started",
+        "payload": {
+            "event_sequence": payload.get("event_sequence"),
+            "round_number": round_number,
+            "current_turn": next_turn,
+            "started_at": payload.get("created_at"),
+            "created_at": payload.get("created_at"),
+        },
+    }
 
 
 async def process_match_vote_timeout(
@@ -559,6 +641,20 @@ def next_turn_timer_from_message(message: MatchMessage) -> MatchTurnTimer | None
     if phase_id is None or deadline_at is None:
         return None
     return MatchTurnTimer(phase_id=phase_id, deadline_at=deadline_at)
+
+
+def _round_number_from_timeout_payload(payload: dict[str, Any]) -> int | None:
+    """timeout payload에서 종료된 라운드 번호를 얻거나 다음 라운드 번호로 보수적으로 추론합니다."""
+    round_number = payload.get("round_number")
+    if isinstance(round_number, int) and not isinstance(round_number, bool):
+        return round_number
+    next_turn = payload.get("next_turn")
+    if not isinstance(next_turn, dict):
+        return None
+    next_round_number = next_turn.get("round_number")
+    if isinstance(next_round_number, int) and not isinstance(next_round_number, bool):
+        return max(1, next_round_number - 1)
+    return None
 
 
 def _parse_phase_id(value: Any) -> UUID:

@@ -445,8 +445,11 @@ AI 답변 실패도 즉시 다음 턴이나 투표로 넘기지 않습니다. �
 기다리고, deadline이 먼저 도달하면 `turn_timeout` 확정을 시도합니다. deadline 이후 도착한 `word.submit`도
 연결 오류로 닫지 않고 같은 timeout 확정 경로로 처리합니다.
 
-timeout으로 현재 끝말잇기 한판이 종료되면 payload에는 다음 판 정보인 `next_turn` 또는 투표 전환을 뜻하는
-`next_status="voting"`과 `voting_deadline_at`이 포함될 수 있습니다.
+timeout으로 현재 끝말잇기 한판이 종료되면 payload에는 종료된 `round_number`, 다음 판 정보인
+`next_turn` 또는 투표 전환을 뜻하는 `next_status="voting"`과 `voting_deadline_at`이 포함될 수 있습니다.
+이 경우 서버는 같은 내용을 사용자 화면에서 더 명확히 처리할 수 있도록 `match.round.finished`도 이어서
+broadcast합니다. 남은 판이 있어 `next_turn`이 생성되면 `match.round.started`도 이어서 보내 다음 라운드
+첫 턴을 명확히 알립니다.
 
 Payload:
 
@@ -456,6 +459,7 @@ Payload:
 | `phase_id` | uuid | 판정이 확정된 phase ID |
 | `participant.display_name` | string | 판정 대상 참가자의 익명 표시명 |
 | `participant.seat_number` | number | 판정 대상 참가자의 순서 |
+| `round_number` | number/null | timeout으로 종료된 끝말잇기 판 번호 |
 | `result` | string | `accepted`, `rejected`, `timeout`, `failed` 중 하나 |
 | `word` | string/null | 제출 단어. 제출이 없는 timeout/AI 실패는 `null` |
 | `normalized_word` | string/null | 중복 방지에 사용하는 정규화 단어. 제출이 없으면 `null` |
@@ -473,6 +477,56 @@ Payload:
 | `next_status` | string 또는 null | 모든 판이 끝난 경우 다음 세션 상태. 현재는 `voting` |
 | `voting_deadline_at` | datetime/null | 투표가 강제 종료될 서버 기준 시각 |
 | `created_at` | datetime | 서버가 판정을 확정한 시각 |
+
+### 이벤트(Event): `match.round.finished`
+
+방향: Server -> 같은 게임 세션에 연결된 client
+
+발생 시점: 서버 기준 timeout으로 현재 끝말잇기 한판이 종료되고, 다음 판 첫 턴 또는 최종 투표 phase가
+생성된 직후. 기존 호환을 위해 `match.turn.resolved(result="timeout")`를 먼저 보내고, 그 다음 이 이벤트를
+연달아 보냅니다.
+
+클라이언트는 이 이벤트를 사용해 "라운드 종료", "다음 라운드 시작", "투표 진입" 같은 큰 화면 전환을
+분명히 표시할 수 있습니다.
+
+Payload:
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| `event_sequence` | number/null | 원인이 된 timeout event 순서 |
+| `phase_id` | uuid | 종료된 turn phase ID |
+| `round_number` | number | 종료된 끝말잇기 판 번호 |
+| `result` | string | 현재는 `timeout` |
+| `reason` | string | 현재는 `deadline_exceeded` |
+| `participant.display_name` | string | timeout 대상 참가자의 익명 표시명 |
+| `participant.seat_number` | number | timeout 대상 참가자의 순서 |
+| `deadline_at` | datetime | 종료된 턴의 서버 기준 제한 시각 |
+| `next_turn` | object 또는 null | 남은 판이 있을 때 새로 생성된 다음 판 첫 턴 정보 |
+| `next_status` | string 또는 null | 모든 판이 끝난 경우 다음 세션 상태. 현재는 `voting` |
+| `voting_deadline_at` | datetime/null | 투표가 강제 종료될 서버 기준 시각 |
+| `created_at` | datetime | 서버가 라운드 종료를 확정한 시각 |
+
+### 이벤트(Event): `match.round.started`
+
+방향: Server -> 같은 게임 세션에 연결된 client
+
+발생 시점: `match.round.finished` 이후 남은 판이 있어 다음 라운드 첫 턴이 생성된 직후. 투표로 넘어가는
+마지막 라운드 종료에서는 발생하지 않습니다.
+
+Payload:
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| `event_sequence` | number/null | 원인이 된 timeout event 순서 |
+| `round_number` | number | 시작된 끝말잇기 판 번호 |
+| `current_turn` | object | 새 라운드의 첫 턴 정보 |
+| `current_turn.phase_id` | uuid | 새 턴 phase ID |
+| `current_turn.turn_number` | number | 새 라운드 안의 턴 번호. 첫 턴은 1 |
+| `current_turn.actor_seat_number` | number | 첫 차례 참가자의 순서 |
+| `current_turn.deadline_at` | datetime | 첫 턴의 서버 기준 제한 시각 |
+| `current_turn.required_start_char` | string/null | 첫 턴의 시작 글자. 새 라운드 첫 턴은 `null` |
+| `started_at` | datetime/null | 라운드 시작 시각 |
+| `created_at` | datetime/null | 서버가 이벤트를 만든 시각 |
 
 ### 요청(Request): `vote.submit`
 
@@ -706,6 +760,12 @@ sequenceDiagram
         Progress-->>MatchWS: match.turn.resolved(result=timeout)
         MatchWS-->>User: 이벤트 match.turn.resolved
         MatchWS-->>Watcher: 이벤트 match.turn.resolved
+        MatchWS-->>User: 이벤트 match.round.finished
+        MatchWS-->>Watcher: 이벤트 match.round.finished
+        opt 남은 판이 있음
+            MatchWS-->>User: 이벤트 match.round.started
+            MatchWS-->>Watcher: 이벤트 match.round.started
+        end
     end
     Watcher->>MatchWS: 재접속
     MatchWS-->>Watcher: 이벤트 match.snapshot(현재 턴/사용 단어/점수/결과)

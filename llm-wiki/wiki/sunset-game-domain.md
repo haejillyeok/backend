@@ -65,13 +65,20 @@ Backend가 소유하는 게임 상태, WebSocket event, Agent 경계를 우선�
   - 닫히지 않았고 활성 room member가 1명 이상인 room 목록, 활성 room member 수, 현재 유저가 active member인지 여부를 반환한다.
   - 현재 유저가 유효한 대기 로비에 이미 참여 중이면 `current_membership`에 room 요약과 `/ws/lobby/rooms/{room_public_id}` 연결 path를 함께 반환한다.
   - 목록 조회는 snapshot이고, 특정 room의 실시간 이벤트는 room 참여 후 WebSocket으로 받는다.
+- 대기 room membership 불변식
+  - 한 유저는 동시에 하나의 `waiting` room에만 active member로 남을 수 있다.
+  - 객실 생성과 다른 객실 입장은 유저 단위 transaction lock으로 직렬화한다.
+  - 새 객실 생성 전에는 기존 active waiting membership을 REST 퇴장과 같은 규칙으로 정리한다.
+  - 다른 객실 입장은 대상 room이 `waiting`이고 정원 여유가 있을 때만 기존 active waiting membership을 정리한다.
 - `POST /api/v1/game/rooms`
   - `session_token` 쿠키로 현재 유저를 인증한다.
-  - `waiting` 상태 room을 생성하고 방장을 첫 활성 `game.room_members`로 등록한다.
+  - 기존 active waiting membership을 정리한 뒤 `waiting` 상태 room을 생성하고 방장을 첫 활성 `game.room_members`로 등록한다.
   - 성공 응답의 `room_public_id`로 `/ws/lobby/rooms/{room_public_id}`에 연결할 수 있다.
 - `POST /api/v1/game/rooms/{room_public_id}/join`
   - `session_token` 쿠키로 현재 유저를 인증한다.
   - room row를 lock한 뒤 `waiting` 상태와 정원을 확인한다.
+  - 대상 room이 참여 가능하면 기존 active waiting membership을 정리하고 대상 room에 참여한다.
+  - 대상 room이 정원 초과이면 기존 active waiting membership을 유지하고 `GAME_ROOM_NOT_JOINABLE`로 거부한다.
   - 참여 정보는 DB의 `game.room_members`에 저장한다.
   - 이미 활성 room member인 유저의 반복 요청은 새 row를 만들지 않고 기존 참여 정보를 반환한다.
   - 신규 멤버가 추가된 경우(`already_member=false`) `/ws/lobby/rooms/{room_public_id}`의 같은 room
@@ -340,6 +347,13 @@ idle -> matching -> settled -> countdown -> transitioning -> playing
 - deadline 이후 도착한 `word.submit`도 연결 오류로 닫지 않고 같은 timeout 확정 경로로 처리한다.
 - Timeout으로 현재 끝말잇기 한판이 종료되면 남은 판이 있을 때 `next_turn`, 모든 판이 끝났을 때
   `next_status=voting`과 `voting_deadline_at`을 함께 보내 화면 전환을 동기화한다.
+- 라운드 종료가 확정된 timeout은 호환용 `match.turn.resolved`를 먼저 보내고, 이어서 `match.round.finished`를
+  같은 세션에 broadcast한다. `match.round.finished` payload에는 종료된 `round_number`, 원인 참가자,
+  `next_turn` 또는 `next_status`/`voting_deadline_at`, `created_at`을 포함해 클라이언트가 큰 전환 UI를
+  분명히 표시할 수 있게 한다.
+- 남은 판이 있어 다음 라운드 첫 턴이 생성되면 `match.round.finished` 뒤에 `match.round.started`를 이어서
+  broadcast한다. `match.round.started`에는 시작된 `round_number`와 `current_turn`을 담고, 투표로 넘어가는
+  마지막 라운드에서는 보내지 않는다.
 - reconnect가 필요하므로 room/session snapshot을 재전송할 수 있어야 한다.
 - disconnect cleanup은 room membership과 game session 정책을 분리해 다룬다.
 - AI answer 요청은 Backend가 현재 GameSession 상태를 검증한 뒤 Agent에 보낸다.

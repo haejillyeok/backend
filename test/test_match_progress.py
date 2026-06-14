@@ -745,6 +745,7 @@ async def test_match_progress_repository_records_turn_timeout_when_deadline_pass
     assert event.sequence == 10
     assert event.event_type == "turn_timeout"
     assert event.payload["participant"] == {"display_name": "1번 손님", "seat_number": 1}
+    assert event.payload["round_number"] == 1
     assert event.payload["deadline_at"] == deadline_at.isoformat()
     assert event.payload["next_status"] == "voting"
     assert event.payload["voting_deadline_at"] == voting_phase.deadline_at.isoformat()

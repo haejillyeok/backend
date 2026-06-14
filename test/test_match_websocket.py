@@ -450,6 +450,122 @@ async def test_process_match_turn_timeout_broadcasts_event_and_returns_next_time
     assert next_timer == MatchTurnTimer(phase_id=next_phase_id, deadline_at=next_deadline_at)
 
 
+async def test_process_match_turn_timeout_broadcasts_round_finished_event() -> None:
+    game_session_public_id = uuid4()
+    phase_id = uuid4()
+    next_phase_id = uuid4()
+    now = datetime(2026, 6, 13, 0, 0, 11, tzinfo=KST)
+    next_deadline_at = datetime(2026, 6, 13, 0, 0, 21, tzinfo=KST)
+
+    class FakeManager:
+        def __init__(self) -> None:
+            self.broadcasts = []
+
+        async def broadcast_session(self, game_session_public_id, message):
+            self.broadcasts.append((game_session_public_id, message))
+
+    class FakeProgressService:
+        async def timeout_turn_if_due(self, **kwargs):
+            return MatchBroadcastEvent(
+                game_session_public_id=game_session_public_id,
+                message={
+                    "type": "match.turn.resolved",
+                    "payload": {
+                        "event_sequence": 7,
+                        "phase_id": phase_id,
+                        "round_number": 1,
+                        "participant": {"display_name": "1번 손님", "seat_number": 1},
+                        "result": "timeout",
+                        "reason": "deadline_exceeded",
+                        "deadline_at": datetime(2026, 6, 13, 0, 0, 10, tzinfo=KST),
+                        "created_at": now,
+                        "next_turn": {
+                            "phase_id": next_phase_id,
+                            "round_number": 2,
+                            "turn_number": 1,
+                            "actor_seat_number": 2,
+                            "deadline_at": next_deadline_at,
+                            "required_start_char": None,
+                        },
+                    },
+                },
+            )
+
+    manager = FakeManager()
+
+    await process_match_turn_timeout(
+        manager=manager,
+        progress_service=FakeProgressService(),
+        ai_turn_service=None,
+        game_session_public_id=game_session_public_id,
+        phase_id=phase_id,
+        now=now,
+    )
+
+    assert [message["type"] for _, message in manager.broadcasts] == [
+        "match.turn.resolved",
+        "match.round.finished",
+        "match.round.started",
+    ]
+    assert manager.broadcasts[1][1]["payload"]["round_number"] == 1
+    assert manager.broadcasts[1][1]["payload"]["next_turn"]["round_number"] == 2
+    assert manager.broadcasts[2][1]["payload"]["round_number"] == 2
+    assert manager.broadcasts[2][1]["payload"]["current_turn"]["phase_id"] == next_phase_id
+
+
+async def test_process_match_turn_timeout_does_not_trigger_ai_when_round_moves_to_voting() -> None:
+    game_session_public_id = uuid4()
+    phase_id = uuid4()
+    now = datetime(2026, 6, 13, 0, 0, 11, tzinfo=KST)
+    voting_deadline_at = datetime(2026, 6, 13, 0, 0, 31, tzinfo=KST)
+
+    class FakeManager:
+        def __init__(self) -> None:
+            self.broadcasts = []
+
+        async def broadcast_session(self, game_session_public_id, message):
+            self.broadcasts.append((game_session_public_id, message))
+
+    class FakeProgressService:
+        async def timeout_turn_if_due(self, **kwargs):
+            return MatchBroadcastEvent(
+                game_session_public_id=game_session_public_id,
+                message={
+                    "type": "match.turn.resolved",
+                    "payload": {
+                        "phase_id": phase_id,
+                        "round_number": 8,
+                        "result": "timeout",
+                        "reason": "deadline_exceeded",
+                        "next_status": "voting",
+                        "voting_deadline_at": voting_deadline_at,
+                        "created_at": now,
+                    },
+                },
+            )
+
+    class FakeAiTurnService:
+        async def play_ai_turn(self, **kwargs):
+            raise AssertionError("투표 전환에는 AI 턴을 실행하면 안 됩니다.")
+
+    manager = FakeManager()
+
+    next_timer = await process_match_turn_timeout(
+        manager=manager,
+        progress_service=FakeProgressService(),
+        ai_turn_service=FakeAiTurnService(),
+        game_session_public_id=game_session_public_id,
+        phase_id=phase_id,
+        now=now,
+    )
+
+    assert next_timer == MatchVotingTimer(deadline_at=voting_deadline_at)
+    assert [message["type"] for _, message in manager.broadcasts] == [
+        "match.turn.resolved",
+        "match.round.finished",
+    ]
+
+
 async def test_process_match_vote_timeout_broadcasts_result_events() -> None:
     game_session_public_id = uuid4()
     now = datetime(2026, 6, 13, 0, 0, 21, tzinfo=KST)

@@ -92,6 +92,7 @@ async def lobby_websocket(
                 websocket.receive_text(),
                 timeout=LOBBY_HEARTBEAT_TIMEOUT_SECONDS,
             )
+            message_started_at = perf_counter()
             message = parse_lobby_message(raw_message)
             metrics.record_message(
                 ws_route=LOBBY_WS_ROUTE,
@@ -108,6 +109,12 @@ async def lobby_websocket(
                     websocket=websocket,
                     message=message,
                 )
+            metrics.record_message_duration(
+                ws_route=LOBBY_WS_ROUTE,
+                ws_endpoint=LOBBY_WS_ENDPOINT,
+                message_type=message["type"],
+                duration_seconds=perf_counter() - message_started_at,
+            )
             if message["type"] == "ping":
                 metrics.record_message(
                     ws_route=LOBBY_WS_ROUTE,

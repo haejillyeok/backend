@@ -183,6 +183,12 @@ class GameRepositoryProtocol(Protocol):
     async def list_rooms(self, *, user_id: UUID) -> list[GameRoomListItem]:
         """로비 목록과 현재 유저의 활성 room membership 여부를 조회합니다."""
 
+    async def lock_waiting_room_membership_for_user(self, *, user_id: UUID) -> None:
+        """한 유저의 대기 room membership 변경을 transaction 안에서 직렬화합니다."""
+
+    async def list_active_waiting_room_public_ids_for_user(self, *, user_id: UUID) -> list[UUID]:
+        """유저가 현재 active member로 남아 있는 대기 room public_id 목록을 조회합니다."""
+
     async def create_room(
         self,
         *,
@@ -397,6 +403,8 @@ class GameService:
         room 생성과 방장 멤버십 생성은 같은 transaction에서 확정합니다. 이후 로비 WebSocket은 이
         `room_members` 행을 기준으로 연결 권한을 확인합니다.
         """
+        await self.repository.lock_waiting_room_membership_for_user(user_id=owner.id)
+        await self._leave_existing_waiting_rooms(user=owner)
         room = await self.repository.create_room(
             owner_user_id=owner.id,
             name=name,
@@ -500,6 +508,7 @@ class GameService:
         이미 참여 중인 유저의 반복 요청은 새 row를 만들지 않고 기존 참여 정보를 반환합니다.
         room 상태와 정원 판단은 room row lock 안에서 수행해 중복 참여와 초과 참여를 줄입니다.
         """
+        await self.repository.lock_waiting_room_membership_for_user(user_id=user.id)
         room = await self.repository.get_room_by_public_id_for_update(room_public_id)
         if room is None:
             raise GameRoomNotFoundError
@@ -523,6 +532,10 @@ class GameService:
         if len(members) >= room.max_players:
             raise GameRoomNotJoinableError
 
+        await self._leave_existing_waiting_rooms(
+            user=user,
+            excluded_room_public_id=room.public_id,
+        )
         member = await self.repository.create_room_member(
             room_id=room.id,
             user_id=user.id,
@@ -550,6 +563,7 @@ class GameService:
             user=user,
             left_at=left_at,
             ignore_inactive_member=False,
+            commit=True,
         )
         if result is None:
             raise GameRoomEntryForbiddenError
@@ -572,6 +586,7 @@ class GameService:
             user=user,
             left_at=left_at,
             ignore_inactive_member=True,
+            commit=True,
         )
 
     async def _leave_waiting_room(
@@ -581,6 +596,7 @@ class GameService:
         user: CurrentUser,
         left_at: datetime,
         ignore_inactive_member: bool,
+        commit: bool,
     ) -> RoomLeaveResult | None:
         """대기 room 퇴장 후 남은 멤버 기준으로 방장 승계 또는 room 폐쇄를 결정합니다."""
         room = await self.repository.get_room_by_public_id_for_update(room_public_id)
@@ -611,7 +627,8 @@ class GameService:
                 room_id=room.id,
                 owner_user_id=new_owner.user_id,
             )
-        await self.repository.commit()
+        if commit:
+            await self.repository.commit()
         return RoomLeaveResult(
             room_public_id=room.public_id,
             user_public_id=user.public_id,
@@ -622,6 +639,32 @@ class GameService:
             new_owner_nickname=new_owner.nickname if new_owner else None,
             room_closed=room_closed,
         )
+
+    async def _leave_existing_waiting_rooms(
+        self,
+        *,
+        user: CurrentUser,
+        excluded_room_public_id: UUID | None = None,
+    ) -> None:
+        """새 대기방 생성/입장 전 유저가 남아 있던 다른 대기방 membership을 정리합니다.
+
+        한 유저가 여러 대기방에 동시에 active member로 남으면 로비 목록에 유령 객실이 누적됩니다.
+        그래서 새 대기방으로 이동하는 유스케이스는 기존 대기방을 REST 퇴장과 같은 규칙으로 먼저
+        정리합니다. 같은 room 반복 입장은 기존 membership을 그대로 반환해야 하므로 제외합니다.
+        """
+        room_public_ids = await self.repository.list_active_waiting_room_public_ids_for_user(
+            user_id=user.id,
+        )
+        for room_public_id in room_public_ids:
+            if room_public_id == excluded_room_public_id:
+                continue
+            await self._leave_waiting_room(
+                room_public_id=room_public_id,
+                user=user,
+                left_at=kst_now(),
+                ignore_inactive_member=True,
+                commit=False,
+            )
 
     async def start_session(self, *, room_public_id: UUID, user_id: UUID) -> GameSessionStartResult:
         """방장이 room의 활성 멤버를 참가자로 고정하고 게임 세션 식별자를 발급합니다.

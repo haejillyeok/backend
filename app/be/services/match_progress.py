@@ -45,6 +45,7 @@ class TurnTimeoutRecord:
     event_sequence: int
     deadline_at: datetime
     created_at: datetime
+    round_number: int | None = None
     next_turn: MatchTurnEventPayload | None = None
     next_status: str | None = None
     voting_deadline_at: datetime | None = None
@@ -244,6 +245,8 @@ class MatchProgressService:
             "deadline_at": record.deadline_at,
             "created_at": record.created_at,
         }
+        if record.round_number is not None:
+            payload["round_number"] = record.round_number
         if record.next_turn is not None:
             payload["next_turn"] = _serialize_next_turn(record.next_turn)
         if record.next_status is not None:

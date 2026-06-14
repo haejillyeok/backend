@@ -283,8 +283,9 @@ Response:
 ### POST `/api/v1/game/rooms`
 
 로그인 유저를 방장으로 하는 대기 객실을 만들고, 같은 transaction에서 방장을 첫 활성
-`room_members`로 등록합니다. 성공 후 클라이언트는 응답의 `room_public_id`로
-`/ws/lobby/rooms/{room_public_id}`에 연결할 수 있습니다.
+`room_members`로 등록합니다. 한 유저는 동시에 하나의 대기 객실에만 active member로 남을 수 있으므로,
+객실 생성 전 기존 대기 객실 membership은 REST 퇴장과 같은 규칙으로 정리합니다. 성공 후 클라이언트는
+응답의 `room_public_id`로 `/ws/lobby/rooms/{room_public_id}`에 연결할 수 있습니다.
 
 Request:
 
@@ -371,7 +372,9 @@ Response:
 
 로그인 유저를 대기 중인 객실의 활성 `room_members`로 참여시킵니다. 이미 같은 room에 활성 멤버로
 참여 중이면 새 row를 만들지 않고 기존 참여 정보를 반환하므로 반복 요청에 멱등적으로 동작합니다.
-객실이 대기 상태가 아니거나 정원이 가득 찬 경우에는 참여할 수 없습니다.
+객실이 대기 상태가 아니거나 정원이 가득 찬 경우에는 참여할 수 없고, 이 경우 기존 대기 객실 membership은
+유지됩니다. 참여 가능한 다른 객실에 새로 들어가는 경우 기존 대기 객실 membership은 REST 퇴장과 같은
+규칙으로 먼저 정리합니다.
 
 신규 멤버로 추가된 경우(`already_member=false`) 서버는 같은 room의
 `/ws/lobby/rooms/{room_public_id}` 연결에 `lobby.room.joined` event를 broadcast합니다. 이미 참여

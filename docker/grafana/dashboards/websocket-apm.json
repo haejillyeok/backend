@@ -401,8 +401,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le, ws_endpoint) (rate(websocket_connection_duration_seconds_bucket{service_name=~\"$service\", ws_route=~\"$ws_route\", ws_endpoint=~\"$ws_endpoint\"}[$__rate_interval])))",
-          "legendFormat": "{{ws_endpoint}} p95",
+          "expr": "histogram_quantile(0.95, sum by (le, ws_endpoint, ws_message_type) (rate(websocket_message_duration_seconds_bucket{service_name=~\"$service\", ws_route=~\"$ws_route\", ws_endpoint=~\"$ws_endpoint\"}[$__rate_interval])))",
+          "legendFormat": "{{ws_endpoint}} {{ws_message_type}} p95",
           "range": true,
           "refId": "A"
         },
@@ -412,13 +412,13 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.99, sum by (le, ws_endpoint) (rate(websocket_connection_duration_seconds_bucket{service_name=~\"$service\", ws_route=~\"$ws_route\", ws_endpoint=~\"$ws_endpoint\"}[$__rate_interval])))",
-          "legendFormat": "{{ws_endpoint}} p99",
+          "expr": "histogram_quantile(0.99, sum by (le, ws_endpoint, ws_message_type) (rate(websocket_message_duration_seconds_bucket{service_name=~\"$service\", ws_route=~\"$ws_route\", ws_endpoint=~\"$ws_endpoint\"}[$__rate_interval])))",
+          "legendFormat": "{{ws_endpoint}} {{ws_message_type}} p99",
           "range": true,
           "refId": "B"
         }
       ],
-      "title": "Connection Duration",
+      "title": "Message Processing Duration",
       "type": "timeseries"
     }
   ],

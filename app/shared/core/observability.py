@@ -66,6 +66,7 @@ WEBSOCKET_DURATION_BUCKET_SECONDS = (
     1800.0,
     3600.0,
 )
+WEBSOCKET_MESSAGE_DURATION_BUCKET_SECONDS = HTTP_DURATION_BUCKET_SECONDS
 
 
 class ObservabilitySettings(BaseSettings):
@@ -160,6 +161,12 @@ class WebSocketServerMetrics:
             unit="{message}",
             description="WebSocket messages by direction and type.",
         )
+        self.message_duration_histogram = self.meter.create_histogram(
+            "websocket.message.duration",
+            unit="s",
+            description="WebSocket inbound message processing duration.",
+            explicit_bucket_boundaries_advisory=WEBSOCKET_MESSAGE_DURATION_BUCKET_SECONDS,
+        )
         self.error_counter = self.meter.create_counter(
             "websocket.errors.total",
             unit="{error}",
@@ -196,6 +203,19 @@ class WebSocketServerMetrics:
         attributes["ws.message.type"] = message_type
         attributes["ws.message.direction"] = direction
         self.message_counter.add(1, attributes=attributes)
+
+    def record_message_duration(
+        self,
+        *,
+        ws_route: str,
+        ws_endpoint: str,
+        message_type: str,
+        duration_seconds: float,
+    ) -> None:
+        """유효한 inbound WebSocket message의 서버 처리 시간을 histogram에 기록합니다."""
+        attributes = self._base_attributes(ws_route=ws_route, ws_endpoint=ws_endpoint)
+        attributes["ws.message.type"] = message_type
+        self.message_duration_histogram.record(duration_seconds, attributes=attributes)
 
     def record_error(self, *, ws_route: str, ws_endpoint: str, error_type: str) -> None:
         """WebSocket 오류 발생 metric을 오류 유형별로 기록합니다."""
@@ -246,6 +266,16 @@ class _NoopWebSocketServerMetrics:
         return None
 
     def record_error(self, *, ws_route: str, ws_endpoint: str, error_type: str) -> None:
+        return None
+
+    def record_message_duration(
+        self,
+        *,
+        ws_route: str,
+        ws_endpoint: str,
+        message_type: str,
+        duration_seconds: float,
+    ) -> None:
         return None
 
     def record_disconnect(self, *, ws_route: str, ws_endpoint: str, close_code: int) -> None:

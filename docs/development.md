@@ -103,10 +103,12 @@ Dashboard 간 이동 링크는 특정 dashboard URL인 `/d/<uid>`를 가리키�
 
 WebSocket metric dashboard는 `docker/grafana/dashboards/websocket-apm.json`에서 provision 됩니다.
 `websocket.connections.active`, `websocket.connections.total`, `websocket.messages.total`,
-`websocket.errors.total`, `websocket.disconnects.total`, `websocket.connection.duration` 기반으로
-active connection, 연결률, message rate, error rate, close code별 disconnect, 연결 지속 시간을
-확인합니다. label은 `service_name`, `ws_route`, `ws_endpoint`, `ws_message_type`, `ws_close_code`처럼
-route template과 낮은 cardinality 값만 사용합니다.
+`websocket.message.duration`, `websocket.errors.total`, `websocket.disconnects.total`,
+`websocket.connection.duration` 기반으로 active connection, 연결률, message rate, message 처리 시간,
+error rate, close code별 disconnect, 연결 지속 시간을 확인합니다. APM latency 판단은 연결 지속 시간이
+아니라 유효한 inbound message를 파싱하고 처리하는 `websocket.message.duration`을 기준으로 합니다.
+label은 `service_name`, `ws_route`, `ws_endpoint`, `ws_message_type`, `ws_close_code`처럼 route template과
+낮은 cardinality 값만 사용합니다.
 
 객체별 실행 시간은 trace span으로 확인합니다. FastAPI 요청 span 아래에 service/repository span을
 수동으로 붙이려면 `app/shared/core/observability.py`의 `@traced_method`를 사용합니다.

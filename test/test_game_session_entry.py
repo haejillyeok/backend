@@ -77,14 +77,19 @@ class FakeGameRepository(GameRepositoryProtocol):
         self,
         *,
         room: GameRoomRecord | None,
+        rooms: list[GameRoomRecord] | None = None,
         members: list[RoomMemberRecord] | None = None,
         participant: GameSessionParticipantRecord | None = None,
         active_session: object | None = None,
+        active_waiting_room_public_ids: list[object] | None = None,
     ) -> None:
-        self.room = room
+        room_records = rooms or ([room] if room is not None else [])
+        self.rooms_by_public_id = {record.public_id: record for record in room_records}
+        self.room = room or (room_records[0] if room_records else None)
         self.members = members or []
         self.participant = participant
         self.active_session = active_session
+        self.active_waiting_room_public_ids = active_waiting_room_public_ids or []
         self.created_sessions: list[dict[str, object]] = []
         self.created_rooms: list[dict[str, object]] = []
         self.created_members: list[RoomMemberRecord] = []
@@ -95,11 +100,20 @@ class FakeGameRepository(GameRepositoryProtocol):
         self.closed_rooms: list[dict[str, object]] = []
         self.updated_rooms: list[dict[str, object]] = []
         self.committed = False
+        self.commit_count = 0
         self.locked_room_public_ids: list[object] = []
+        self.locked_waiting_membership_user_ids: list[object] = []
 
     async def list_rooms(self, *, user_id):
         _ = user_id
         return self.room_summaries
+
+    async def list_active_waiting_room_public_ids_for_user(self, *, user_id):
+        _ = user_id
+        return self.active_waiting_room_public_ids
+
+    async def lock_waiting_room_membership_for_user(self, *, user_id):
+        self.locked_waiting_membership_user_ids.append(user_id)
 
     async def create_room(self, *, owner_user_id, name, game_type, status, max_players):
         room = RoomCreateResult(
@@ -131,17 +145,18 @@ class FakeGameRepository(GameRepositoryProtocol):
             max_players=max_players,
             created_at=room.created_at,
         )
+        self.rooms_by_public_id[self.room.public_id] = self.room
         return self.room
 
     async def get_room_by_public_id(self, room_public_id):
-        return self.room if self.room and self.room.public_id == room_public_id else None
+        return self.rooms_by_public_id.get(room_public_id)
 
     async def get_room_by_public_id_for_update(self, room_public_id):
         self.locked_room_public_ids.append(room_public_id)
-        return self.room if self.room and self.room.public_id == room_public_id else None
+        return self.rooms_by_public_id.get(room_public_id)
 
     async def get_active_session_by_room_id(self, room_id):
-        if self.room and self.room.id == room_id:
+        if any(room.id == room_id for room in self.rooms_by_public_id.values()):
             return self.active_session
         return None
 
@@ -179,7 +194,7 @@ class FakeGameRepository(GameRepositoryProtocol):
             if not (existing.room_id == room_id and existing.user_id == user_id)
         ]
         result = RoomLeaveResult(
-            room_public_id=self.room.public_id,
+            room_public_id=self._room_public_id_for_room_id(room_id),
             user_public_id=uuid4(),
             nickname=member.nickname,
             left_at=left_at,
@@ -188,21 +203,42 @@ class FakeGameRepository(GameRepositoryProtocol):
         return result
 
     async def transfer_room_owner(self, *, room_id, owner_user_id):
-        if self.room and self.room.id == room_id:
-            self.room = GameRoomRecord(
-                id=self.room.id,
-                public_id=self.room.public_id,
+        room = self._room_for_room_id(room_id)
+        if room is not None:
+            updated = GameRoomRecord(
+                id=room.id,
+                public_id=room.public_id,
                 owner_user_id=owner_user_id,
-                name=self.room.name,
-                game_type=self.room.game_type,
-                status=self.room.status,
-                max_players=self.room.max_players,
-                created_at=self.room.created_at,
+                name=room.name,
+                game_type=room.game_type,
+                status=room.status,
+                max_players=room.max_players,
+                rule_config=room.rule_config,
+                created_at=room.created_at,
             )
+            self.rooms_by_public_id[updated.public_id] = updated
+            if self.room and self.room.id == room_id:
+                self.room = updated
             self.new_owner_user_id = owner_user_id
 
     async def close_room(self, *, room_id, closed_at):
         self.closed_rooms.append({"room_id": room_id, "closed_at": closed_at})
+        room = self._room_for_room_id(room_id)
+        if room is not None:
+            updated = GameRoomRecord(
+                id=room.id,
+                public_id=room.public_id,
+                owner_user_id=room.owner_user_id,
+                name=room.name,
+                game_type=room.game_type,
+                status="closed",
+                max_players=room.max_players,
+                rule_config=room.rule_config,
+                created_at=room.created_at,
+            )
+            self.rooms_by_public_id[updated.public_id] = updated
+            if self.room and self.room.id == room_id:
+                self.room = updated
 
     async def update_room_settings(self, *, room_id, name, max_players, rule_config):
         self.updated_rooms.append(
@@ -213,24 +249,28 @@ class FakeGameRepository(GameRepositoryProtocol):
                 "rule_config": rule_config,
             }
         )
-        if self.room is None:
+        room = self._room_for_room_id(room_id)
+        if room is None:
             raise AssertionError("room must exist before update")
-        self.room = GameRoomRecord(
-            id=self.room.id,
-            public_id=self.room.public_id,
-            owner_user_id=self.room.owner_user_id,
+        updated = GameRoomRecord(
+            id=room.id,
+            public_id=room.public_id,
+            owner_user_id=room.owner_user_id,
             name=name,
-            game_type=self.room.game_type,
-            status=self.room.status,
+            game_type=room.game_type,
+            status=room.status,
             max_players=max_players,
             rule_config=rule_config,
-            created_at=self.room.created_at,
+            created_at=room.created_at,
         )
+        self.rooms_by_public_id[updated.public_id] = updated
+        if self.room and self.room.id == room_id:
+            self.room = updated
         return RoomUpdateResult(
-            room_public_id=self.room.public_id,
+            room_public_id=updated.public_id,
             name=name,
-            game_type=self.room.game_type,
-            status=self.room.status,
+            game_type=updated.game_type,
+            status=updated.status,
             max_players=max_players,
             rule_config=rule_config,
         )
@@ -277,6 +317,19 @@ class FakeGameRepository(GameRepositoryProtocol):
 
     async def commit(self):
         self.committed = True
+        self.commit_count += 1
+
+    def _room_for_room_id(self, room_id):
+        return next(
+            (room for room in self.rooms_by_public_id.values() if room.id == room_id),
+            None,
+        )
+
+    def _room_public_id_for_room_id(self, room_id):
+        room = self._room_for_room_id(room_id)
+        if room is None:
+            raise AssertionError("room must exist before leaving")
+        return room.public_id
 
 
 def test_auth_service_resolves_current_user_from_active_session_token():
@@ -343,6 +396,123 @@ def test_game_service_joins_waiting_room_and_persists_membership():
     assert repository.committed is True
 
 
+def test_game_service_leaves_existing_waiting_room_before_joining_another_room():
+    user = CurrentUser(
+        id=uuid4(),
+        public_id=uuid4(),
+        account_id="player_001",
+        nickname="초보자",
+    )
+    old_room_id = uuid4()
+    old_room_public_id = uuid4()
+    new_room_id = uuid4()
+    new_room_public_id = uuid4()
+    old_room = GameRoomRecord(
+        id=old_room_id,
+        public_id=old_room_public_id,
+        owner_user_id=user.id,
+        name="이전 객실",
+        game_type="shiritori",
+        status="waiting",
+        max_players=4,
+    )
+    new_room = GameRoomRecord(
+        id=new_room_id,
+        public_id=new_room_public_id,
+        owner_user_id=uuid4(),
+        name="새 객실",
+        game_type="shiritori",
+        status="waiting",
+        max_players=4,
+    )
+    repository = FakeGameRepository(
+        room=new_room,
+        rooms=[old_room, new_room],
+        members=[
+            RoomMemberRecord(
+                room_id=old_room_id,
+                user_id=user.id,
+                nickname=user.nickname,
+                joined_at=datetime(2026, 6, 12, tzinfo=KST),
+            )
+        ],
+        active_waiting_room_public_ids=[old_room_public_id],
+    )
+    service = GameService(repository)
+
+    result = asyncio.run(service.join_room(room_public_id=new_room_public_id, user=user))
+
+    assert result.room_public_id == new_room_public_id
+    assert result.already_member is False
+    assert repository.closed_rooms == [
+        {
+            "room_id": old_room_id,
+            "closed_at": repository.left_members[0].left_at,
+        }
+    ]
+    assert repository.created_members[-1].room_id == new_room_id
+    assert repository.created_members[-1].user_id == user.id
+    assert repository.commit_count == 1
+
+
+def test_game_service_keeps_existing_waiting_room_when_target_room_is_full():
+    user = CurrentUser(
+        id=uuid4(),
+        public_id=uuid4(),
+        account_id="player_001",
+        nickname="초보자",
+    )
+    old_room_id = uuid4()
+    old_room_public_id = uuid4()
+    full_room_id = uuid4()
+    full_room_public_id = uuid4()
+    old_room = GameRoomRecord(
+        id=old_room_id,
+        public_id=old_room_public_id,
+        owner_user_id=user.id,
+        name="이전 객실",
+        game_type="shiritori",
+        status="waiting",
+        max_players=4,
+    )
+    full_room = GameRoomRecord(
+        id=full_room_id,
+        public_id=full_room_public_id,
+        owner_user_id=uuid4(),
+        name="가득 찬 객실",
+        game_type="shiritori",
+        status="waiting",
+        max_players=1,
+    )
+    repository = FakeGameRepository(
+        room=full_room,
+        rooms=[old_room, full_room],
+        members=[
+            RoomMemberRecord(
+                room_id=old_room_id,
+                user_id=user.id,
+                nickname=user.nickname,
+                joined_at=datetime(2026, 6, 12, tzinfo=KST),
+            ),
+            RoomMemberRecord(
+                room_id=full_room_id,
+                user_id=uuid4(),
+                nickname="다른손님",
+                joined_at=datetime(2026, 6, 12, tzinfo=KST),
+            ),
+        ],
+        active_waiting_room_public_ids=[old_room_public_id],
+    )
+    service = GameService(repository)
+
+    with pytest.raises(GameRoomNotJoinableError):
+        asyncio.run(service.join_room(room_public_id=full_room_public_id, user=user))
+
+    assert repository.left_members == []
+    assert repository.closed_rooms == []
+    assert repository.created_members == []
+
+
 def test_game_service_lists_rooms_for_lobby_selection():
     user_id = uuid4()
     room_public_id = uuid4()
@@ -394,7 +564,83 @@ def test_game_service_creates_waiting_room_and_owner_membership():
     assert result.member_count == 1
     assert repository.created_rooms[0]["owner_user_id"] == owner.id
     assert repository.created_members[0].user_id == owner.id
+    assert repository.locked_waiting_membership_user_ids == [owner.id]
     assert repository.committed is True
+
+
+def test_game_service_locks_user_waiting_membership_before_creating_room():
+    owner = CurrentUser(
+        id=uuid4(),
+        public_id=uuid4(),
+        account_id="player_001",
+        nickname="방장",
+    )
+    repository = FakeGameRepository(room=None)
+    service = GameService(repository)
+
+    asyncio.run(
+        service.create_room(
+            name="첫 객실",
+            game_type="shiritori",
+            max_players=4,
+            owner=owner,
+        )
+    )
+
+    assert repository.locked_waiting_membership_user_ids == [owner.id]
+
+
+def test_game_service_closes_existing_waiting_room_before_creating_new_room():
+    owner = CurrentUser(
+        id=uuid4(),
+        public_id=uuid4(),
+        account_id="player_001",
+        nickname="방장",
+    )
+    old_room_id = uuid4()
+    old_room_public_id = uuid4()
+    repository = FakeGameRepository(
+        room=GameRoomRecord(
+            id=old_room_id,
+            public_id=old_room_public_id,
+            owner_user_id=owner.id,
+            name="이전 객실",
+            game_type="shiritori",
+            status="waiting",
+            max_players=4,
+        ),
+        members=[
+            RoomMemberRecord(
+                room_id=old_room_id,
+                user_id=owner.id,
+                nickname=owner.nickname,
+                joined_at=datetime(2026, 6, 12, tzinfo=KST),
+            )
+        ],
+        active_waiting_room_public_ids=[old_room_public_id],
+    )
+    service = GameService(repository)
+
+    result = asyncio.run(
+        service.create_room(
+            name="새 객실",
+            game_type="shiritori",
+            max_players=4,
+            owner=owner,
+        )
+    )
+
+    assert result.name == "새 객실"
+    assert repository.closed_rooms == [
+        {
+            "room_id": old_room_id,
+            "closed_at": repository.left_members[0].left_at,
+        }
+    ]
+    assert repository.left_members[0].nickname == owner.nickname
+    assert repository.created_members[-1].user_id == owner.id
+    assert repository.committed is True
+    assert repository.commit_count == 1
 
 
 def test_game_service_authorizes_room_lobby_connection_for_active_member():

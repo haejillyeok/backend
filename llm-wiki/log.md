@@ -4,6 +4,24 @@
 코드 변경 상세는 Git history, PR, issue에서 확인하고, 이 파일에는 위키 페이지의 지식, 계약, 정책,
 컨벤션이 어떻게 바뀌었는지만 남깁니다.
 
+## [2026-06-14] maintenance | Clarify single active waiting room membership
+
+- `sunset-game-domain.md`와 `realtime-websocket.md`에 한 유저는 하나의 `waiting` room에만 active member로 남는다는 불변식을 추가했다.
+- 객실 생성/다른 객실 입장 전 기존 active waiting membership을 REST 퇴장 규칙으로 정리하고, 정원 초과 입장 실패 시 기존 membership은 유지한다는 기준을 정리했다.
+
+## [2026-06-14] maintenance | Switch WebSocket APM latency to message duration
+
+- `observability-stack.md`에 WebSocket APM latency 판단 기준을 연결 지속 시간이 아니라 유효한 inbound message 처리 시간으로 정리했다.
+- `websocket.message.duration` histogram을 endpoint와 message type별 p95/p99 latency 기준으로 사용하고, `websocket.connection.duration`은 연결 수명 관찰용으로 구분한다는 기준을 추가했다.
+
+## [2026-06-14] maintenance | Clarify test page match event state policy
+
+- `test-page-harness.md`에 Match WebSocket `match.turn.resolved` event를 원본 로그뿐 아니라 게임 진행 화면 상태에도 반영한다는 기준을 추가했다.
+- 단어 제출 `accepted`/`rejected`/`failed`/`timeout` 판정별 화면 상태와 사용자 notice 갱신 기준을 정리했다.
+- 사용자-facing Match WebSocket event는 `match.feed`로 정규화해 최근 판정 카드와 최근 흐름 UI에 표시하고, 내 답변과 다른 손님의 답변을 구분한다는 기준을 추가했다.
+- timeout으로 라운드 종료가 확정되면 `match.turn.resolved` 뒤에 `match.round.finished`를 이어서 broadcast하고, 테스트 페이지는 이를 라운드 종료 피드로 표시한다는 기준을 추가했다.
+- 다음 라운드 첫 턴이 생성되면 `match.round.started`를 이어서 broadcast하고, 테스트 페이지는 이를 라운드 시작 피드로 표시한다는 기준을 추가했다.
+
 ## [2026-06-14] maintenance | Clarify match progress FK write order
 
 - `sunset-game-domain.md`와 `sunset-game-database-design.md`에 단어 제출 성공/거절 저장 시 `participant_actions`, `word_game.submissions`, `session_phases`, `game_events` 사이의 FK 참조 순서에 맞춰 staged insert/flush를 수행한다는 기준을 추가했다.
@@ -41,6 +59,7 @@
 - 이후 테스트 페이지 기준을 BE-only 연결과 체크인 → 로비 → 객실 → 게임 진행 페이지 흐름으로 정정했다.
 - 이후 구현을 React/Vite로 전환하고, 요청 URL은 Vite 환경변수, 앱 상태는 `useReducer` store 기준으로 관리한다는 기준을 추가했다.
 - 보호 REST API 요청은 JS가 HttpOnly `session_token`을 직접 읽지 않고 `credentials: "include"`로 쿠키를 포함하며, 숨김 운영 노트에서 protected API 세션 확인을 제공한다는 기준을 추가했다.
+- 게임 진행 화면은 match snapshot의 server time과 deadline으로 표시용 타이머를 계산하고, participant `is_me`와 actor seat 비교로 내 턴 UI를 강조한다는 기준을 추가했다.
 - 기본 UI는 사용자-facing 게임 플로우로 유지하고, 서버 선택/health/문서/원본 로그/Realtime ping은 숨김 운영 노트로 분리한다는 기준을 추가했다.
 
 ## [2026-06-14] maintenance | Clarify WebSocket error code contract

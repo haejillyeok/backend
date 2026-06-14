@@ -49,7 +49,7 @@ def test_websocket_apm_dashboard_is_generic_and_uses_websocket_metrics() -> None
     assert "websocket_messages_total" in text
     assert "websocket_errors_total" in text
     assert "websocket_disconnects_total" in text
-    assert "websocket_connection_duration_seconds_bucket" in text
+    assert "websocket_message_duration_seconds_bucket" in text
     assert "$ws_route" in text
     assert "$ws_endpoint" in text
     assert "room_public_id" not in text

@@ -167,6 +167,7 @@ async def match_websocket(
                         )
                         continue
                 raise
+            message_started_at = perf_counter()
             message = parse_match_message(raw_message)
             metrics.record_message(
                 ws_route=MATCH_WS_ROUTE,
@@ -187,6 +188,12 @@ async def match_websocket(
                     ai_turn_service=match_ai_turn_service,
                     now=kst_now(),
                 )
+            metrics.record_message_duration(
+                ws_route=MATCH_WS_ROUTE,
+                ws_endpoint=MATCH_WS_ENDPOINT,
+                message_type=message["type"],
+                duration_seconds=perf_counter() - message_started_at,
+            )
             for broadcast_message in broadcast_messages:
                 next_match_timer = next_match_timer_from_message(broadcast_message)
                 if next_match_timer is not None:

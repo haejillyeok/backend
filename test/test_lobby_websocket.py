@@ -52,6 +52,9 @@ class FakeWebSocketMetrics:
     def record_message(self, **kwargs) -> None:
         self.calls.append(("message", kwargs))
 
+    def record_message_duration(self, **kwargs) -> None:
+        self.calls.append(("message_duration", kwargs))
+
     def record_error(self, **kwargs) -> None:
         self.calls.append(("error", kwargs))
 
@@ -332,6 +335,9 @@ def test_room_lobby_websocket_records_apm_metrics_and_spans(monkeypatch) -> None
     assert message_calls[2][1]["direction"] == "inbound"
     assert message_calls[3][1]["message_type"] == "lobby.pong"
     assert message_calls[3][1]["direction"] == "outbound"
+    message_duration_calls = [call for call in metrics.calls if call[0] == "message_duration"]
+    assert message_duration_calls[0][1]["message_type"] == "ping"
+    assert message_duration_calls[0][1]["duration_seconds"] >= 0
     assert any(call[0] == "disconnect" for call in metrics.calls)
     assert any(call[0] == "duration" for call in metrics.calls)
     assert "WebSocket.lobby.connect" in span_names
