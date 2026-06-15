@@ -1,6 +1,6 @@
 from enum import Enum
 
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from app.agent.schemas.base import AgentSchemaModel
 
@@ -30,3 +30,11 @@ class AgentAnswerRequest(AgentSchemaModel):
     last_char: str | None = None
     condition: AgentCondition | None = None
     ai_policy: AIPolicy = Field(default_factory=AIPolicy)
+
+    @field_validator("game_type", mode="before")
+    @classmethod
+    def normalize_legacy_game_type(cls, value: object) -> object:
+        # Keep old Backend releases working during the staged word_chain rollout.
+        if value == "shiritori":
+            return GameType.WORD_CHAIN
+        return value
