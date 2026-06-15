@@ -51,6 +51,8 @@ logs/
 *.sqlite3
 *.db
 *.db-journal
+scripts/valid_words_seed.sql
+test-page
 
 # Uploads and temporary files
 tmp/
