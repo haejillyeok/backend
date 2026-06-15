@@ -25,6 +25,7 @@ from app.be.services.match import (
     MatchTurnTimer,
     MatchTurnSnapshot,
     MatchVotingTimer,
+    broadcast_match_event_with_round_finished,
     match_connection_manager,
     process_match_turn_timeout,
     process_match_vote_timeout,
@@ -428,7 +429,7 @@ async def test_process_match_turn_timeout_broadcasts_event_and_returns_next_time
                             "actor_seat_number": 2,
                             "deadline_at": next_deadline_at,
                             "required_start_char": None,
-                        }
+                        },
                     },
                 },
             )
@@ -513,6 +514,67 @@ async def test_process_match_turn_timeout_broadcasts_round_finished_event() -> N
     assert manager.broadcasts[2][1]["payload"]["current_turn"]["phase_id"] == next_phase_id
 
 
+async def test_broadcast_match_event_waits_until_delayed_round_start() -> None:
+    game_session_public_id = uuid4()
+    phase_id = uuid4()
+    next_phase_id = uuid4()
+    now = datetime(2026, 6, 13, 0, 0, 11, tzinfo=KST)
+    round_started_at = datetime(2026, 6, 13, 0, 0, 16, tzinfo=KST)
+    sleeps = []
+
+    class FakeManager:
+        def __init__(self) -> None:
+            self.broadcasts = []
+
+        async def broadcast_session(self, game_session_public_id, message):
+            self.broadcasts.append((game_session_public_id, message))
+
+    async def fake_sleep(seconds):
+        sleeps.append(seconds)
+
+    manager = FakeManager()
+    event = MatchBroadcastEvent(
+        game_session_public_id=game_session_public_id,
+        message={
+            "type": "match.turn.resolved",
+            "payload": {
+                "event_sequence": 7,
+                "phase_id": phase_id,
+                "round_number": 1,
+                "participant": {"display_name": "1번 손님", "seat_number": 1},
+                "result": "timeout",
+                "reason": "deadline_exceeded",
+                "deadline_at": datetime(2026, 6, 13, 0, 0, 10, tzinfo=KST),
+                "created_at": now,
+                "next_turn": {
+                    "phase_id": next_phase_id,
+                    "round_number": 2,
+                    "turn_number": 1,
+                    "actor_seat_number": 2,
+                    "started_at": round_started_at,
+                    "deadline_at": datetime(2026, 6, 13, 0, 0, 26, tzinfo=KST),
+                    "required_start_char": None,
+                },
+            },
+        },
+    )
+
+    await broadcast_match_event_with_round_finished(
+        manager=manager,
+        event=event,
+        now=now,
+        sleep=fake_sleep,
+    )
+
+    assert sleeps == [5.0]
+    assert [message["type"] for _, message in manager.broadcasts] == [
+        "match.turn.resolved",
+        "match.round.finished",
+        "match.round.started",
+    ]
+    assert manager.broadcasts[2][1]["payload"]["started_at"] == round_started_at
+
+
 async def test_process_match_turn_timeout_does_not_trigger_ai_when_round_moves_to_voting() -> None:
     game_session_public_id = uuid4()
     phase_id = uuid4()
@@ -564,6 +626,81 @@ async def test_process_match_turn_timeout_does_not_trigger_ai_when_round_moves_t
         "match.turn.resolved",
         "match.round.finished",
     ]
+
+
+async def test_process_match_turn_timeout_keeps_ai_timer_after_failed_ai_answer() -> None:
+    game_session_public_id = uuid4()
+    phase_id = uuid4()
+    ai_phase_id = uuid4()
+    now = datetime(2026, 6, 13, 0, 0, 11, tzinfo=KST)
+    ai_deadline_at = datetime(2026, 6, 13, 0, 0, 21, tzinfo=KST)
+
+    class FakeManager:
+        def __init__(self) -> None:
+            self.broadcasts = []
+
+        async def broadcast_session(self, game_session_public_id, message):
+            self.broadcasts.append((game_session_public_id, message))
+
+    class FakeProgressService:
+        async def timeout_turn_if_due(self, **kwargs):
+            return MatchBroadcastEvent(
+                game_session_public_id=game_session_public_id,
+                message={
+                    "type": "match.turn.resolved",
+                    "payload": {
+                        "phase_id": phase_id,
+                        "round_number": 1,
+                        "result": "timeout",
+                        "reason": "deadline_exceeded",
+                        "next_turn": {
+                            "phase_id": ai_phase_id,
+                            "round_number": 2,
+                            "turn_number": 1,
+                            "actor_seat_number": 2,
+                            "deadline_at": ai_deadline_at,
+                            "required_start_char": None,
+                        },
+                        "created_at": now,
+                    },
+                },
+            )
+
+    class FakeAiTurnService:
+        async def play_ai_turn(self, **kwargs):
+            assert kwargs["phase_id"] == ai_phase_id
+            return MatchBroadcastEvent(
+                game_session_public_id=game_session_public_id,
+                message={
+                    "type": "match.turn.resolved",
+                    "payload": {
+                        "phase_id": ai_phase_id,
+                        "result": "failed",
+                        "reason": "no_candidate",
+                        "created_at": now,
+                    },
+                },
+            )
+
+    manager = FakeManager()
+
+    next_timer = await process_match_turn_timeout(
+        manager=manager,
+        progress_service=FakeProgressService(),
+        ai_turn_service=FakeAiTurnService(),
+        game_session_public_id=game_session_public_id,
+        phase_id=phase_id,
+        now=now,
+    )
+
+    assert next_timer == MatchTurnTimer(phase_id=ai_phase_id, deadline_at=ai_deadline_at)
+    assert [message["type"] for _, message in manager.broadcasts] == [
+        "match.turn.resolved",
+        "match.round.finished",
+        "match.round.started",
+        "match.turn.resolved",
+    ]
+    assert manager.broadcasts[-1][1]["payload"]["result"] == "failed"
 
 
 async def test_process_match_vote_timeout_broadcasts_result_events() -> None:

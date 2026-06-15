@@ -80,7 +80,7 @@ def create_local_environment() -> dict[str, Any]:
             _environment_value("password", "secret-password"),
             _environment_value("nickname", "초보자"),
             _environment_value("roomName", "첫 객실"),
-            _environment_value("gameType", "shiritori"),
+            _environment_value("gameType", "word_chain"),
             _environment_value("maxPlayers", "4"),
             _environment_value("roomPublicId", "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7e"),
             _environment_value("gameSessionPublicId", "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b80"),
@@ -214,7 +214,9 @@ def _create_url(
 def _replace_path_variables(path: str) -> str:
     return re.sub(
         r"{([^{}]+)}",
-        lambda match: f"{{{{{PATH_VARIABLES.get(match.group(1), _to_lower_camel(match.group(1)))}}}}}",
+        lambda match: (
+            f"{{{{{PATH_VARIABLES.get(match.group(1), _to_lower_camel(match.group(1)))}}}}}"
+        ),
         path,
     )
 

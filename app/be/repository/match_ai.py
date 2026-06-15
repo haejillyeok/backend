@@ -55,7 +55,10 @@ class MatchAiTurnRepository:
 
         used_word_result = await self.db_session.execute(
             select(UsedWord)
-            .where(UsedWord.session_id == game_session.id)
+            .where(
+                UsedWord.session_id == game_session.id,
+                UsedWord.round_number == turn.round_number,
+            )
             .order_by(UsedWord.normalized_word.asc())
         )
         used_words = [used_word.normalized_word for used_word in used_word_result.scalars().all()]

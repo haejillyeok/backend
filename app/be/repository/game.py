@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import timedelta
 from uuid import UUID
 
@@ -14,6 +15,7 @@ from app.be.services.game import (
     GameRoomRecord,
     GameSessionParticipantRecord,
     GameSessionStartResult,
+    GameSessionTurnRecord,
     RoomLeaveResult,
     RoomMemberRecord,
     RoomUpdateResult,
@@ -61,7 +63,9 @@ class GameRepository:
         """유저가 active member로 남아 있는 대기 room public_id를 조회합니다."""
         return await self._list_active_waiting_room_public_ids_for_user(user_id=user_id)
 
-    @traced_method("GameRepository.list_active_waiting_room_public_ids_for_user", layer="repository")
+    @traced_method(
+        "GameRepository.list_active_waiting_room_public_ids_for_user", layer="repository"
+    )
     async def _list_active_waiting_room_public_ids_for_user(self, *, user_id: UUID) -> list[UUID]:
         """새 대기방 이동 전 정리할 기존 대기 room 목록 조회 시간을 trace span으로 기록합니다."""
         statement = (
@@ -257,12 +261,44 @@ class GameRepository:
             )
             for participant in participant_result.scalars().all()
         ]
+        current_turn = await self._get_current_turn_for_session(game_session)
         return GameSessionStartResult(
             game_session_public_id=game_session.public_id,
             room_public_id=room.public_id,
             game_type=game_session.game_type,
             status=game_session.status,
             participants=participants,
+            rule_config=game_session.rule_config,
+            current_turn=current_turn,
+        )
+
+    async def _get_current_turn_for_session(
+        self,
+        game_session: GameSession,
+    ) -> GameSessionTurnRecord | None:
+        """game.started handoff에 포함할 현재 단어 턴 정보를 조회합니다."""
+        if game_session.current_phase_id is None:
+            return None
+        result = await self.db_session.execute(
+            select(SessionPhase, WordTurn, SessionParticipant)
+            .join(WordTurn, WordTurn.phase_id == SessionPhase.id)
+            .join(SessionParticipant, SessionParticipant.id == WordTurn.participant_id)
+            .where(
+                SessionPhase.id == game_session.current_phase_id,
+                SessionPhase.session_id == game_session.id,
+            )
+        )
+        row = result.one_or_none()
+        if row is None:
+            return None
+        phase, turn, participant = row
+        return GameSessionTurnRecord(
+            phase_id=phase.id,
+            round_number=turn.round_number,
+            turn_number=turn.turn_number,
+            actor_seat_number=participant.seat_number,
+            deadline_at=phase.deadline_at,
+            required_start_char=turn.condition_payload.get("required_start_char"),
         )
 
     async def list_active_room_members(self, room_id: UUID) -> list[RoomMemberRecord]:
@@ -553,7 +589,7 @@ class GameRepository:
         # current_phase_id와 session_phases.session_id가 원형 FK라서, 참조 대상 row를 단계별로 확정합니다.
         await self.db_session.flush()
 
-        if session.game_type == GameType.SHIRITORI.value and participant_rows:
+        if session.game_type == GameType.WORD_CHAIN.value and participant_rows:
             initial_phase = self._build_initial_word_turn_phase(
                 game_session=game_session,
                 first_participant=min(
@@ -574,6 +610,21 @@ class GameRepository:
             await self.db_session.flush()
             game_session.current_phase_id = initial_phase.id
             await self.db_session.flush()
+            first_participant = min(
+                participant_rows,
+                key=lambda participant: participant.seat_number,
+            )
+            return replace(
+                session,
+                current_turn=GameSessionTurnRecord(
+                    phase_id=initial_phase.id,
+                    round_number=1,
+                    turn_number=1,
+                    actor_seat_number=first_participant.seat_number,
+                    deadline_at=initial_phase.deadline_at,
+                    required_start_char=initial_phase.condition_payload.get("required_start_char"),
+                ),
+            )
         return session
 
     def _build_initial_word_turn_phase(

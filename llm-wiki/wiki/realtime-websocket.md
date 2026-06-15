@@ -129,11 +129,12 @@ event payload는 익명 표시명과 seat number만 공개하고, 원래 닉네�
 `game_sessions.current_phase_id`를 이 phase로 지정한다. 따라서 match snapshot은 현재 phase를 조회해
 `current_turn.phase_id`, `round_number`, `turn_number`, `actor_seat_number`, `deadline_at`,
 `required_start_char`를 복구한다. `phase_id`는 client가 `word.submit.phase_id`로 다시 보내는 현재 턴
-식별자다. 첫 턴은 `round_number=1`, `turn_number=1`, `required_start_char=null`이다.
+식별자다. 첫 턴은 `round_number=1`, `turn_number=1`, `required_start_char=null`이다. 로비
+`game.started` handoff event도 같은 첫 `current_turn` 정보를 포함한다.
 
 현재 client command는 `ping`, `word.submit`, `vote.submit`이다. `ping`은 `match.pong`으로 응답한다.
 `word.submit`은 연결 identity의 participant, payload의 `phase_id`, 서버 시각, DB current
-phase/turn/deadline, `word_game.valid_words`, used_words를 기준으로 검증한다. 성공하면 `participant_actions.action_type =
+phase/turn/deadline, `word_game.valid_words`, 현재 라운드 used_words를 기준으로 검증한다. 성공하면 `participant_actions.action_type =
 word_submit`, `word_game.submissions`, `word_game.used_words`, `score_ledger`, `game_events.event_type =
 word.accepted`를 저장하고 다음 `turn` phase와 `word_game.turns` row를 만든 뒤
 `game_sessions.current_phase_id`를 다음 phase로 옮긴다. 시작 글자 불일치, 사전 미등재, 중복 단어처럼 게임 규칙상
@@ -156,12 +157,19 @@ Timeout으로 끝말잇기 한판이 종료되면 event payload에 남은 판의
 투표 전환을 뜻하는 `next_status=voting`과 `voting_deadline_at`을 포함한다. 투표 전환 시 Backend는
 `phase_type=voting`인 `session_phases` row를 만들고 `game_sessions.current_phase_id`로 지정해 재접속
 snapshot에서 deadline을 복구할 수 있게 한다.
+남은 판의 첫 턴은 `started_at`을 timeout 확정 시각보다 5초 뒤로 잡고, `match.round.started`는 그 시작
+시각에 맞춰 broadcast한다.
 
 AI 손님의 차례에서 Agent API가 timeout, 네트워크 오류, 4xx/5xx, invalid payload, `no_candidate` 등으로
 단어를 확정하지 못하면 Backend가 실패를 확정한다. 실패는 `participant_actions.action_type =
 ai_answer_failed`, `game_events.event_type = ai_answer_failed`로 저장하고, transaction commit 이후 같은
 game session의 match 연결에 `match.turn.resolved`를 `payload.result=failed`로 broadcast한다. WebSocket
 send는 DB transaction 안에서 실행하지 않는다.
+다만 공개 payload는 도둑잡기 컨셉을 지키기 위해 내부 Agent/API 실패 사유를 노출하지 않는다.
+`payload.reason`은 `answer_unavailable`로 통일하고, `details`에서는 `agent_*`, `error`, `status_code`를
+제거한다.
+Agent가 단어를 반환했지만 Backend 검증에서 실패한 경우에는 `word`, `normalized_word`에 해당 단어를 담아
+유저들이 AI가 어떤 단어를 냈는지 볼 수 있게 한다.
 AI 실패는 현재 phase를 종료하거나 다음 턴/투표 전환 payload를 만들지 않는다. 현재 턴은 deadline까지
 유지하고, 실제 턴 종료와 다음 판/투표 전환은 `turn_timeout` 확정 경로만 담당한다.
 Agent 호출은 DB transaction 밖에서 대기하므로, 서버 timeout 등으로 이미 종료된 phase에 대해 뒤늦게
@@ -170,7 +178,7 @@ AI가 성공 답변을 가져왔더라도 `submit_word` 시점에 서버 deadlin
 않고 `turn_timeout` 확정 경로로 `match.turn.resolved`를 `payload.result=timeout`으로 broadcast한다.
 
 AI 턴 처리는 Agent API 호출을 DB 쓰기 transaction과 분리한다. 먼저 DB에서 현재 phase가 AI actor인지,
-`used_words`, `required_start_char`를 조회하고, Agent `/api/v1/agent/answer`에 `used_words`, `last_char`,
+현재 라운드의 `used_words`, `required_start_char`를 조회하고, Agent `/api/v1/agent/answer`에 `used_words`, `last_char`,
 `condition.last_char`를 보낸다. `status=ok`와 answer가 있으면 기존 `submit_word` 진행 경로로 저장하고,
 `no_candidate` 또는 Agent client 오류는 기존 `fail_ai_answer` 진행 경로로 저장한다.
 `/ws/match`의 `word.submit` 처리 후 `match.turn.resolved.payload.result=accepted`이고

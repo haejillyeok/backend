@@ -4,6 +4,46 @@
 코드 변경 상세는 Git history, PR, issue에서 확인하고, 이 파일에는 위키 페이지의 지식, 계약, 정책,
 컨벤션이 어떻게 바뀌었는지만 남깁니다.
 
+## [2026-06-15] maintenance | Hide AI internals from match clients
+
+- `payload.result=failed`의 공개 `reason`은 내부 `agent_error`/`agent_timeout` 대신 `answer_unavailable`로 통일한다는 기준을 추가했다.
+- `match.turn.resolved`의 failed 제출 단어는 공개 계약인 `word`, `normalized_word`로만 노출하고, client가 AI 내부 details key에 의존하지 않는다는 기준을 정리했다.
+- 테스트 페이지는 답변자가 AI인지 사람인지 구분하지 않고 제출 단어 공개 필드만 표시한다는 기준을 추가했다.
+- Agent가 단어를 반환했지만 Backend 검증에서 실패한 경우에는 AI 실패가 아니라 일반 참가자 오답처럼 `payload.result=rejected`로 broadcast한다는 기준을 정리했다.
+
+## [2026-06-15] maintenance | Clarify AI retry and round countdown
+
+- AI 답변 실패 후에도 같은 AI phase deadline timer를 유지해 timeout 전까지 Agent answer API를 다시 호출할 수 있다는 기준을 정리했다.
+- 테스트 페이지는 다음 라운드 첫 턴 `started_at` 전까지 별도 라운드 시작 카운트다운을 표시한다는 기준을 추가했다.
+
+## [2026-06-15] maintenance | Add delayed round start handoff
+
+- 끝말잇기 라운드 timeout 후 남은 판의 첫 턴은 `started_at`을 timeout 확정 시각보다 5초 뒤로 잡고, `match.round.started`도 그 시각에 맞춰 broadcast한다는 계약을 정리했다.
+- AI가 단어를 반환했지만 Backend 검증에서 실패한 `failed` 이벤트는 `word`, `normalized_word`에 AI 제출 단어를 포함한다는 기준을 추가했다.
+- 테스트 페이지는 timeout의 예약 `next_turn`으로 즉시 현재 턴을 바꾸지 않고, `match.round.started`에서 실제 현재 턴을 전환한다는 기준을 반영했다.
+
+## [2026-06-15] maintenance | Rename word chain game type
+
+- 공개 API와 Agent handler 선택에 쓰는 끝말잇기 game type 식별자를 `shiritori`가 아니라 `word_chain`으로 관리한다는 기준을 정리했다.
+- 단어 사전 seed와 `word_game.valid_words.game_type`도 `word_chain` 값을 기준으로 관리한다.
+
+## [2026-06-15] maintenance | Include first turn in game started handoff
+
+- `game.started` handoff event와 start REST 응답이 시작 transaction에서 생성한 첫 `current_turn`을 포함한다는 계약을 추가했다.
+- client는 match 연결 전에도 첫 차례 참가자, `phase_id`, deadline을 알 수 있고, `/ws/match` snapshot으로 같은 정보를 복구할 수 있음을 정리했다.
+
+## [2026-06-15] maintenance | Align valid word seed payload fields
+
+- Backend 기본 단어 사전 seed는 `scripts/valid_words_seed.sql`이며 `word_game.valid_words`에 DB 적재용 SQL로 반영한다는 기준을 추가했다.
+- `word_game.valid_words`가 시작/끝 글자뿐 아니라 `chosung`, `syllables`, `length`, `used_count` metadata를 함께 관리한다는 DB 설계 기준을 정리했다.
+
+## [2026-06-15] maintenance | Scope used words to current round
+
+- 끝말잇기 `used_words` 중복 판정과 Agent context는 game session 전체가 아니라 현재 라운드 기준이라는 계약을 정리했다.
+- `word_game.used_words`의 unique 기준을 `(session_id, round_number, normalized_word)`로 갱신했다.
+- `/ws/match` snapshot과 `word.submit` 검증 설명에서 `used_words` 범위를 현재 끝말잇기 판으로 명시했다.
+- 한 `Room`이 여러 `GameSession` 이력을 가질 수 있고, 결과 확정 후 같은 room이 다시 `waiting`으로 돌아간다는 상태 흐름을 명시했다.
+
 ## [2026-06-15] maintenance | Expand lobby move cleanup policy
 
 - `sunset-game-domain.md`에 새 객실 생성/다른 객실 입장 전 기존 active room membership을 정리한다는 기준을 `waiting` room 밖으로 확장했다.

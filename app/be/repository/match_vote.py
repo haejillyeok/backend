@@ -8,13 +8,14 @@ from app.be.models.game import (
     GameEvent,
     GameSession,
     ParticipantAction,
+    Room,
     ScoreLedger,
     SessionParticipant,
     SessionPhase,
     SessionResult,
     Vote,
 )
-from app.be.schemas.game_enum import GameSessionStatus
+from app.be.schemas.game_enum import GameSessionStatus, RoomStatus
 from app.be.services.match_vote import (
     MatchResultParticipantPayload,
     VoteAcceptedRecord,
@@ -133,7 +134,7 @@ class MatchVoteRepository:
         result_event_sequence: int | None = None
         if submitted_vote_count >= required_vote_count:
             result_event_sequence = accepted_sequence + 1
-            result_records = self._publish_results(
+            result_records = await self._publish_results(
                 game_session=game_session,
                 participants=participants,
                 votes=all_votes,
@@ -201,7 +202,7 @@ class MatchVoteRepository:
         )
         self.db_session.add(timeout_event)
         result_event_sequence = timeout_sequence + 1
-        result_records = self._publish_results(
+        result_records = await self._publish_results(
             game_session=game_session,
             participants=participants,
             votes=votes,
@@ -225,7 +226,7 @@ class MatchVoteRepository:
             result_created_at=now,
         )
 
-    def _publish_results(
+    async def _publish_results(
         self,
         *,
         game_session: GameSession,
@@ -315,6 +316,9 @@ class MatchVoteRepository:
 
         game_session.status = GameSessionStatus.RESULT.value
         game_session.ended_at = now
+        room = await self._get_room_for_update(game_session.room_id)
+        room.status = RoomStatus.WAITING.value
+        room.updated_at = now
         self.db_session.add(
             GameEvent(
                 id=generate_uuid_v7(),
@@ -344,6 +348,19 @@ class MatchVoteRepository:
             )
         )
         return result_records
+
+    async def _get_room_for_update(self, room_id: UUID) -> Room:
+        """결과 확정 후 같은 객실에서 다음 세션을 시작할 수 있도록 room row를 잠그고 조회합니다."""
+        result = await self.db_session.execute(
+            select(Room).where(Room.id == room_id).with_for_update()
+        )
+        room = result.scalar_one_or_none()
+        if room is None:
+            raise AppException(
+                code=ErrorCode.GAME_ROOM_NOT_FOUND,
+                details={"reason": "room_not_found"},
+            )
+        return room
 
     def _rank_by_score(self, final_scores: dict[UUID, int]) -> dict[UUID, int]:
         """동점자는 같은 등수로 계산합니다."""

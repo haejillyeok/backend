@@ -16,6 +16,7 @@ from app.be.models.game import SessionPhase, UsedWord, ValidWord, WordSubmission
 from app.be.schemas.game_enum import GameSessionStatus
 from app.be.services.match_progress import (
     AI_ANSWER_FAILED_EVENT_TYPE,
+    ROUND_START_DELAY_SECONDS,
     TURN_TIMEOUT_EVENT_TYPE,
     WORD_ACCEPTED_EVENT_TYPE,
     WORD_REJECT_ACTION_TYPE,
@@ -276,6 +277,7 @@ class MatchProgressRepository:
         )
         await self._ensure_word_not_used(
             session_id=game_session.id,
+            round_number=turn.round_number,
             normalized_word=normalized_word,
         )
         participants = await self._list_participants(game_session.id)
@@ -336,6 +338,7 @@ class MatchProgressRepository:
             id=generate_uuid_v7(),
             session_id=game_session.id,
             submission_id=submission.id,
+            round_number=turn.round_number,
             normalized_word=normalized_word,
         )
         score_delta = 10
@@ -364,6 +367,7 @@ class MatchProgressRepository:
             "round_number": next_turn.round_number,
             "turn_number": next_turn.turn_number,
             "actor_seat_number": next_participant.seat_number,
+            "started_at": next_phase.started_at.isoformat(),
             "deadline_at": next_phase.deadline_at.isoformat(),
             "required_start_char": next_required_start_char,
         }
@@ -411,6 +415,7 @@ class MatchProgressRepository:
                 round_number=next_turn.round_number,
                 turn_number=next_turn.turn_number,
                 actor_seat_number=next_participant.seat_number,
+                started_at=next_phase.started_at,
                 deadline_at=next_phase.deadline_at,
                 required_start_char=next_required_start_char,
             ),
@@ -590,10 +595,17 @@ class MatchProgressRepository:
             )
         return row
 
-    async def _ensure_word_not_used(self, *, session_id: UUID, normalized_word: str) -> None:
+    async def _ensure_word_not_used(
+        self,
+        *,
+        session_id: UUID,
+        round_number: int,
+        normalized_word: str,
+    ) -> None:
         result = await self.db_session.execute(
             select(UsedWord).where(
                 UsedWord.session_id == session_id,
+                UsedWord.round_number == round_number,
                 UsedWord.normalized_word == normalized_word,
             )
         )
@@ -714,6 +726,7 @@ class MatchProgressRepository:
 
         next_participant = self._next_participant(participants, participant)
         turn_time_seconds = int(game_session.rule_config.get("turn_time_seconds", 10))
+        next_round_started_at = now + timedelta(seconds=ROUND_START_DELAY_SECONDS)
         next_phase = SessionPhase(
             id=generate_uuid_v7(),
             session_id=game_session.id,
@@ -722,8 +735,8 @@ class MatchProgressRepository:
             actor_participant_id=next_participant.id,
             condition_payload={"required_start_char": None},
             time_limit_seconds=turn_time_seconds,
-            started_at=now,
-            deadline_at=now + timedelta(seconds=turn_time_seconds),
+            started_at=next_round_started_at,
+            deadline_at=next_round_started_at + timedelta(seconds=turn_time_seconds),
         )
         next_turn = WordTurn(
             id=generate_uuid_v7(),
@@ -739,6 +752,7 @@ class MatchProgressRepository:
             "round_number": next_turn.round_number,
             "turn_number": next_turn.turn_number,
             "actor_seat_number": next_participant.seat_number,
+            "started_at": next_phase.started_at.isoformat(),
             "deadline_at": next_phase.deadline_at.isoformat(),
             "required_start_char": None,
         }
@@ -750,6 +764,7 @@ class MatchProgressRepository:
                 round_number=next_turn.round_number,
                 turn_number=next_turn.turn_number,
                 actor_seat_number=next_participant.seat_number,
+                started_at=next_phase.started_at,
                 deadline_at=next_phase.deadline_at,
                 required_start_char=None,
             ),

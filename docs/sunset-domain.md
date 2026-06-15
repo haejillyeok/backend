@@ -101,10 +101,10 @@ Guest가 Turn 중 제출한 단어입니다. 단어는 게임 종류별 규칙�
 
 ## Game Types
 
-현재 Agent 서버는 `shiritori`, `chosung`, `contains` 타입의 단어 후보 검색을 지원합니다. 캡처의 주요
-설명은 `shiritori`, 즉 끝말잇기에 집중되어 있습니다.
+현재 Agent 서버는 `word_chain`, `chosung`, `contains` 타입의 단어 후보 검색을 지원합니다. 캡처의 주요
+설명은 `word_chain`, 즉 끝말잇기에 집중되어 있습니다.
 
-### Shiritori
+### Word Chain
 
 끝말잇기는 앞 사람이 말한 단어의 마지막 글자로 시작하는 새 단어를 이어 말하는 게임입니다.
 

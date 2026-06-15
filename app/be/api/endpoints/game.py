@@ -12,6 +12,7 @@ from app.be.schemas.response.game import (
     GameRoomSummaryResponse,
     GameSessionEntryResponse,
     GameSessionParticipantResponse,
+    GameSessionTurnResponse,
     RoomJoinResponse,
     RoomLeaveResponse,
     StartGameSessionResponse,
@@ -354,6 +355,18 @@ def map_start_result(result: GameSessionStartResult) -> StartGameSessionResponse
         game_session_token=result.game_session_token,
         game_session_token_expires_at=result.game_session_token_expires_at,
         rule_config=result.rule_config,
+        current_turn=(
+            GameSessionTurnResponse(
+                phase_id=result.current_turn.phase_id,
+                round_number=result.current_turn.round_number,
+                turn_number=result.current_turn.turn_number,
+                actor_seat_number=result.current_turn.actor_seat_number,
+                deadline_at=result.current_turn.deadline_at,
+                required_start_char=result.current_turn.required_start_char,
+            )
+            if result.current_turn is not None
+            else None
+        ),
         participants=[
             GameSessionParticipantResponse(
                 display_name=participant.display_name,

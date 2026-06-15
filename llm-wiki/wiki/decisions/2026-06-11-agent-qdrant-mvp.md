@@ -9,9 +9,9 @@ updated: 2026-06-11
 ## Decision
 
 - Backend 게임 상태 처리는 Agent 범위에 포함하지 않는다.
-- Backend의 `game_type`은 `shiritori`, `chosung`, `contains` handler 선택에만 사용하며
+- Backend의 `game_type`은 `word_chain`, `chosung`, `contains` handler 선택에만 사용하며
   Qdrant payload에는 `game_types`를 저장하지 않는다.
-- handler는 `shiritori=start_word`, `chosung=chosung`, `contains=syllables` 조건으로
+- handler는 `word_chain=start_word`, `chosung=chosung`, `contains=syllables` 조건으로
   Qdrant payload filter를 만든다.
 - `used_words`는 Qdrant `word` 필드의 `must_not` 블랙리스트 조건으로 제외한다.
 - 검증 완료 단어 payload는 `word`, `start_word`, `end_word`, `chosung`, `syllables`,
@@ -19,7 +19,7 @@ updated: 2026-06-11
 - Qdrant 후보가 있으면 `used_words`를 제외한 후보 중 최대 10개를 무작위 추출하고 그중 하나를
   무작위로 반환한다.
 - Qdrant 후보가 없으면 game type별 프롬프트로 vLLM을 한 번 호출해 2~4글자 단어를 생성한다.
-- 생성 결과는 `shiritori` 시작 글자, `chosung` 전체 초성, `contains` 포함 글자 조건과 길이,
+- 생성 결과는 `word_chain` 시작 글자, `chosung` 전체 초성, `contains` 포함 글자 조건과 길이,
   완성형 한글, `used_words` 중복 여부를 검증한다.
 - 단어 적재와 답변 사용 횟수 증가는 FastAPI background task로 처리한다.
 - request 멱등성은 MVP에서 프로세스 로컬 cache를 사용하고 Redis 교체 경계를 유지한다.

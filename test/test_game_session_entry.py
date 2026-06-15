@@ -389,7 +389,7 @@ def test_game_service_joins_waiting_room_and_persists_membership():
             public_id=room_public_id,
             owner_user_id=uuid4(),
             name="첫 객실",
-            game_type="shiritori",
+            game_type="word_chain",
             status="waiting",
             max_players=2,
         )
@@ -422,7 +422,7 @@ def test_game_service_leaves_existing_waiting_room_before_joining_another_room()
         public_id=old_room_public_id,
         owner_user_id=user.id,
         name="이전 객실",
-        game_type="shiritori",
+        game_type="word_chain",
         status="waiting",
         max_players=4,
     )
@@ -431,7 +431,7 @@ def test_game_service_leaves_existing_waiting_room_before_joining_another_room()
         public_id=new_room_public_id,
         owner_user_id=uuid4(),
         name="새 객실",
-        game_type="shiritori",
+        game_type="word_chain",
         status="waiting",
         max_players=4,
     )
@@ -481,7 +481,7 @@ def test_game_service_keeps_existing_waiting_room_when_target_room_is_full():
         public_id=old_room_public_id,
         owner_user_id=user.id,
         name="이전 객실",
-        game_type="shiritori",
+        game_type="word_chain",
         status="waiting",
         max_players=4,
     )
@@ -490,7 +490,7 @@ def test_game_service_keeps_existing_waiting_room_when_target_room_is_full():
         public_id=full_room_public_id,
         owner_user_id=uuid4(),
         name="가득 찬 객실",
-        game_type="shiritori",
+        game_type="word_chain",
         status="waiting",
         max_players=1,
     )
@@ -531,7 +531,7 @@ def test_game_service_lists_rooms_for_lobby_selection():
         GameRoomListItem(
             room_public_id=room_public_id,
             name="첫 객실",
-            game_type="shiritori",
+            game_type="word_chain",
             status="waiting",
             max_players=4,
             member_count=2,
@@ -563,7 +563,7 @@ def test_game_service_creates_waiting_room_and_owner_membership():
     result = asyncio.run(
         service.create_room(
             name="첫 객실",
-            game_type="shiritori",
+            game_type="word_chain",
             max_players=4,
             owner=owner,
         )
@@ -591,7 +591,7 @@ def test_game_service_locks_user_waiting_membership_before_creating_room():
     asyncio.run(
         service.create_room(
             name="첫 객실",
-            game_type="shiritori",
+            game_type="word_chain",
             max_players=4,
             owner=owner,
         )
@@ -615,7 +615,7 @@ def test_game_service_closes_existing_waiting_room_before_creating_new_room():
             public_id=old_room_public_id,
             owner_user_id=owner.id,
             name="이전 객실",
-            game_type="shiritori",
+            game_type="word_chain",
             status="waiting",
             max_players=4,
         ),
@@ -634,7 +634,7 @@ def test_game_service_closes_existing_waiting_room_before_creating_new_room():
     result = asyncio.run(
         service.create_room(
             name="새 객실",
-            game_type="shiritori",
+            game_type="word_chain",
             max_players=4,
             owner=owner,
         )
@@ -666,7 +666,7 @@ def test_game_service_aborts_solo_started_room_before_creating_new_room():
     old_session = GameSessionStartResult(
         game_session_public_id=game_session_public_id,
         room_public_id=old_room_public_id,
-        game_type="shiritori",
+        game_type="word_chain",
         status="starting",
         participants=[
             GameSessionParticipantRecord(
@@ -695,7 +695,7 @@ def test_game_service_aborts_solo_started_room_before_creating_new_room():
             public_id=old_room_public_id,
             owner_user_id=owner.id,
             name="이전 객실",
-            game_type="shiritori",
+            game_type="word_chain",
             status="starting",
             max_players=4,
         ),
@@ -715,7 +715,7 @@ def test_game_service_aborts_solo_started_room_before_creating_new_room():
     result = asyncio.run(
         service.create_room(
             name="새 객실",
-            game_type="shiritori",
+            game_type="word_chain",
             max_players=4,
             owner=owner,
         )
@@ -751,7 +751,7 @@ def test_game_service_authorizes_room_lobby_connection_for_active_member():
             public_id=room_public_id,
             owner_user_id=user_id,
             name="첫 객실",
-            game_type="shiritori",
+            game_type="word_chain",
             status="waiting",
             max_players=4,
         ),
@@ -798,7 +798,7 @@ def test_game_service_rejects_room_lobby_connection_for_user_outside_room():
             public_id=room_public_id,
             owner_user_id=uuid4(),
             name="첫 객실",
-            game_type="shiritori",
+            game_type="word_chain",
             status="waiting",
             max_players=4,
         ),
@@ -831,7 +831,7 @@ def test_game_service_marks_room_member_left_after_disconnect_grace():
             public_id=room_public_id,
             owner_user_id=uuid4(),
             name="첫 객실",
-            game_type="shiritori",
+            game_type="word_chain",
             status="waiting",
             max_players=4,
         ),
@@ -890,7 +890,7 @@ def test_game_service_transfers_owner_when_room_owner_leaves_waiting_room():
             public_id=room_public_id,
             owner_user_id=owner.id,
             name="첫 객실",
-            game_type="shiritori",
+            game_type="word_chain",
             status="waiting",
             max_players=4,
         ),
@@ -940,7 +940,7 @@ def test_game_service_closes_waiting_room_when_last_member_leaves():
             public_id=room_public_id,
             owner_user_id=user.id,
             name="첫 객실",
-            game_type="shiritori",
+            game_type="word_chain",
             status="waiting",
             max_players=4,
         ),
@@ -986,7 +986,7 @@ def test_game_service_skips_leave_when_room_member_already_inactive():
             public_id=room_public_id,
             owner_user_id=uuid4(),
             name="첫 객실",
-            game_type="shiritori",
+            game_type="word_chain",
             status="waiting",
             max_players=4,
         ),
@@ -1028,7 +1028,7 @@ def test_game_service_returns_existing_room_member_for_repeated_join():
             public_id=room_public_id,
             owner_user_id=uuid4(),
             name="첫 객실",
-            game_type="shiritori",
+            game_type="word_chain",
             status="waiting",
             max_players=2,
         ),
@@ -1059,7 +1059,7 @@ def test_game_service_updates_waiting_room_settings_for_owner():
             public_id=room_public_id,
             owner_user_id=owner.id,
             name="첫 객실",
-            game_type="shiritori",
+            game_type="word_chain",
             status="waiting",
             max_players=4,
             rule_config={"max_rounds": 4, "turn_time_seconds": 10},
@@ -1080,7 +1080,7 @@ def test_game_service_updates_waiting_room_settings_for_owner():
     assert result == RoomUpdateResult(
         room_public_id=room_public_id,
         name="수정된 객실",
-        game_type="shiritori",
+        game_type="word_chain",
         status="waiting",
         max_players=5,
         rule_config={"max_rounds": 8, "turn_time_seconds": 9},
@@ -1110,7 +1110,7 @@ def test_game_service_rejects_room_update_from_non_owner():
             public_id=uuid4(),
             owner_user_id=uuid4(),
             name="첫 객실",
-            game_type="shiritori",
+            game_type="word_chain",
             status="waiting",
             max_players=4,
         )
@@ -1142,7 +1142,7 @@ def test_game_service_rejects_room_update_after_game_started():
             public_id=uuid4(),
             owner_user_id=owner.id,
             name="첫 객실",
-            game_type="shiritori",
+            game_type="word_chain",
             status="starting",
             max_players=4,
         )
@@ -1176,7 +1176,7 @@ def test_game_service_rejects_join_when_room_is_full():
             public_id=room_public_id,
             owner_user_id=uuid4(),
             name="첫 객실",
-            game_type="shiritori",
+            game_type="word_chain",
             status="waiting",
             max_players=1,
         ),
@@ -1206,7 +1206,7 @@ def test_game_service_starts_session_for_room_owner_and_freezes_allowed_members(
             public_id=room_public_id,
             owner_user_id=owner_id,
             name="첫 객실",
-            game_type="shiritori",
+            game_type="word_chain",
             status="waiting",
             max_players=4,
             rule_config={"max_rounds": 8, "turn_time_seconds": 10},
@@ -1231,7 +1231,7 @@ def test_game_service_starts_session_for_room_owner_and_freezes_allowed_members(
     result = asyncio.run(service.start_session(room_public_id=room_public_id, user_id=owner_id))
 
     assert result.room_public_id == room_public_id
-    assert result.game_type == "shiritori"
+    assert result.game_type == "word_chain"
     assert result.status == "starting"
     assert result.rule_config == {"max_rounds": 8, "turn_time_seconds": 10}
     assert [participant.participant_type for participant in result.participants] == [
@@ -1268,7 +1268,7 @@ def test_game_service_returns_existing_session_for_repeated_start_request():
     existing_session = GameSessionStartResult(
         game_session_public_id=game_session_public_id,
         room_public_id=room_public_id,
-        game_type="shiritori",
+        game_type="word_chain",
         status="starting",
         participants=[
             GameSessionParticipantRecord(
@@ -1288,7 +1288,7 @@ def test_game_service_returns_existing_session_for_repeated_start_request():
             public_id=room_public_id,
             owner_user_id=owner_id,
             name="첫 객실",
-            game_type="shiritori",
+            game_type="word_chain",
             status="starting",
             max_players=4,
         ),
@@ -1388,6 +1388,7 @@ def test_start_game_session_endpoint_returns_session_for_authenticated_owner(mon
     app = create_app()
     room_public_id = uuid4()
     game_session_public_id = uuid4()
+    phase_id = uuid4()
     broadcast_calls: list[tuple[object, dict]] = []
     current_user = CurrentUser(
         id=uuid4(),
@@ -1405,11 +1406,23 @@ def test_start_game_session_endpoint_returns_session_for_authenticated_owner(mon
                 {
                     "game_session_public_id": game_session_public_id,
                     "room_public_id": room_public_id,
-                    "game_type": "shiritori",
+                    "game_type": "word_chain",
                     "status": "starting",
                     "rule_config": {"max_rounds": 8, "turn_time_seconds": 10},
                     "game_session_token": "owner-resume-token",
                     "game_session_token_expires_at": datetime(2026, 6, 12, 1, tzinfo=KST),
+                    "current_turn": type(
+                        "CurrentTurn",
+                        (),
+                        {
+                            "phase_id": phase_id,
+                            "round_number": 1,
+                            "turn_number": 1,
+                            "actor_seat_number": 1,
+                            "deadline_at": datetime(2026, 6, 12, 0, 0, 10, tzinfo=KST),
+                            "required_start_char": None,
+                        },
+                    )(),
                     "participants": [
                         type(
                             "Participant",
@@ -1455,11 +1468,19 @@ def test_start_game_session_endpoint_returns_session_for_authenticated_owner(mon
         "data": {
             "game_session_public_id": str(game_session_public_id),
             "room_public_id": str(room_public_id),
-            "game_type": "shiritori",
+            "game_type": "word_chain",
             "status": "starting",
             "game_session_token": "owner-resume-token",
             "game_session_token_expires_at": "2026-06-12T01:00:00+09:00",
             "rule_config": {"max_rounds": 8, "turn_time_seconds": 10},
+            "current_turn": {
+                "phase_id": str(phase_id),
+                "round_number": 1,
+                "turn_number": 1,
+                "actor_seat_number": 1,
+                "deadline_at": "2026-06-12T00:00:10+09:00",
+                "required_start_char": None,
+            },
             "participants": [
                 {
                     "display_name": "1번 손님",
@@ -1480,9 +1501,17 @@ def test_start_game_session_endpoint_returns_session_for_authenticated_owner(mon
                 "payload": {
                     "game_session_public_id": str(game_session_public_id),
                     "room_public_id": str(room_public_id),
-                    "game_type": "shiritori",
+                    "game_type": "word_chain",
                     "status": "starting",
                     "rule_config": {"max_rounds": 8, "turn_time_seconds": 10},
+                    "current_turn": {
+                        "phase_id": str(phase_id),
+                        "round_number": 1,
+                        "turn_number": 1,
+                        "actor_seat_number": 1,
+                        "deadline_at": "2026-06-12T00:00:10+09:00",
+                        "required_start_char": None,
+                    },
                     "participants": [
                         {
                             "display_name": "1번 손님",

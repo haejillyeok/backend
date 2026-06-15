@@ -166,7 +166,7 @@ Agent 비즈니스 API를 사용하려면 최소 32자의 `AGENT_API_KEY`와 Qdr
 QDRANT_URL=http://qdrant:6333
 QDRANT_COLLECTION=game_words
 VLLM_BASE_URL=http://vllm:8000
-VLLM_MODEL_NAME=shiritori-llm
+VLLM_MODEL_NAME=word_chain-llm
 USE_VLLM=true
 CANDIDATE_SHORTLIST_SIZE=10
 VLLM_TIMEOUT_SECONDS=10
@@ -221,6 +221,18 @@ Agent image는 단일 저장소 image를 사용하며 manifest 기본값은
 python scripts/init_qdrant.py \
   --url http://qdrant:6333 \
   --collection game_words
+```
+
+Backend 단어 사전은 `scripts/valid_words_seed.sql`로 `word_game.valid_words`에 적재합니다.
+원본 JSONL을 다시 받을 때만 `scripts/seed_valid_words.py`로 SQL seed를 재생성합니다.
+
+```bash
+.venv/bin/python scripts/seed_valid_words.py \
+  /path/to/shiritori_words_rule_cleaned_fixed_schema.jsonl \
+  scripts/valid_words_seed.sql
+
+psql "postgresql://user:password@localhost:5432/db" \
+  -f scripts/valid_words_seed.sql
 ```
 
 포맷은 `ruff`로 관리합니다. 변경 전 확인은 `format-check`, 로컬 자동 정리는 `format`을

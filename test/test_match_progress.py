@@ -13,7 +13,7 @@ from app.be.models.game import (
 )
 from app.be.models.game import SessionPhase, UsedWord, WordSubmission, WordTurn
 from app.be.repository.match_progress import MatchProgressRepository
-from app.be.services.match_progress import MatchProgressService
+from app.be.services.match_progress import AiAnswerFailureRecord, MatchProgressService
 from app.shared.core.exceptions import AppException
 
 
@@ -51,6 +51,7 @@ class FakeDbSession:
     def __init__(self, results=None) -> None:
         self.results = list(results or [])
         self.added = []
+        self.statements = []
         self.flushed_item_types = []
         self.observed_game_sessions = []
         self.flushed_game_session_current_phase_ids = []
@@ -58,6 +59,7 @@ class FakeDbSession:
         self.committed = False
 
     async def execute(self, statement):
+        self.statements.append(statement)
         result = self.results.pop(0)
         if (
             isinstance(result.scalar, GameSession)
@@ -88,7 +90,7 @@ def build_session(session_id: UUID, public_id: UUID) -> GameSession:
         id=session_id,
         public_id=public_id,
         room_id=uuid4(),
-        game_type="shiritori",
+        game_type="word_chain",
         status="in_progress",
         rule_config={"max_rounds": 8, "turn_time_seconds": 10},
         started_at=datetime(2026, 6, 13, tzinfo=KST),
@@ -156,13 +158,114 @@ async def test_match_progress_service_commits_ai_failure_and_returns_broadcast_e
             "result": "failed",
             "word": None,
             "normalized_word": None,
-            "reason": "agent_timeout",
+            "reason": "answer_unavailable",
             "details": {"timeout_seconds": 3},
             "score_delta": 0,
             "created_at": datetime(2026, 6, 13, tzinfo=KST),
         },
     }
     assert "participant_type" not in str(event.message)
+    assert "agent" not in str(event.message)
+
+
+async def test_match_progress_service_hides_internal_agent_failure_details() -> None:
+    game_session_public_id = uuid4()
+    phase_id = uuid4()
+    participant_id = uuid4()
+
+    class FakeRepository:
+        async def record_ai_answer_failure(self, **kwargs):
+            return AiAnswerFailureRecord(
+                game_session_public_id=game_session_public_id,
+                phase_id=phase_id,
+                participant_id=participant_id,
+                display_name="2번 손님",
+                seat_number=2,
+                action_id=uuid4(),
+                event_id=uuid4(),
+                event_sequence=7,
+                reason="agent_error",
+                details={
+                    "error": "agent answer request failed",
+                    "status_code": 503,
+                    "agent_reason": "no_available_word",
+                },
+                created_at=datetime(2026, 6, 13, tzinfo=KST),
+            )
+
+        async def commit(self) -> None:
+            pass
+
+    service = MatchProgressService(FakeRepository())
+
+    event = await service.fail_ai_answer(
+        game_session_public_id=game_session_public_id,
+        phase_id=phase_id,
+        participant_id=participant_id,
+        reason="agent_error",
+        details={
+            "error": "agent answer request failed",
+            "status_code": 503,
+            "agent_reason": "no_available_word",
+        },
+    )
+
+    assert event is not None
+    assert event.message["payload"]["reason"] == "answer_unavailable"
+    assert event.message["payload"]["details"] == {}
+    assert "agent" not in str(event.message)
+
+
+async def test_match_progress_service_includes_rejected_ai_answer_word_in_failed_event() -> None:
+    game_session_public_id = uuid4()
+    phase_id = uuid4()
+    participant_id = uuid4()
+    created_at = datetime(2026, 6, 13, tzinfo=KST)
+
+    class FakeRepository:
+        def __init__(self) -> None:
+            self.committed = False
+
+        async def record_ai_answer_failure(self, **kwargs):
+            return AiAnswerFailureRecord(
+                game_session_public_id=game_session_public_id,
+                phase_id=phase_id,
+                participant_id=participant_id,
+                display_name="2번 손님",
+                seat_number=2,
+                action_id=uuid4(),
+                event_id=uuid4(),
+                event_sequence=7,
+                reason="word_not_in_dictionary",
+                details={
+                    "agent_answer": "없는단어",
+                    "validation_reason": "word_not_in_dictionary",
+                },
+                created_at=created_at,
+            )
+
+        async def commit(self) -> None:
+            self.committed = True
+
+    service = MatchProgressService(FakeRepository())
+
+    event = await service.fail_ai_answer(
+        game_session_public_id=game_session_public_id,
+        phase_id=phase_id,
+        participant_id=participant_id,
+        reason="word_not_in_dictionary",
+        details={
+            "agent_answer": "없는단어",
+            "validation_reason": "word_not_in_dictionary",
+        },
+    )
+
+    assert event is not None
+    assert event.message["payload"]["result"] == "failed"
+    assert event.message["payload"]["word"] == "없는단어"
+    assert event.message["payload"]["normalized_word"] == "없는단어"
+    assert event.message["payload"]["details"] == {"validation_reason": "word_not_in_dictionary"}
+    assert "agent_answer" not in event.message["payload"]["details"]
 
 
 async def test_match_progress_service_keeps_ai_failure_without_transition_payload() -> None:
@@ -344,6 +447,7 @@ async def test_match_progress_service_commits_word_submission_and_returns_broadc
                     round_number=1,
                     turn_number=2,
                     actor_seat_number=2,
+                    started_at=now,
                     deadline_at=datetime(2026, 6, 13, 0, 0, 15, tzinfo=KST),
                     required_start_char="과",
                 ),
@@ -833,7 +937,8 @@ async def test_match_progress_repository_starts_next_round_after_timeout_before_
     assert next_phase.phase_number == 5
     assert next_phase.actor_participant_id == next_participant_id
     assert next_phase.condition_payload == {"required_start_char": None}
-    assert next_phase.deadline_at == datetime(2026, 6, 13, 0, 0, 21, tzinfo=KST)
+    assert next_phase.started_at == datetime(2026, 6, 13, 0, 0, 16, tzinfo=KST)
+    assert next_phase.deadline_at == datetime(2026, 6, 13, 0, 0, 26, tzinfo=KST)
     assert isinstance(next_turn, WordTurn)
     assert next_turn.round_number == 2
     assert next_turn.turn_number == 1
@@ -842,8 +947,10 @@ async def test_match_progress_repository_starts_next_round_after_timeout_before_
     assert game_session.status == "playing"
     assert event.payload["next_turn"]["round_number"] == 2
     assert event.payload["next_turn"]["actor_seat_number"] == 2
+    assert event.payload["next_turn"]["started_at"] == "2026-06-13T00:00:16+09:00"
     assert record.next_turn is not None
     assert record.next_turn.round_number == 2
+    assert record.next_turn.started_at == datetime(2026, 6, 13, 0, 0, 16, tzinfo=KST)
     assert action.action_type == "turn_timeout"
     assert db_session.flushed_item_types[0] == ["ParticipantAction"]
     assert db_session.flushed_item_types[1] == ["ParticipantAction", "SessionPhase"]
@@ -1018,6 +1125,7 @@ async def test_match_progress_repository_accepts_word_submission_and_starts_next
     assert submission.normalized_word == "사과"
     assert isinstance(used_word, UsedWord)
     assert used_word.session_id == session_id
+    assert used_word.round_number == 1
     assert used_word.normalized_word == "사과"
     assert isinstance(score, ScoreLedger)
     assert score.score_delta == 10
@@ -1062,6 +1170,10 @@ async def test_match_progress_repository_accepts_word_submission_and_starts_next
         "GameEvent",
     ]
     assert db_session.committed is True
+    used_word_lookup_sql = str(
+        db_session.statements[4].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "used_words.round_number" in used_word_lookup_sql
 
 
 async def test_match_progress_repository_rejects_word_missing_from_dictionary() -> None:

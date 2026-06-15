@@ -5,7 +5,7 @@ from app.agent.schemas.request.data_stack import DataStackRequest
 from app.agent.services.answer import AgentService
 from app.agent.services.candidate import CandidateService
 from app.agent.services.game_handlers import build_handler_registry
-from app.agent.services.game_handlers.shiritori import ShiritoriHandler
+from app.agent.services.game_handlers.word_chain import WordChainHandler
 from app.agent.services.idempotency import InMemoryIdempotencyStore
 from app.agent.services.stack import StackService
 from app.agent.services.usage import QdrantUsageService
@@ -51,7 +51,7 @@ def build_service(
         vllm_service
         or VllmService(
             "http://vllm:8000",
-            "shiritori-llm",
+            "word_chain-llm",
             enabled=False,
             timeout_seconds=1,
         ),
@@ -62,7 +62,7 @@ def answer_request(request_id: str = "req-1") -> AgentAnswerRequest:
     return AgentAnswerRequest(
         request_id=request_id,
         room_id="room-1",
-        game_type="shiritori",
+        game_type="word_chain",
         used_words=["거미줄"],
         last_char="줄",
     )
@@ -88,14 +88,14 @@ async def test_no_qdrant_candidate_uses_vllm_fallback_once() -> None:
     assert execution.usage_word is None
     assert vllm_service.calls == [
         {
-            "game_type": "shiritori",
+            "game_type": "word_chain",
             "condition": "줄",
             "used_words": {"거미줄"},
         }
     ]
 
 
-async def test_non_shiritori_no_candidate_uses_game_specific_fallback() -> None:
+async def test_non_word_chain_no_candidate_uses_game_specific_fallback() -> None:
     vllm_service = FakeVllmService("고구마")
     service = build_service(FakeWordRepository(), vllm_service)
 
@@ -156,12 +156,12 @@ async def test_used_words_are_excluded_after_single_repository_query() -> None:
     service = CandidateService(repository, random_source=random.Random(0))
     request = AgentAnswerRequest(
         room_id="room-1",
-        game_type="shiritori",
+        game_type="word_chain",
         used_words=["줄넘기"],
         last_char="줄",
     )
 
-    result = await service.select(request, ShiritoriHandler())
+    result = await service.select(request, WordChainHandler())
 
     assert result is not None
     assert result.selected.word == "줄다리기"
@@ -180,11 +180,11 @@ async def test_candidate_selection_uses_random_shortlist_of_ten() -> None:
     result = await service.select(
         AgentAnswerRequest(
             room_id="room-1",
-            game_type="shiritori",
+            game_type="word_chain",
             used_words=[],
             last_char="줄",
         ),
-        ShiritoriHandler(),
+        WordChainHandler(),
     )
 
     assert result.selected is not None
@@ -229,7 +229,7 @@ async def test_stack_builds_payload_and_avoids_duplicate_job() -> None:
 def test_stack_request_accepts_legacy_fields_without_storing_them() -> None:
     request = DataStackRequest.model_validate(
         {
-            "game_types": ["shiritori", "chosung", "contains"],
+            "game_types": ["word_chain", "chosung", "contains"],
             "words": ["사과"],
             "options": {
                 "is_valid": True,

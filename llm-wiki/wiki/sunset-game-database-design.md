@@ -59,8 +59,9 @@ DB는 게임의 최종 사실과 복구 가능한 기록을 저장한다.
   unique lookup index를 기준으로 한다. 현재 서버 로직에 시작 글자별 후보 조회가 없으므로
   `starts_with` 별도 index는 두지 않는다.
 - `(session_id, sequence)`, `(session_id, action_number)`, `(session_id, phase_number)`,
-  `(session_id, seat_number)`, `(session_id, participant_id)`, `(session_id, normalized_word)`처럼 unique
-  constraint가 이미 prefix 조회를 커버하는 경우 같은 첫 column만 가진 별도 단일 index는 두지 않는다.
+  `(session_id, seat_number)`, `(session_id, participant_id)`,
+  `(session_id, round_number, normalized_word)`처럼 unique constraint가 이미 prefix 조회를 커버하는 경우
+  같은 첫 column만 가진 별도 단일 index는 두지 않는다.
 
 ## Layering Strategy
 
@@ -105,8 +106,8 @@ MVP가 단어 게임만 구현하더라도 공통 core는 플랫폼 기준으로
 
 ### `game.rooms`
 
-대기방과 객실 목록의 기준 resource다. 게임이 끝난 뒤 같은 room을 다시 대기 상태로 돌리는 흐름은
-미래 확장 후보이며, 현재 Backend MVP는 게임 세션 결과 확정까지만 처리한다.
+대기방과 객실 목록의 기준 resource다. 한 room은 여러 `game.game_sessions` 이력을 가질 수 있으며,
+게임 세션 결과가 확정되면 room은 다시 `waiting` 상태로 돌아가 다음 게임 세션을 시작할 수 있다.
 
 | Column | Type | Notes |
 | --- | --- | --- |
@@ -114,7 +115,7 @@ MVP가 단어 게임만 구현하더라도 공통 core는 플랫폼 기준으로
 | `public_id` | UUID v7 | 외부 노출용 unique id |
 | `owner_user_id` | UUID v7 | `users.users.id`, 방장 |
 | `name` | text | 객실 이름 |
-| `game_type` | text | `shiritori`, `word_guess`, `card_duel` 등 |
+| `game_type` | text | `word_chain`, `word_guess`, `card_duel` 등 |
 | `status` | text | `waiting`, `starting`, `playing`, `closed` 등 |
 | `max_players` | integer | 실제 유저 최대 인원. AI 포함 총원은 session에서 결정 |
 | `created_at` | timestamptz | 생성 시각 |
@@ -368,11 +369,15 @@ row에 있는 단어만 accepted로 처리한다.
 | Column | Type | Notes |
 | --- | --- | --- |
 | `id` | UUID v7 | 내부 join용 primary key |
-| `game_type` | text | `shiritori`, `chosung`, `contains` 등 적용 게임 |
+| `game_type` | text | `word_chain`, `chosung`, `contains` 등 적용 게임 |
 | `word` | text | 표시용 원문 단어 |
 | `normalized_word` | text | 제출 판정과 중복 판정용 정규화 단어 |
 | `starts_with` | text | 시작 글자 후보 검색용 값 |
 | `ends_with` | text | 끝말잇기 다음 시작 글자 계산용 값 |
+| `chosung` | text nullable | 초성 게임과 후보 분석용 초성 문자열 |
+| `syllables` | jsonb nullable | JSONL payload의 완성형 한글 음절 배열 |
+| `length` | integer nullable | 단어 음절 수 |
+| `used_count` | integer | 사전 단어가 AI 후보로 사용된 횟수. 기본값은 0 |
 | `is_active` | boolean | 현재 판정에 사용할 단어 여부 |
 | `source` | text nullable | 사전 출처 또는 import batch |
 | `created_at` | timestamptz | 등록 시각 |
@@ -383,6 +388,8 @@ row에 있는 단어만 accepted로 처리한다.
 - `(game_type, normalized_word)` unique
 - 현재 단어 검증 쿼리는 `(game_type, normalized_word, is_active)` exact lookup이므로 unique index로 조회하고
   `is_active`는 row 확인 시 필터링한다.
+- `starts_with`, `ends_with`, `chosung`, `syllables`, `length`, `used_count`는
+  검증 완료 JSONL 원본에서 생성한 `scripts/valid_words_seed.sql`로 함께 적재한다.
 - 시작 글자별 후보 조회 API가 생기면 `(game_type, starts_with) WHERE is_active IS TRUE` index를 그때 추가한다.
 
 ### `word_game.turns`
@@ -413,18 +420,19 @@ row에 있는 단어만 accepted로 처리한다.
 
 ### `word_game.used_words`
 
-세션 안 사용 단어 uniqueness를 DB에서 강하게 막아야 할 때 추가한다.
+세션의 특정 라운드 안 사용 단어 uniqueness를 DB에서 강하게 막아야 할 때 추가한다.
 
 | Column | Type | Notes |
 | --- | --- | --- |
 | `id` | UUID v7 | 내부 join용 primary key |
 | `session_id` | UUID v7 | `game.game_sessions.id` |
 | `submission_id` | UUID v7 | `word_game.submissions.id` |
+| `round_number` | integer | 단어가 사용된 끝말잇기 판 번호 |
 | `normalized_word` | text | 중복 판정용 정규화 단어 |
 
 권장 제약:
 
-- `(session_id, normalized_word)` unique
+- `(session_id, round_number, normalized_word)` unique
 
 ## Snapshot Reconstruction
 

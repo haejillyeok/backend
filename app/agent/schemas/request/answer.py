@@ -6,7 +6,7 @@ from app.agent.schemas.base import AgentSchemaModel
 
 
 class GameType(str, Enum):
-    SHIRITORI = "shiritori"
+    WORD_CHAIN = "word_chain"
     CHOSUNG = "chosung"
     CONTAINS = "contains"
 

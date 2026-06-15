@@ -9,7 +9,7 @@ class AgentSettings(BaseSettings):
     qdrant_url: str = "http://qdrant:6333"
     qdrant_collection: str = "game_words"
     vllm_base_url: str = "http://vllm:8000"
-    vllm_model_name: str = "shiritori-llm"
+    vllm_model_name: str = "word_chain-llm"
     use_vllm: bool = True
     use_redis_counter: bool = False
     candidate_limit: int = 100

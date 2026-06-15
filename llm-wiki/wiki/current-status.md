@@ -1,7 +1,7 @@
 ---
 title: Current Status
 type: overview
-updated: 2026-06-13
+updated: 2026-06-15
 ---
 
 # Current Status
@@ -14,10 +14,12 @@ updated: 2026-06-13
 - `app/be/models/`는 백엔드 SQLAlchemy ORM 모델과 Alembic autogenerate용 metadata base를 가진다.
 - `app/agent/`는 에이전트 FastAPI 앱, API 라우터, dependency, Qdrant repository, schema,
   game handler, service 계층을 가진다.
-- Agent는 Backend가 전달한 `game_type`으로 `shiritori`, `chosung`, `contains` handler를
+- Agent는 Backend가 전달한 `game_type`으로 `word_chain`, `chosung`, `contains` handler를
   선택하고 각각 `start_word`, `chosung`, `syllables`로 Qdrant를 검색한다.
 - Qdrant payload에는 `game_types`를 저장하지 않으며 `used_words`는 `word` 블랙리스트로
   제외한다. 후보가 없으면 game type별 vLLM fallback을 사용한다.
+- Backend 기본 단어 사전 seed는 `scripts/valid_words_seed.sql`이며, `word_game.valid_words`에
+  DB 적재용 SQL로 반영한다.
 - `deploy/k3s/`는 Agent, Qdrant, vLLM 배포 구성을 관리한다.
 - 현재 회사 k3s Agent의 외부 경로는 NodePort `31080`에서 Azure VM localhost로 이어지는
   SSH reverse tunnel과 Azure Nginx가 담당한다.

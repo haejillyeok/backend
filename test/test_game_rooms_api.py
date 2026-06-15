@@ -40,7 +40,7 @@ def test_list_game_rooms_returns_lobby_room_summaries() -> None:
                     GameRoomListItem(
                         room_public_id=room_public_id,
                         name="첫 객실",
-                        game_type="shiritori",
+                        game_type="word_chain",
                         status="waiting",
                         max_players=4,
                         member_count=2,
@@ -51,7 +51,7 @@ def test_list_game_rooms_returns_lobby_room_summaries() -> None:
                 current_membership=CurrentLobbyMembership(
                     room_public_id=room_public_id,
                     name="첫 객실",
-                    game_type="shiritori",
+                    game_type="word_chain",
                     status="waiting",
                     max_players=4,
                     member_count=2,
@@ -73,7 +73,7 @@ def test_list_game_rooms_returns_lobby_room_summaries() -> None:
             {
                 "room_public_id": str(room_public_id),
                 "name": "첫 객실",
-                "game_type": "shiritori",
+                "game_type": "word_chain",
                 "status": "waiting",
                 "max_players": 4,
                 "member_count": 2,
@@ -85,7 +85,7 @@ def test_list_game_rooms_returns_lobby_room_summaries() -> None:
         "current_membership": {
             "room_public_id": str(room_public_id),
             "name": "첫 객실",
-            "game_type": "shiritori",
+            "game_type": "word_chain",
             "status": "waiting",
             "max_players": 4,
             "member_count": 2,
@@ -111,7 +111,7 @@ def test_create_game_room_creates_owner_membership() -> None:
         ) -> RoomCreateResult:
             assert owner == user
             assert name == "첫 객실"
-            assert game_type == "shiritori"
+            assert game_type == "word_chain"
             assert max_players == 4
             return RoomCreateResult(
                 room_public_id=room_public_id,
@@ -130,14 +130,14 @@ def test_create_game_room_creates_owner_membership() -> None:
 
     response = client.post(
         "/api/v1/game/rooms",
-        json={"name": "첫 객실", "game_type": "shiritori", "max_players": 4},
+        json={"name": "첫 객실", "game_type": "word_chain", "max_players": 4},
     )
 
     assert response.status_code == 201
     assert response.json()["data"] == {
         "room_public_id": str(room_public_id),
         "name": "첫 객실",
-        "game_type": "shiritori",
+        "game_type": "word_chain",
         "status": "waiting",
         "max_players": 4,
         "member_count": 1,
@@ -227,7 +227,7 @@ def test_update_game_room_returns_updated_settings_for_owner() -> None:
             return RoomUpdateResult(
                 room_public_id=room_public_id,
                 name=name,
-                game_type="shiritori",
+                game_type="word_chain",
                 status="waiting",
                 max_players=max_players,
                 rule_config=rule_config,
@@ -253,7 +253,7 @@ def test_update_game_room_returns_updated_settings_for_owner() -> None:
     assert response.json()["data"] == {
         "room_public_id": str(room_public_id),
         "name": "수정된 객실",
-        "game_type": "shiritori",
+        "game_type": "word_chain",
         "status": "waiting",
         "max_players": 5,
         "rule_config": {"max_rounds": 8, "turn_time_seconds": 10},
@@ -270,7 +270,7 @@ def test_update_game_room_broadcasts_updated_settings_to_lobby_subscribers(monke
             return RoomUpdateResult(
                 room_public_id=room_public_id,
                 name=name,
-                game_type="shiritori",
+                game_type="word_chain",
                 status="waiting",
                 max_players=max_players,
                 rule_config=rule_config,

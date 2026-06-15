@@ -41,8 +41,10 @@ class FakeResult:
 class FakeDbSession:
     def __init__(self, results) -> None:
         self.results = list(results)
+        self.statements = []
 
     async def execute(self, statement):
+        self.statements.append(statement)
         return self.results.pop(0)
 
 
@@ -63,6 +65,7 @@ class FakeProgressService:
     def __init__(self) -> None:
         self.submitted_words = []
         self.failures = []
+        self.rejected_words = []
 
     async def submit_word(self, **kwargs):
         self.submitted_words.append(kwargs)
@@ -84,6 +87,20 @@ class FakeProgressService:
             },
         )
 
+    async def reject_word(self, **kwargs):
+        self.rejected_words.append(kwargs)
+        return MatchBroadcastEvent(
+            game_session_public_id=kwargs["game_session_public_id"],
+            message={
+                "type": "match.turn.resolved",
+                "payload": {
+                    "result": "rejected",
+                    "word": kwargs["word"],
+                    "reason": kwargs["reason"],
+                },
+            },
+        )
+
 
 def ai_context(
     *,
@@ -95,7 +112,7 @@ def ai_context(
         game_session_public_id=game_session_public_id,
         phase_id=phase_id,
         participant_id=participant_id,
-        game_type="shiritori",
+        game_type="word_chain",
         used_words=["사과", "과자"],
         required_start_char="자",
     )
@@ -123,7 +140,7 @@ async def test_match_ai_turn_service_requests_agent_with_used_words_and_submits_
         result=AgentAnswerResult(
             request_id=str(phase_id),
             room_id=str(game_session_public_id),
-            game_type="shiritori",
+            game_type="word_chain",
             answer="자동차",
             status="ok",
             reason=None,
@@ -141,7 +158,7 @@ async def test_match_ai_turn_service_requests_agent_with_used_words_and_submits_
     request = agent_client.requests[0]
     assert request.request_id == str(phase_id)
     assert request.room_id == str(game_session_public_id)
-    assert request.game_type == "shiritori"
+    assert request.game_type == "word_chain"
     assert request.used_words == ["사과", "과자"]
     assert request.last_char == "자"
     assert request.condition.last_char == "자"
@@ -177,7 +194,7 @@ async def test_match_ai_turn_service_records_failure_when_agent_has_no_candidate
         result=AgentAnswerResult(
             request_id=str(phase_id),
             room_id=str(game_session_public_id),
-            game_type="shiritori",
+            game_type="word_chain",
             answer=None,
             status="no_candidate",
             reason="no_available_word",
@@ -205,6 +222,58 @@ async def test_match_ai_turn_service_records_failure_when_agent_has_no_candidate
     assert event is not None
     assert event.message["type"] == "match.turn.resolved"
     assert event.message["payload"]["result"] == "failed"
+
+
+async def test_match_ai_turn_service_preserves_no_candidate_answer_word() -> None:
+    game_session_public_id = uuid4()
+    phase_id = uuid4()
+    participant_id = uuid4()
+    now = datetime(2026, 6, 13, tzinfo=KST)
+
+    class FakeRepository:
+        async def get_ai_turn_context(self, **kwargs):
+            return ai_context(
+                game_session_public_id=game_session_public_id,
+                phase_id=phase_id,
+                participant_id=participant_id,
+            )
+
+    agent_client = FakeAgentAnswerClient(
+        result=AgentAnswerResult(
+            request_id=str(phase_id),
+            room_id=str(game_session_public_id),
+            game_type="word_chain",
+            answer="과자",
+            status="no_candidate",
+            reason="word_not_in_dictionary",
+        )
+    )
+    progress_service = FakeProgressService()
+    service = MatchAiTurnService(FakeRepository(), agent_client, progress_service)
+
+    event = await service.play_ai_turn(
+        game_session_public_id=game_session_public_id,
+        phase_id=phase_id,
+        now=now,
+    )
+
+    assert progress_service.submitted_words == []
+    assert progress_service.failures == []
+    assert progress_service.rejected_words == [
+        {
+            "game_session_public_id": game_session_public_id,
+            "phase_id": phase_id,
+            "participant_id": participant_id,
+            "word": "과자",
+            "reason": "word_not_in_dictionary",
+            "details": {"validation_reason": "word_not_in_dictionary"},
+            "now": now,
+        }
+    ]
+    assert event is not None
+    assert event.message["type"] == "match.turn.resolved"
+    assert event.message["payload"]["result"] == "rejected"
+    assert event.message["payload"]["word"] == "과자"
 
 
 async def test_match_ai_turn_service_records_failure_when_agent_request_fails() -> None:
@@ -244,6 +313,65 @@ async def test_match_ai_turn_service_records_failure_when_agent_request_fails() 
     assert event.message["payload"]["result"] == "failed"
 
 
+async def test_match_ai_turn_service_rejects_agent_answer_like_player_word() -> None:
+    game_session_public_id = uuid4()
+    phase_id = uuid4()
+    participant_id = uuid4()
+    now = datetime(2026, 6, 13, tzinfo=KST)
+
+    class FakeRepository:
+        async def get_ai_turn_context(self, **kwargs):
+            return ai_context(
+                game_session_public_id=game_session_public_id,
+                phase_id=phase_id,
+                participant_id=participant_id,
+            )
+
+    class RejectingProgressService(FakeProgressService):
+        async def submit_word(self, **kwargs):
+            self.submitted_words.append(kwargs)
+            raise AppException(
+                code=ErrorCode.VALIDATION_ERROR,
+                details={"reason": "word_not_in_dictionary"},
+            )
+
+    agent_client = FakeAgentAnswerClient(
+        result=AgentAnswerResult(
+            request_id=str(phase_id),
+            room_id=str(game_session_public_id),
+            game_type="word_chain",
+            answer="없는단어",
+            status="ok",
+            reason=None,
+        )
+    )
+    progress_service = RejectingProgressService()
+    service = MatchAiTurnService(FakeRepository(), agent_client, progress_service)
+
+    event = await service.play_ai_turn(
+        game_session_public_id=game_session_public_id,
+        phase_id=phase_id,
+        now=now,
+    )
+
+    assert progress_service.failures == []
+    assert progress_service.rejected_words == [
+        {
+            "game_session_public_id": game_session_public_id,
+            "phase_id": phase_id,
+            "participant_id": participant_id,
+            "word": "없는단어",
+            "reason": "word_not_in_dictionary",
+            "details": {"validation_reason": "word_not_in_dictionary"},
+            "now": now,
+        }
+    ]
+    assert event is not None
+    assert event.message["type"] == "match.turn.resolved"
+    assert event.message["payload"]["result"] == "rejected"
+    assert event.message["payload"]["word"] == "없는단어"
+
+
 async def test_match_ai_turn_service_ignores_answer_when_phase_already_finished() -> None:
     game_session_public_id = uuid4()
     phase_id = uuid4()
@@ -270,7 +398,7 @@ async def test_match_ai_turn_service_ignores_answer_when_phase_already_finished(
         result=AgentAnswerResult(
             request_id=str(phase_id),
             room_id=str(game_session_public_id),
-            game_type="shiritori",
+            game_type="word_chain",
             answer="자동차",
             status="ok",
             reason=None,
@@ -329,7 +457,7 @@ async def test_match_ai_turn_service_converts_late_answer_to_turn_timeout() -> N
         result=AgentAnswerResult(
             request_id=str(phase_id),
             room_id=str(game_session_public_id),
-            game_type="shiritori",
+            game_type="word_chain",
             answer="자동차",
             status="ok",
             reason=None,
@@ -366,7 +494,7 @@ async def test_match_ai_turn_repository_builds_context_for_ai_actor() -> None:
         id=session_id,
         public_id=game_session_public_id,
         room_id=uuid4(),
-        game_type="shiritori",
+        game_type="word_chain",
         status="playing",
         rule_config={"max_rounds": 8, "turn_time_seconds": 10},
     )
@@ -404,6 +532,7 @@ async def test_match_ai_turn_repository_builds_context_for_ai_actor() -> None:
                     UsedWord(
                         id=uuid4(),
                         session_id=session_id,
+                        round_number=1,
                         submission_id=uuid4(),
                         normalized_word="사과",
                     )
@@ -422,7 +551,11 @@ async def test_match_ai_turn_repository_builds_context_for_ai_actor() -> None:
         game_session_public_id=game_session_public_id,
         phase_id=phase_id,
         participant_id=participant_id,
-        game_type="shiritori",
+        game_type="word_chain",
         used_words=["사과"],
         required_start_char="자",
     )
+    used_word_lookup_sql = str(
+        db_session.statements[2].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "used_words.round_number" in used_word_lookup_sql

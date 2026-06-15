@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Protocol
+from typing import Any, Awaitable, Callable, Protocol
 from uuid import UUID
 
 from fastapi import WebSocket
@@ -510,17 +511,17 @@ async def process_match_turn_timeout(
     )
     if event is None:
         return None
-    await broadcast_match_event_with_round_finished(manager=manager, event=event)
+    await broadcast_match_event_with_round_finished(manager=manager, event=event, now=now)
     next_timer = next_match_timer_from_message(event.message)
     if ai_turn_service is not None and isinstance(next_timer, MatchTurnTimer):
         ai_event = await ai_turn_service.play_ai_turn(
             game_session_public_id=event.game_session_public_id,
             phase_id=next_timer.phase_id,
-            now=now,
+            now=kst_now(),
         )
         if ai_event is not None:
             await broadcast_match_event_with_round_finished(manager=manager, event=ai_event)
-            return next_match_timer_from_message(ai_event.message)
+            return next_match_timer_from_message(ai_event.message) or next_timer
     return next_timer
 
 
@@ -528,6 +529,8 @@ async def broadcast_match_event_with_round_finished(
     *,
     manager: MatchConnectionManager,
     event: MatchBroadcastEvent,
+    now: datetime | None = None,
+    sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
 ) -> list[MatchMessage]:
     """진행 event를 broadcast하고, 라운드 종료가 포함되면 별도 event를 이어서 전송합니다."""
     await manager.broadcast_session(event.game_session_public_id, event.message)
@@ -538,6 +541,9 @@ async def broadcast_match_event_with_round_finished(
         messages.append(round_finished_message)
     round_started_message = round_started_message_from_turn_resolved(event.message)
     if round_started_message is not None:
+        delay_seconds = _seconds_until_round_started(round_started_message, now=now or kst_now())
+        if delay_seconds > 0:
+            await sleep(delay_seconds)
         await manager.broadcast_session(event.game_session_public_id, round_started_message)
         messages.append(round_started_message)
     return messages
@@ -592,10 +598,21 @@ def round_started_message_from_turn_resolved(message: MatchMessage) -> MatchMess
             "event_sequence": payload.get("event_sequence"),
             "round_number": round_number,
             "current_turn": next_turn,
-            "started_at": payload.get("created_at"),
+            "started_at": next_turn.get("started_at") or payload.get("created_at"),
             "created_at": payload.get("created_at"),
         },
     }
+
+
+def _seconds_until_round_started(message: MatchMessage, *, now: datetime) -> float:
+    """`match.round.started` 이벤트를 실제 라운드 시작 시각까지 지연할 초를 계산합니다."""
+    payload = message.get("payload")
+    if not isinstance(payload, dict):
+        return 0.0
+    started_at = _parse_optional_datetime(payload.get("started_at"))
+    if started_at is None:
+        return 0.0
+    return max(0.0, (started_at - now).total_seconds())
 
 
 async def process_match_vote_timeout(

@@ -4,7 +4,7 @@ from app.agent.core.exceptions import InvalidGameCondition
 from app.agent.schemas.request.answer import AgentAnswerRequest
 from app.agent.services.game_handlers.chosung import ChosungHandler
 from app.agent.services.game_handlers.contains import ContainsHandler
-from app.agent.services.game_handlers.shiritori import ShiritoriHandler
+from app.agent.services.game_handlers.word_chain import WordChainHandler
 
 
 def filter_values(query_filter) -> dict[str, object]:
@@ -15,14 +15,14 @@ def filter_values(query_filter) -> dict[str, object]:
     }
 
 
-def test_shiritori_filter_uses_fallback_and_excludes_used_words() -> None:
+def test_word_chain_filter_uses_fallback_and_excludes_used_words() -> None:
     request = AgentAnswerRequest(
         room_id="room-1",
-        game_type="shiritori",
+        game_type="word_chain",
         used_words=["줄넘기"],
         last_char="줄",
     )
-    query_filter = ShiritoriHandler().build_filter(request, {"줄넘기"})
+    query_filter = WordChainHandler().build_filter(request, {"줄넘기"})
 
     assert filter_values(query_filter)["start_word"] == "줄"
     assert set(filter_values(query_filter)) == {"start_word"}

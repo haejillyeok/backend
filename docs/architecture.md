@@ -24,7 +24,7 @@ DB 설정과 SQLAlchemy async engine 생명주기는 `app/shared/core/config/dat
 세션을 제공합니다. `agent`는 Backend RDB에 접근하지 않으며, 자체 Qdrant repository와
 Agent API schema만 소유합니다.
 
-Agent 답변 생성은 Qdrant payload filter 검색을 우선합니다. `shiritori`, `chosung`,
+Agent 답변 생성은 Qdrant payload filter 검색을 우선합니다. `word_chain`, `chosung`,
 `contains` handler가 검색 조건을 만들고, 후보 선택 서비스는 `used_words`를 제외한 후보 중
 최대 10개를 무작위로 추린 뒤 하나를 반환합니다. 끝말잇기 후보가 없고 `USE_VLLM=true`이면
 vLLM이 마지막 글자로 시작하는 2~4글자 단어를 한 번 생성합니다. Agent는 시작 글자, 길이,

@@ -5,7 +5,7 @@ import httpx
 from app.agent.prompts import (
     get_chosung_fallback_prompt,
     get_contains_fallback_prompt,
-    get_shiritori_fallback_prompt,
+    get_word_chain_fallback_prompt,
 )
 from app.agent.schemas.request.answer import GameType
 from app.agent.utils.korean import (
@@ -82,8 +82,8 @@ class VllmService:
         used_words: set[str],
     ) -> str:
         prompt_values = {"used_words": ", ".join(sorted(used_words)) or "없음"}
-        if game_type == GameType.SHIRITORI:
-            return get_shiritori_fallback_prompt().format(
+        if game_type == GameType.WORD_CHAIN:
+            return get_word_chain_fallback_prompt().format(
                 start_char=condition,
                 **prompt_values,
             )
@@ -108,7 +108,7 @@ class VllmService:
     ) -> bool:
         if not cls._is_common_valid_word(word, used_words=used_words):
             return False
-        if game_type == GameType.SHIRITORI:
+        if game_type == GameType.WORD_CHAIN:
             return word.startswith(condition)
         if game_type == GameType.CHOSUNG:
             return extract_chosung(word) == condition

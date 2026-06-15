@@ -154,6 +154,16 @@ class GameSessionParticipantRecord:
 
 
 @dataclass(frozen=True)
+class GameSessionTurnRecord:
+    phase_id: UUID
+    round_number: int
+    turn_number: int
+    actor_seat_number: int
+    deadline_at: datetime | None
+    required_start_char: str | None
+
+
+@dataclass(frozen=True)
 class GameSessionStartResult:
     game_session_public_id: UUID
     room_public_id: UUID
@@ -163,6 +173,7 @@ class GameSessionStartResult:
     rule_config: dict[str, int] = field(default_factory=default_room_rule_config)
     game_session_token: str = ""
     game_session_token_expires_at: datetime | None = None
+    current_turn: GameSessionTurnRecord | None = None
 
 
 @dataclass(frozen=True)

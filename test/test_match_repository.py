@@ -58,7 +58,7 @@ async def test_match_repository_builds_anonymous_snapshot_from_session_state() -
         id=uuid4(),
         public_id=game_session_public_id,
         room_id=uuid4(),
-        game_type="shiritori",
+        game_type="word_chain",
         status="playing",
         rule_config={"max_rounds": 8, "turn_time_seconds": 10},
     )
@@ -82,17 +82,10 @@ async def test_match_repository_builds_anonymous_snapshot_from_session_state() -
         seat_number=2,
         is_uninvited_guest=True,
     )
-    used_word = UsedWord(
-        id=uuid4(),
-        session_id=game_session.id,
-        submission_id=uuid4(),
-        normalized_word="사과",
-    )
     db_session = FakeDbSession(
         [
             FakeResult(scalar=game_session),
             FakeResult(scalars=[first_participant, second_participant]),
-            FakeResult(scalars=[used_word]),
             FakeResult(rows=[(first_participant.id, 10), (second_participant.id, -10)]),
         ]
     )
@@ -113,7 +106,7 @@ async def test_match_repository_builds_anonymous_snapshot_from_session_state() -
         ("1번 손님", 1, True),
         ("2번 손님", 2, False),
     ]
-    assert snapshot.used_words == ["사과"]
+    assert snapshot.used_words == []
     assert [(item.display_name, item.score, item.is_me) for item in snapshot.scoreboard] == [
         ("1번 손님", 10, True),
         ("2번 손님", -10, False),
@@ -130,7 +123,7 @@ async def test_match_repository_includes_current_turn_from_session_phase() -> No
         id=uuid4(),
         public_id=game_session_public_id,
         room_id=uuid4(),
-        game_type="shiritori",
+        game_type="word_chain",
         status="playing",
         rule_config={"max_rounds": 8, "turn_time_seconds": 10},
         current_phase_id=phase_id,
@@ -167,9 +160,19 @@ async def test_match_repository_includes_current_turn_from_session_phase() -> No
         [
             FakeResult(scalar=game_session),
             FakeResult(scalars=[first_participant]),
-            FakeResult(scalars=[]),
             FakeResult(rows=[]),
             FakeResult(rows=[(phase, turn, first_participant)]),
+            FakeResult(
+                scalars=[
+                    UsedWord(
+                        id=uuid4(),
+                        session_id=game_session.id,
+                        submission_id=uuid4(),
+                        round_number=1,
+                        normalized_word="사과",
+                    )
+                ]
+            ),
         ]
     )
     repository = MatchRepository(db_session, now_provider=lambda: datetime(2026, 6, 13, tzinfo=KST))
@@ -187,6 +190,7 @@ async def test_match_repository_includes_current_turn_from_session_phase() -> No
     assert snapshot.current_turn.actor_seat_number == 1
     assert snapshot.current_turn.deadline_at == datetime(2026, 6, 13, 0, 0, 10, tzinfo=KST)
     assert snapshot.current_turn.required_start_char == "가"
+    assert snapshot.used_words == ["사과"]
 
 
 async def test_match_repository_includes_voting_deadline_from_current_phase() -> None:
@@ -198,7 +202,7 @@ async def test_match_repository_includes_voting_deadline_from_current_phase() ->
         id=uuid4(),
         public_id=game_session_public_id,
         room_id=uuid4(),
-        game_type="shiritori",
+        game_type="word_chain",
         status="voting",
         rule_config={"max_rounds": 1, "turn_time_seconds": 10},
         current_phase_id=phase_id,
@@ -227,7 +231,6 @@ async def test_match_repository_includes_voting_deadline_from_current_phase() ->
             FakeResult(scalars=[participant]),
             FakeResult(scalars=[]),
             FakeResult(rows=[]),
-            FakeResult(rows=[]),
             FakeResult(scalar=voting_phase),
         ]
     )
@@ -250,7 +253,7 @@ async def test_match_repository_includes_result_snapshot_after_session_result() 
         id=uuid4(),
         public_id=game_session_public_id,
         room_id=uuid4(),
-        game_type="shiritori",
+        game_type="word_chain",
         status="result",
         rule_config={"max_rounds": 1, "turn_time_seconds": 10},
     )
@@ -300,7 +303,6 @@ async def test_match_repository_includes_result_snapshot_after_session_result() 
         [
             FakeResult(scalar=game_session),
             FakeResult(scalars=[user_participant, ai_participant]),
-            FakeResult(scalars=[]),
             FakeResult(rows=[(user_participant_id, 20), (ai_participant_id, -5)]),
             FakeResult(rows=[(user_result, user_participant), (ai_result, ai_participant)]),
         ]

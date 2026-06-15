@@ -8,6 +8,7 @@ from app.be.models.game import (
     GameEvent,
     GameSession,
     ParticipantAction,
+    Room,
     ScoreLedger,
     SessionParticipant,
     SessionPhase,
@@ -406,8 +407,18 @@ async def test_match_vote_repository_publishes_result_when_all_users_voted() -> 
         id=session_id,
         public_id=game_session_public_id,
         room_id=uuid4(),
-        game_type="shiritori",
+        game_type="word_chain",
         status="voting",
+        rule_config={"max_rounds": 1, "turn_time_seconds": 10},
+    )
+    room = Room(
+        id=game_session.room_id,
+        public_id=uuid4(),
+        owner_user_id=uuid4(),
+        name="첫 객실",
+        game_type="word_chain",
+        status="playing",
+        max_players=2,
         rule_config={"max_rounds": 1, "turn_time_seconds": 10},
     )
     first_voter = SessionParticipant(
@@ -455,6 +466,7 @@ async def test_match_vote_repository_publishes_result_when_all_users_voted() -> 
             FakeResult(rows=[(first_voter_id, 10)]),
             FakeResult(scalar=2),
             FakeResult(scalar=3),
+            FakeResult(scalar=room),
         ]
     )
     repository = MatchVoteRepository(db_session)
@@ -504,6 +516,7 @@ async def test_match_vote_repository_publishes_result_when_all_users_voted() -> 
     assert result_event.event_type == "result.published"
     assert game_session.status == "result"
     assert game_session.ended_at == voted_at
+    assert room.status == "waiting"
     assert record.accepted.submitted_vote_count == 2
     assert record.result_event_sequence == 5
     assert record.result is not None
@@ -523,7 +536,7 @@ async def test_match_vote_repository_rejects_vote_after_voting_deadline() -> Non
         id=session_id,
         public_id=game_session_public_id,
         room_id=uuid4(),
-        game_type="shiritori",
+        game_type="word_chain",
         status="voting",
         rule_config={"max_rounds": 1, "turn_time_seconds": 10},
         current_phase_id=phase_id,
@@ -586,8 +599,18 @@ async def test_match_vote_repository_publishes_result_on_vote_timeout() -> None:
         id=session_id,
         public_id=game_session_public_id,
         room_id=uuid4(),
-        game_type="shiritori",
+        game_type="word_chain",
         status="voting",
+        rule_config={"max_rounds": 1, "turn_time_seconds": 10},
+    )
+    room = Room(
+        id=game_session.room_id,
+        public_id=uuid4(),
+        owner_user_id=uuid4(),
+        name="첫 객실",
+        game_type="word_chain",
+        status="playing",
+        max_players=2,
         rule_config={"max_rounds": 1, "turn_time_seconds": 10},
     )
     first_voter = SessionParticipant(
@@ -632,6 +655,7 @@ async def test_match_vote_repository_publishes_result_on_vote_timeout() -> None:
             FakeResult(scalars=[existing_vote]),
             FakeResult(rows=[]),
             FakeResult(scalar=4),
+            FakeResult(scalar=room),
         ]
     )
     repository = MatchVoteRepository(db_session)
@@ -667,6 +691,7 @@ async def test_match_vote_repository_publishes_result_on_vote_timeout() -> None:
     assert isinstance(result_event, GameEvent)
     assert result_event.event_type == "result.published"
     assert game_session.status == "result"
+    assert room.status == "waiting"
     assert record.accepted.submitted_vote_count == 1
     assert record.result_event_sequence == 6
     assert record.result is not None
@@ -679,7 +704,7 @@ async def test_match_vote_repository_ignores_stale_vote_timeout_after_result() -
         id=uuid4(),
         public_id=game_session_public_id,
         room_id=uuid4(),
-        game_type="shiritori",
+        game_type="word_chain",
         status="result",
         rule_config={"max_rounds": 1, "turn_time_seconds": 10},
     )

@@ -209,7 +209,7 @@ Swagger에는 게임 API의 닫힌 문자열 값을 enum으로 노출합니다.
 
 | Field | Values |
 | --- | --- |
-| `game_type` | `shiritori`, `chosung`, `contains` |
+| `game_type` | `word_chain`, `chosung`, `contains` |
 | room `status` | `waiting`, `starting`, `playing`, `closed` |
 | game session `status` | `starting`, `playing`, `voting`, `result`, `aborted` |
 
@@ -252,7 +252,7 @@ Response:
       {
         "room_public_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7e",
         "name": "첫 객실",
-        "game_type": "shiritori",
+        "game_type": "word_chain",
         "status": "waiting",
         "max_players": 4,
         "member_count": 1,
@@ -264,7 +264,7 @@ Response:
     "current_membership": {
       "room_public_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7e",
       "name": "첫 객실",
-      "game_type": "shiritori",
+      "game_type": "word_chain",
       "status": "waiting",
       "max_players": 4,
       "member_count": 1,
@@ -294,7 +294,7 @@ Request:
 ```json
 {
   "name": "첫 객실",
-  "game_type": "shiritori",
+  "game_type": "word_chain",
   "max_players": 4
 }
 ```
@@ -307,7 +307,7 @@ Response:
   "data": {
     "room_public_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7e",
     "name": "첫 객실",
-    "game_type": "shiritori",
+    "game_type": "word_chain",
     "status": "waiting",
     "max_players": 4,
     "member_count": 1,
@@ -350,7 +350,7 @@ Response:
   "data": {
     "room_public_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7e",
     "name": "수정된 객실",
-    "game_type": "shiritori",
+    "game_type": "word_chain",
     "status": "waiting",
     "max_players": 5,
     "rule_config": {
@@ -447,6 +447,8 @@ Response:
 사용할 `game_session_public_id`를 반환합니다. 실제 유저 참가자 뒤에 AI 손님 1명이
 내부 참가자로 추가됩니다. 시작 시점의 객실 `rule_config`는 `game_sessions.rule_config`에 snapshot으로
 고정됩니다. `game_session_public_id`는 한 게임 세션의 공개 식별자이며, 라운드 ID가 아닙니다.
+끝말잇기 세션은 시작 transaction 안에서 첫 턴을 함께 만들고, 응답과 `game.started` event에
+`current_turn`으로 포함합니다.
 
 이 endpoint는 방장의 반복 요청에 대해 멱등적으로 동작합니다. 같은 room에 `starting`, `playing`,
 `voting`처럼 아직 종료되지 않은 active session이 있으면 새 session을 만들지 않고 기존
@@ -462,13 +464,21 @@ Response:
   "data": {
     "game_session_public_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7f",
     "room_public_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7e",
-    "game_type": "shiritori",
+    "game_type": "word_chain",
     "status": "starting",
     "game_session_token": "opaque-game-session-token",
     "game_session_token_expires_at": "2026-06-12T03:00:00+09:00",
     "rule_config": {
       "max_rounds": 8,
       "turn_time_seconds": 10
+    },
+    "current_turn": {
+      "phase_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b81",
+      "round_number": 1,
+      "turn_number": 1,
+      "actor_seat_number": 1,
+      "deadline_at": "2026-06-12T03:00:10+09:00",
+      "required_start_char": null
     },
     "participants": [
       {
@@ -613,7 +623,7 @@ Backend가 처리한 게임 상태를 받아 Qdrant 후보를 우선 반환합�
 {
   "request_id": "req-20260610-0001",
   "room_id": "room-001",
-  "game_type": "shiritori",
+  "game_type": "word_chain",
   "used_words": ["자전거", "거미줄"],
   "last_char": "줄",
   "condition": {
@@ -633,7 +643,7 @@ Qdrant 후보가 있으면 `used_words`를 제외한 후보 중 최대 10개를 
 {
   "request_id": "req-20260610-0001",
   "room_id": "room-001",
-  "game_type": "shiritori",
+  "game_type": "word_chain",
   "answer": "줄넘기",
   "status": "ok",
   "reason": null
@@ -651,14 +661,14 @@ vLLM이 비활성화됐거나, 호출에 실패했거나, 생성 결과가 검�
 {
   "request_id": "req-20260610-0001",
   "room_id": "room-001",
-  "game_type": "shiritori",
+  "game_type": "word_chain",
   "answer": null,
   "status": "no_candidate",
   "reason": "no_available_word"
 }
 ```
 
-`game_type`은 `shiritori`, `chosung`, `contains`를 지원합니다. `condition.last_char`,
+`game_type`은 `word_chain`, `chosung`, `contains`를 지원합니다. `condition.last_char`,
 `condition.chosung`, `condition.contains_word`를 각각 사용하며, 끝말잇기는 기존 호환을 위해
 root `last_char`도 허용합니다. Qdrant 후보가 없으면 세 game type 모두 각각의 조건을 검증하는
 vLLM 생성 fallback을 한 번 호출합니다.
@@ -700,6 +710,12 @@ vLLM 생성 fallback을 한 번 호출합니다.
 
 검증 완료 JSONL을 직접 적재할 때는 `scripts/seed_word_payloads.py`를 사용합니다. 파일을
 스트리밍 검증하고 기본 500개 단위로 Qdrant에 upsert합니다.
+
+Backend의 기본 단어 사전 seed는 `scripts/valid_words_seed.sql`입니다.
+`scripts/seed_valid_words.py`는 검증 완료 JSONL을 DB 적재용 SQL로 변환하며,
+`start_word`, `end_word`, `chosung`, `syllables`, `length`, `used_count` payload를
+`word_game.valid_words`의 `starts_with`, `ends_with`, `chosung`, `syllables`, `length`,
+`used_count` column으로 매핑합니다.
 
 응답 status는 `202 Accepted`입니다.
 

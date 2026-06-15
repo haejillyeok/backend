@@ -28,7 +28,7 @@ class CreateGameRoomRequest(SchemaModel):
     )
     game_type: GameType = Field(
         description="객실에서 시작할 게임 종류입니다.",
-        examples=["shiritori"],
+        examples=["word_chain"],
     )
     max_players: int = Field(
         ge=1,

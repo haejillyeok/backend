@@ -38,3 +38,4 @@ def test_word_game_models_use_word_game_schema_tables() -> None:
     assert WordSubmission.__tablename__ == "submissions"
     assert UsedWord.__table__.schema == WORD_GAME_SCHEMA
     assert UsedWord.__tablename__ == "used_words"
+    assert "round_number" in UsedWord.__table__.columns

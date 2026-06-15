@@ -56,7 +56,7 @@ async def test_agent_answer_client_sends_used_words_and_maps_answer_payload() ->
         assert json.loads(request.content) == {
             "request_id": "turn-1",
             "room_id": "session-1",
-            "game_type": "shiritori",
+            "game_type": "word_chain",
             "used_words": ["사과", "과자"],
             "last_char": "자",
             "condition": {"last_char": "자"},
@@ -70,7 +70,7 @@ async def test_agent_answer_client_sends_used_words_and_maps_answer_payload() ->
             json={
                 "request_id": "turn-1",
                 "room_id": "session-1",
-                "game_type": "shiritori",
+                "game_type": "word_chain",
                 "answer": "자동차",
                 "status": "ok",
                 "reason": None,
@@ -83,7 +83,7 @@ async def test_agent_answer_client_sends_used_words_and_maps_answer_payload() ->
         AgentAnswerRequest(
             request_id="turn-1",
             room_id="session-1",
-            game_type="shiritori",
+            game_type="word_chain",
             used_words=["사과", "과자"],
             last_char="자",
             condition={"last_char": "자"},
@@ -101,7 +101,7 @@ async def test_agent_answer_client_maps_no_candidate_payload() -> None:
             json={
                 "request_id": "turn-2",
                 "room_id": "session-1",
-                "game_type": "shiritori",
+                "game_type": "word_chain",
                 "answer": None,
                 "status": "no_candidate",
                 "reason": "no_available_word",
@@ -114,7 +114,7 @@ async def test_agent_answer_client_maps_no_candidate_payload() -> None:
         AgentAnswerRequest(
             request_id="turn-2",
             room_id="session-1",
-            game_type="shiritori",
+            game_type="word_chain",
             used_words=[],
             last_char="힣",
             condition={"last_char": "힣"},

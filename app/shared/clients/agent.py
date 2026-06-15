@@ -41,7 +41,7 @@ class AgentAnswerRequest(BaseModel):
 
     request_id: str | None = None
     room_id: str
-    game_type: Literal["shiritori", "chosung", "contains"]
+    game_type: Literal["word_chain", "chosung", "contains"]
     used_words: list[str]
     last_char: str | None = None
     condition: AgentAnswerCondition | dict[str, str | None] | None = None
@@ -53,7 +53,7 @@ class AgentAnswerResult(BaseModel):
 
     request_id: str | None
     room_id: str
-    game_type: Literal["shiritori", "chosung", "contains"]
+    game_type: Literal["word_chain", "chosung", "contains"]
     answer: str | None
     status: Literal["ok", "no_candidate"]
     reason: str | None = None

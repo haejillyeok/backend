@@ -275,8 +275,9 @@ Payload:
 
 REST start API가 세션 생성을 확정한 뒤 로비에서 매치로 넘어가는 handoff용으로 broadcast합니다.
 방 전체 공통 payload에는 사용자별 `game_session_token`을 포함하지 않습니다.
-끝말잇기 세션은 시작 transaction 안에서 첫 번째 턴을 함께 생성하며, `/ws/match` 연결 직후
-`match.snapshot.current_turn`으로 복구할 수 있습니다.
+끝말잇기 세션은 시작 transaction 안에서 첫 번째 턴을 함께 생성하며, `game.started.current_turn`에
+첫 차례 정보를 포함합니다. `/ws/match` 연결 직후에도 `match.snapshot.current_turn`으로 같은 정보를
+복구할 수 있습니다.
 
 Payload:
 
@@ -287,6 +288,13 @@ Payload:
 | `game_type` | string | 게임 종류 |
 | `status` | string | 시작된 게임 세션 상태 |
 | `rule_config` | object | 시작 시점에 세션으로 고정된 룰 설정 |
+| `current_turn` | object/null | 시작 직후 첫 턴 정보 |
+| `current_turn.phase_id` | uuid | `word.submit.phase_id`에 사용할 현재 턴 phase ID |
+| `current_turn.round_number` | number | 현재 끝말잇기 판 번호. 시작 직후는 1 |
+| `current_turn.turn_number` | number | 현재 판 안의 턴 번호. 시작 직후는 1 |
+| `current_turn.actor_seat_number` | number | 첫 차례 참가자의 순서 |
+| `current_turn.deadline_at` | datetime/null | 서버 기준 턴 제한 시각 |
+| `current_turn.required_start_char` | string/null | 첫 턴에 필요한 시작 글자. 시작 직후는 `null` |
 | `participants` | array | 시작 시 고정된 익명 참가자 snapshot |
 | `participants[].display_name` | string | `1번 손님` 같은 익명 표시명 |
 | `participants[].seat_number` | number | 게임 세션 안 순서 |
@@ -361,7 +369,7 @@ Payload 주요 필드:
 | `current_turn.actor_seat_number` | number | 현재 차례 참가자의 순서 |
 | `current_turn.deadline_at` | datetime/null | 서버 기준 턴 제한 시각 |
 | `current_turn.required_start_char` | string/null | 이번 턴에 필요한 시작 글자. 첫 턴은 `null` |
-| `used_words` | array | 해당 세션에서 이미 사용된 정규화 단어 |
+| `used_words` | array | 현재 끝말잇기 판에서 이미 사용된 정규화 단어 |
 | `scoreboard` | array | 익명 점수판 |
 | `server_time` | datetime | 서버 기준 현재 시각 |
 | `voting_deadline_at` | datetime/null | `voting` 상태에서 서버가 결과를 강제 확정할 시각 |
@@ -387,7 +395,7 @@ Payload 주요 필드:
 방향: Client -> Server
 
 현재 턴 참가자가 단어를 제출합니다. 서버는 연결 identity의 `participant_id`, payload의 `phase_id`, 서버 시각,
-DB의 현재 phase/turn/deadline/used_words를 기준으로 제출을 검증합니다.
+DB의 현재 phase/turn/deadline과 현재 라운드의 `used_words`를 기준으로 제출을 검증합니다.
 
 Payload:
 
@@ -424,7 +432,7 @@ Payload:
 | `accepted` | 제출 단어가 현재 턴, 제한 시간, 시작 글자, 사전 등재, 중복 단어 검증을 통과했고 다음 턴이 생성됨 |
 | `rejected` | 제출 단어가 시작 글자 불일치, 사전 미등재, 중복 단어 같은 게임 규칙 검증에 실패함 |
 | `timeout` | 서버 기준 `current_turn.deadline_at`이 지나 현재 턴이 시간 초과로 확정됨 |
-| `failed` | AI 손님 차례에서 Agent API timeout, 네트워크 오류, `no_candidate` 등이 발생함 |
+| `failed` | 손님 답변을 확정하지 못함. 내부 Agent/API 실패 사유는 공개하지 않음 |
 
 다음 턴 actor가 AI인 경우 Backend는 현재 phase, 사용된 단어 목록, 시작 글자를 Agent answer API에 넘겨
 AI 답변을 받아 같은 제출 확정 경로로 처리할 수 있습니다. Agent answer 설정이 활성화되어 있으면
@@ -436,9 +444,11 @@ AI 답변을 받아 같은 제출 확정 경로로 처리할 수 있습니다. A
 거절된 경우 현재 턴은 유지되며 `next_turn`은 생성하지 않습니다. 사전에 없는 단어는
 `reason="word_not_in_dictionary"`로 거절합니다.
 
-AI 답변 실패도 즉시 다음 턴이나 투표로 넘기지 않습니다. 서버는 실패 action/event를 저장하고
-`result="failed"`를 broadcast하지만, 현재 phase는 deadline까지 유지합니다. 실제 턴 종료와 다음 판/투표
-전환은 서버 deadline에 도달해 `timeout`이 확정될 때만 일어납니다.
+답변 실패도 즉시 다음 턴이나 투표로 넘기지 않습니다. 서버는 실패 action/event를 저장하고
+`result="failed"`를 broadcast하지만, 현재 phase는 deadline까지 유지합니다. 공개 payload의 `reason`은
+`answer_unavailable`로 통일하고, Agent/API 같은 내부 실패 사유는 `reason`이나 `details`에 노출하지
+않습니다. AI가 단어를 반환했지만 Backend 검증에 실패한 경우 `word`, `normalized_word`에는 제출 단어를
+담습니다. 실제 턴 종료와 다음 판/투표 전환은 서버 deadline에 도달해 `timeout`이 확정될 때만 일어납니다.
 
 서버 timeout 판단은 클라이언트 타이머가 아니라 서버 시각과 DB의 phase deadline을 기준으로 합니다.
 `/ws/match` 서버 루프는 heartbeat 대기 시간과 현재 턴 deadline 중 더 이른 시점까지만 client frame을
@@ -448,8 +458,9 @@ AI 답변 실패도 즉시 다음 턴이나 투표로 넘기지 않습니다. �
 timeout으로 현재 끝말잇기 한판이 종료되면 payload에는 종료된 `round_number`, 다음 판 정보인
 `next_turn` 또는 투표 전환을 뜻하는 `next_status="voting"`과 `voting_deadline_at`이 포함될 수 있습니다.
 이 경우 서버는 같은 내용을 사용자 화면에서 더 명확히 처리할 수 있도록 `match.round.finished`도 이어서
-broadcast합니다. 남은 판이 있어 `next_turn`이 생성되면 `match.round.started`도 이어서 보내 다음 라운드
-첫 턴을 명확히 알립니다.
+broadcast합니다. 남은 판이 있어 `next_turn`이 생성되면 다음 라운드 첫 턴의 `started_at`을 timeout 확정
+시각보다 5초 뒤로 잡고, `match.round.started`도 그 시작 시각에 맞춰 보내 다음 라운드 첫 턴을 명확히
+알립니다.
 
 Payload:
 
@@ -461,10 +472,10 @@ Payload:
 | `participant.seat_number` | number | 판정 대상 참가자의 순서 |
 | `round_number` | number/null | timeout으로 종료된 끝말잇기 판 번호 |
 | `result` | string | `accepted`, `rejected`, `timeout`, `failed` 중 하나 |
-| `word` | string/null | 제출 단어. 제출이 없는 timeout/AI 실패는 `null` |
+| `word` | string/null | 제출 단어. 제출이 없는 timeout/Agent 미응답 실패는 `null` |
 | `normalized_word` | string/null | 중복 방지에 사용하는 정규화 단어. 제출이 없으면 `null` |
-| `reason` | string/null | 거절, timeout, 실패 사유. accepted는 `null` |
-| `details` | object | 필요한 시작 글자, timeout 초, agent status 등 비식별 세부 정보 |
+| `reason` | string/null | 거절, timeout, 실패 사유. accepted는 `null`, 내부 답변 실패는 `answer_unavailable` |
+| `details` | object | 필요한 시작 글자, timeout 초 등 비식별 세부 정보. Agent/API 내부 정보는 포함하지 않음 |
 | `score_delta` | number | 판정으로 발생한 점수 변화. 점수 변화가 없으면 0 |
 | `deadline_at` | datetime/null | timeout일 때 서버가 확정한 제한 시각 |
 | `next_turn` | object 또는 null | 남은 판이 있을 때 새로 생성된 다음 판 첫 턴 정보 |
@@ -472,6 +483,7 @@ Payload:
 | `next_turn.round_number` | number | 다음 턴의 끝말잇기 판 번호 |
 | `next_turn.turn_number` | number | 다음 턴 번호 |
 | `next_turn.actor_seat_number` | number | 다음 차례 참가자의 순서 |
+| `next_turn.started_at` | datetime | 다음 턴이 실제로 시작되는 서버 기준 시각. 다음 라운드 첫 턴은 라운드 종료 확정 후 5초 뒤 |
 | `next_turn.deadline_at` | datetime | 다음 턴의 서버 기준 제한 시각 |
 | `next_turn.required_start_char` | string/null | 다음 단어가 시작해야 하는 글자 |
 | `next_status` | string 또는 null | 모든 판이 끝난 경우 다음 세션 상태. 현재는 `voting` |
@@ -510,8 +522,8 @@ Payload:
 
 방향: Server -> 같은 게임 세션에 연결된 client
 
-발생 시점: `match.round.finished` 이후 남은 판이 있어 다음 라운드 첫 턴이 생성된 직후. 투표로 넘어가는
-마지막 라운드 종료에서는 발생하지 않습니다.
+발생 시점: `match.round.finished` 이후 남은 판이 있어 다음 라운드 첫 턴이 생성되고, 5초 대기 시간이 지난
+시점. 투표로 넘어가는 마지막 라운드 종료에서는 발생하지 않습니다.
 
 Payload:
 
@@ -523,6 +535,7 @@ Payload:
 | `current_turn.phase_id` | uuid | 새 턴 phase ID |
 | `current_turn.turn_number` | number | 새 라운드 안의 턴 번호. 첫 턴은 1 |
 | `current_turn.actor_seat_number` | number | 첫 차례 참가자의 순서 |
+| `current_turn.started_at` | datetime | 첫 턴이 실제로 시작되는 서버 기준 시각 |
 | `current_turn.deadline_at` | datetime | 첫 턴의 서버 기준 제한 시각 |
 | `current_turn.required_start_char` | string/null | 첫 턴의 시작 글자. 새 라운드 첫 턴은 `null` |
 | `started_at` | datetime/null | 라운드 시작 시각 |

@@ -528,7 +528,7 @@ def test_be_openapi_documents_game_contract_enums():
     game_type_schema = schema["components"]["schemas"][
         game_type_ref.removeprefix("#/components/schemas/")
     ]
-    assert game_type_schema["enum"] == ["shiritori", "chosung", "contains"]
+    assert game_type_schema["enum"] == ["word_chain", "chosung", "contains"]
 
     start_operation = schema["paths"]["/api/v1/game/rooms/{room_public_id}/start"]["post"]
     start_response_ref = start_operation["responses"]["200"]["content"]["application/json"][

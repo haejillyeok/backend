@@ -2,7 +2,7 @@ from enum import StrEnum
 
 
 class GameType(StrEnum):
-    SHIRITORI = "shiritori"
+    WORD_CHAIN = "word_chain"
     CHOSUNG = "chosung"
     CONTAINS = "contains"
 

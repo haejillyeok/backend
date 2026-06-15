@@ -55,7 +55,7 @@ Backend가 소유하는 게임 상태, WebSocket event, Agent 경계를 우선�
 
 게임 API의 공개 계약에서 닫힌 문자열 값은 Pydantic enum으로 관리해 Swagger에 enum으로 노출한다.
 
-- `game_type`: `shiritori`, `chosung`, `contains`
+- `game_type`: `word_chain`, `chosung`, `contains`
 - room `status`: `waiting`, `starting`, `playing`, `closed`
 - game session `status`: `starting`, `playing`, `voting`, `result`, `aborted`
 - `participant_type`: `user`, `ai`
@@ -153,7 +153,8 @@ hash와 만료 시각으로 저장하는 match 복구 credential이다. `/ws/mat
 세션과 `game_session_public_id` 조합을 사용할 수 있고, 로그인 세션이 만료되었거나 재연결 중이면
 `game_session_token` hash로 participant identity를 복원할 수 있다. 방 전체에 같은 `game.started`
 payload를 broadcast할 때는 토큰을 넣지 말고, 토큰은 현재 유저에게만 돌아가는 REST response 또는
-사용자별 handoff payload에만 포함한다.
+사용자별 handoff payload에만 포함한다. `game.started`에는 시작 transaction에서 생성한 첫
+`current_turn`을 포함해 client가 match 연결 전에도 첫 차례 참가자와 `phase_id`를 알 수 있게 한다.
 
 ## Room and Session State
 
@@ -178,12 +179,14 @@ lobby
 - `round_finished`: 다음 라운드 이동 또는 최종 투표 이동을 결정한다.
 - `voting`: 플레이어 투표를 수집한다.
 - `result`: 단어 게임 점수와 투표 점수를 합산해 등수와 우승자를 계산한다.
+- `result`가 확정되면 해당 `GameSession`은 종료 이력으로 남기고 같은 `Room`은 다시 `room_waiting`으로
+  돌아가 다음 `GameSession`을 시작할 수 있다. 한 `Room`은 여러 게임 세션 이력을 가질 수 있다.
 
 ## Game Types
 
-현재 Agent는 `shiritori`, `chosung`, `contains`를 지원한다. 캡처의 상세 규칙은 `shiritori`에 집중되어 있다.
+현재 Agent는 `word_chain`, `chosung`, `contains`를 지원한다. 캡처의 상세 규칙은 `word_chain`에 집중되어 있다.
 
-### Shiritori Rules
+### Word Chain Rules
 
 현재 Backend MVP에서 확정된 끝말잇기 규칙은 다음과 같다.
 
@@ -200,7 +203,7 @@ lobby
 
 Cycle은 도메인 개념으로 남겨두되, 현재 Backend MVP는 Cycle row를 저장하거나 Cycle 종료마다 시간을 줄이지 않는다.
 
-### Shiritori Score
+### Word Chain Score
 
 현재 Backend MVP 점수 규칙은 다음과 같다.
 
@@ -353,27 +356,40 @@ idle -> matching -> settled -> countdown -> transitioning -> playing
   같은 세션에 broadcast한다. `match.round.finished` payload에는 종료된 `round_number`, 원인 참가자,
   `next_turn` 또는 `next_status`/`voting_deadline_at`, `created_at`을 포함해 클라이언트가 큰 전환 UI를
   분명히 표시할 수 있게 한다.
-- 남은 판이 있어 다음 라운드 첫 턴이 생성되면 `match.round.finished` 뒤에 `match.round.started`를 이어서
+- 남은 판이 있어 다음 라운드 첫 턴이 생성되면 첫 턴의 `started_at`과 `deadline_at`을 라운드 종료 확정
+  시각보다 5초 뒤로 민다. `match.round.finished` 뒤에는 5초 텀을 둔 다음 `match.round.started`를
   broadcast한다. `match.round.started`에는 시작된 `round_number`와 `current_turn`을 담고, 투표로 넘어가는
   마지막 라운드에서는 보내지 않는다.
 - reconnect가 필요하므로 room/session snapshot을 재전송할 수 있어야 한다.
 - disconnect cleanup은 room membership과 game session 정책을 분리해 다룬다.
 - AI answer 요청은 Backend가 현재 GameSession 상태를 검증한 뒤 Agent에 보낸다.
-- Agent answer 요청에는 해당 game session의 `used_words`와 현재 턴의 `required_start_char`를
+- Agent answer 요청에는 현재 라운드의 `used_words`와 현재 턴의 `required_start_char`를
   `last_char`, `condition.last_char`로 함께 보낸다.
-- Agent가 `no_candidate`를 반환하면 Backend가 AI 손님의 실패/감점 또는 대체 정책을 결정한다.
+- Agent가 `no_candidate`를 반환하고 제출 단어가 없으면 Backend가 AI 손님의 실패/대체 정책을 결정한다.
+- Agent가 `no_candidate` 상태라도 제출 단어를 함께 반환했다면 Backend는 일반 참가자 단어 제출처럼
+  `word_reject` 경로로 처리한다.
 - Agent API timeout, 네트워크 오류, 4xx/5xx, invalid payload처럼 답변이 돌아오지 않는 경우도 Backend가
   `ai_answer_failed` action/event로 확정하고, commit 이후 `/ws/match` 연결에 `match.turn.resolved`를
   `payload.result=failed`로 보낸다.
-- AI 실패는 현재 phase를 종료하거나 다음 턴/투표로 전환하지 않는다. 현재 턴은 deadline까지 유지하고,
+- 내부 Agent/API 실패 사유는 공개 WebSocket payload에 노출하지 않는다. `payload.result=failed`의 공개
+  `reason`은 `answer_unavailable`로 통일하고, `details`에서도 `agent_*`, `error`, `status_code` 같은 구현
+  정보를 제거한다.
+- Agent가 단어를 반환했지만 Backend 단어 검증에서 실패한 경우에는 일반 참가자의 오답 제출처럼
+  `payload.result=rejected`로 보내고, `word`, `normalized_word`에 제출 단어를 담아 모든 match 연결 client가
+  틀린 제출 내용을 볼 수 있게 한다. Socket client는 참가자가 AI인지 알 필요가 없으므로 제출 단어는 공개
+  계약인 `word`, `normalized_word`로만 읽고, `details`에는 `agent_answer` 같은 내부 구현 key를 노출하지
+  않는다.
+- 단어가 없는 AI 실패는 현재 phase를 종료하거나 다음 턴/투표로 전환하지 않는다. 현재 턴은 deadline까지 유지하고,
   실제 턴 종료와 다음 판/투표 전환은 `turn_timeout` 확정 경로만 담당한다.
+- 단어가 없는 AI 실패 뒤에도 `/ws/match` loop는 같은 AI phase deadline timer를 유지한다. deadline 전까지 같은
+  phase가 다시 감지되면 Agent answer API를 재호출할 수 있고, deadline이 지나면 timeout 경로로 확정한다.
 - Agent 호출 대기 중 서버 timeout 등으로 phase가 이미 종료된 경우, 뒤늦게 도착한 AI 성공/실패는 추가 event 없이
   무시한다.
 - AI 성공 답변이 도착했더라도 서버 deadline이 이미 지났으면 단어 제출로 저장하지 않고 `turn_timeout`으로
   확정한다.
 - 사용자가 `/ws/match`에 `word.submit`을 보내면 Backend가 현재 턴 actor, deadline, 시작 글자, 사전 등재,
-  중복 단어를 검증한 뒤 제출/사용 단어/점수/다음 턴을 저장하고 commit 이후 `match.turn.resolved`를
-  `payload.result=accepted`로 보낸다.
+  같은 라운드 안의 중복 단어를 검증한 뒤 제출/사용 단어/점수/다음 턴을 저장하고 commit 이후
+  `match.turn.resolved`를 `payload.result=accepted`로 보낸다.
 - 단어 제출 성공 저장은 `participant_actions`를 먼저 확정하고, `word_game.submissions`를 확정한 뒤
   `used_words`, 점수, 다음 phase, 다음 turn, event를 FK 순서에 맞춰 저장한다.
 - 시작 글자 불일치, 사전 미등재, 중복 단어처럼 게임 규칙상 거절된 단어 제출은 연결 오류로 처리하지 않는다. Backend는

@@ -6,7 +6,7 @@ from pydantic import SecretStr
 from app.agent.core.config import AgentSettings
 from app.agent.core.security import verify_api_key
 from app.agent.main import create_app
-from app.agent.prompts import get_shiritori_fallback_prompt
+from app.agent.prompts import get_word_chain_fallback_prompt
 
 
 def test_health_does_not_require_api_key() -> None:
@@ -23,7 +23,7 @@ def test_business_api_rejects_missing_api_key() -> None:
             "/api/v1/agent/answer",
             json={
                 "room_id": "room-1",
-                "game_type": "shiritori",
+                "game_type": "word_chain",
                 "used_words": [],
                 "last_char": "줄",
             },
@@ -55,8 +55,8 @@ def test_api_key_validation_fails_closed() -> None:
     assert error.value.status_code == 503
 
 
-def test_shiritori_fallback_prompt_is_variable_based() -> None:
-    prompt = get_shiritori_fallback_prompt()
+def test_word_chain_fallback_prompt_is_variable_based() -> None:
+    prompt = get_word_chain_fallback_prompt()
 
     assert "{start_char}" in prompt
     assert "{used_words}" in prompt

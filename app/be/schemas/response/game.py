@@ -81,6 +81,15 @@ class GameSessionParticipantResponse(SchemaModel):
     seat_number: int
 
 
+class GameSessionTurnResponse(SchemaModel):
+    phase_id: UUID
+    round_number: int
+    turn_number: int
+    actor_seat_number: int
+    deadline_at: datetime | None
+    required_start_char: str | None
+
+
 class StartGameSessionResponse(SchemaModel):
     game_session_public_id: UUID
     room_public_id: UUID
@@ -89,6 +98,7 @@ class StartGameSessionResponse(SchemaModel):
     game_session_token: str
     game_session_token_expires_at: datetime
     rule_config: GameRoomRuleConfigResponse
+    current_turn: GameSessionTurnResponse | None
     participants: list[GameSessionParticipantResponse]
 
 

@@ -478,7 +478,7 @@ class WordSubmission(Base):
 
 
 class UsedWord(Base):
-    """세션 안에서 이미 사용된 단어를 중복 방지용으로 저장하는 ORM 모델입니다."""
+    """세션의 특정 라운드 안에서 이미 사용된 단어를 중복 방지용으로 저장하는 ORM 모델입니다."""
 
     __tablename__ = "used_words"
     __table_args__ = {"schema": WORD_GAME_SCHEMA}
@@ -498,6 +498,7 @@ class UsedWord(Base):
         ForeignKey(f"{WORD_GAME_SCHEMA}.submissions.id"),
         nullable=False,
     )
+    round_number: Mapped[int] = mapped_column(Integer, nullable=False)
     normalized_word: Mapped[str] = mapped_column(Text, nullable=False)
 
 
@@ -517,6 +518,10 @@ class ValidWord(Base):
     normalized_word: Mapped[str] = mapped_column(Text, nullable=False)
     starts_with: Mapped[str] = mapped_column(Text, nullable=False)
     ends_with: Mapped[str] = mapped_column(Text, nullable=False)
+    chosung: Mapped[str | None] = mapped_column(Text, nullable=True)
+    syllables: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
+    length: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    used_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     source: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(

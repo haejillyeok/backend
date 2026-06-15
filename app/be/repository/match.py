@@ -60,13 +60,6 @@ class MatchRepository:
         )
         participants = list(participant_result.scalars().all())
 
-        used_word_result = await self.db_session.execute(
-            select(UsedWord)
-            .where(UsedWord.session_id == game_session.id)
-            .order_by(UsedWord.normalized_word.asc())
-        )
-        used_words = [used_word.normalized_word for used_word in used_word_result.scalars().all()]
-
         score_result = await self.db_session.execute(
             select(ScoreLedger.participant_id, func.coalesce(func.sum(ScoreLedger.score_delta), 0))
             .where(ScoreLedger.session_id == game_session.id)
@@ -77,6 +70,10 @@ class MatchRepository:
             for score_participant_id, score in score_result.all()
         }
         current_turn = await self._get_current_turn(game_session)
+        used_words = await self._list_used_words_for_current_round(
+            game_session=game_session,
+            current_turn=current_turn,
+        )
         voting_deadline_at = await self._get_voting_deadline(game_session)
         results = await self._get_results(game_session, participant_id=participant_id)
 
@@ -108,6 +105,25 @@ class MatchRepository:
             voting_deadline_at=voting_deadline_at,
             results=results,
         )
+
+    async def _list_used_words_for_current_round(
+        self,
+        *,
+        game_session: GameSession,
+        current_turn: MatchTurnSnapshot | None,
+    ) -> list[str]:
+        """현재 라운드 화면과 AI context에 맞춰 해당 라운드에서 사용된 단어만 조회합니다."""
+        if current_turn is None:
+            return []
+        used_word_result = await self.db_session.execute(
+            select(UsedWord)
+            .where(
+                UsedWord.session_id == game_session.id,
+                UsedWord.round_number == current_turn.round_number,
+            )
+            .order_by(UsedWord.normalized_word.asc())
+        )
+        return [used_word.normalized_word for used_word in used_word_result.scalars().all()]
 
     async def _get_current_turn(self, game_session: GameSession) -> MatchTurnSnapshot | None:
         """세션의 current_phase_id가 가리키는 단어 턴 snapshot을 조회합니다."""

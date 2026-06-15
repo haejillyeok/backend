@@ -50,15 +50,21 @@ Lobby WebSocket을 연결한다. 게임 시작에 성공하면 match session tok
 타이머, 배너, 단어 입력 영역을 강조한다.
 Match WebSocket의 `match.turn.resolved` event는 원본 로그에만 남기지 않고 화면 상태에도 반영한다.
 `accepted`는 `next_turn`으로 현재 턴과 phase id를 갱신하고, `rejected`/`failed`는 현재 턴을 유지한 채
-사용자 notice로 판정 사유를 보여준다. `timeout`이나 `next_status`가 포함된 event는 다음 턴 또는 투표
-상태 전환 표시를 갱신한다.
+사용자 notice로 판정 사유를 보여준다. `rejected`/`failed`에 `word`가 포함되어 있으면 notice와 최근 판정
+카드에 제출 단어를 보여준다.
+테스트 페이지는 답변자가 사람인지 AI인지 구분하지 않고 공개 payload의 `word`, `normalized_word` 같은
+제출 단어 필드만 표시하며, `details.agent_answer` 같은 내부 구현 필드에는 의존하지 않는다.
+`timeout`에 `next_status`가 포함되면 투표 상태 전환 표시를 갱신한다. `timeout`에 `next_turn`이 포함되어도
+다음 라운드 시작까지 5초 텀이 있으므로 현재 턴을 즉시 바꾸지 않고, 이후 `match.round.started` event에서
+현재 턴과 phase id를 갱신한다. 이 대기 구간에는 `next_turn.started_at` 기준의 별도 라운드 시작
+카운트다운을 표시한다.
 또한 Match WebSocket에서 받은 사용자-facing event는 `match.feed`에 정규화해 누적한다. 게임 진행 화면은
 최근 판정을 큰 카드로 보여주고, 사이드 영역에는 최근 흐름을 쌓아 누가 어떤 단어를 냈고 서버가 어떻게
 판정했는지 바로 읽을 수 있게 한다. 내 답변과 다른 손님의 답변은 별도 문구와 스타일로 구분한다.
 `match.round.finished` event는 라운드 종료 피드로 정규화해 다음 라운드 시작 또는 투표 진입을 사용자에게
 명확히 보여준다.
-`match.round.started` event는 라운드 시작 피드로 정규화해 새 라운드 번호와 첫 차례 좌석을 사용자에게
-바로 보여준다.
+`match.round.started` event는 라운드 시작 피드로 정규화하고, 새 라운드 번호와 첫 차례 좌석을 사용자에게
+보여주며, 게임 진행 화면의 현재 턴을 이 이벤트 기준으로 전환한다.
 
 서버 선택, health 확인, Swagger와 WebSocket 문서 링크, `/ws/realtime` ping/pong, 원본 REST/WS 로그는
 상단의 숨김 운영 노트 패널에 둔다. 기본 화면에는 `BE`, `API`, `WebSocket`, `Swagger`, raw identifier 같은
@@ -73,7 +79,7 @@ protected API를 호출해 쿠키 포함 여부를 확인한다.
 
 상태관리는 React `useReducer` 기반 단일 store로 관리한다. Store는 현재 페이지, 런타임 BE 설정,
 로그인 유저, 객실 목록/선택 객실, 현재 멤버십, match 세션 식별자, match snapshot, WebSocket 연결
-상태, 이벤트 로그, 숨김 운영 노트 open 상태, 사용자 notice와 busy action을 소유한다. 실제 `WebSocket`
+상태, 이벤트 로그, 다음 라운드 시작 대기 상태, 숨김 운영 노트 open 상태, 사용자 notice와 busy action을 소유한다. 실제 `WebSocket`
 객체는 React state에 넣지 않고 `useRef`로 보관하고, 연결 상태와 수신 event만 reducer action으로 반영한다.
 
 ## Design Notes
