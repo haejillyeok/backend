@@ -182,6 +182,7 @@ async def test_match_vote_service_commits_vote_and_returns_progress_event() -> N
             "submitted_vote_count": 1,
             "required_vote_count": 2,
             "created_at": voted_at,
+            "server_time": voted_at,
         },
     }
 
@@ -291,6 +292,7 @@ async def test_match_vote_service_returns_result_event_when_all_users_voted() ->
             },
         ],
         "created_at": voted_at,
+        "server_time": voted_at,
     }
 
 
@@ -362,8 +364,10 @@ async def test_match_vote_service_commits_vote_timeout_and_returns_result_event(
         "submitted_vote_count": 1,
         "required_vote_count": 2,
         "created_at": timed_out_at,
+        "server_time": timed_out_at,
     }
     assert events[1].message["payload"]["event_sequence"] == 9
+    assert events[1].message["payload"]["server_time"] == timed_out_at
 
 
 async def test_match_vote_service_ignores_stale_vote_timeout_after_result() -> None:

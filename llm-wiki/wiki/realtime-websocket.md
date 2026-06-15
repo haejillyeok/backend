@@ -132,9 +132,13 @@ event payload는 익명 표시명과 seat number만 공개하고, 원래 닉네�
 식별자다. 첫 턴은 `round_number=1`, `turn_number=1`이고, `started_at`은 게임 시작 확정 시각보다
 5초 뒤다. 각 라운드 첫 턴의 `required_start_char`는 `word_game.valid_words`의 활성 단어가 실제로 가진
 `starts_with` 중 하나를 무작위로 선택하며, 후보 단어셋이 비어 있을 때만 `null`이다. 로비
-`game.started` handoff event도 같은 첫 `current_turn` 정보를 포함한다.
+`game.started` handoff event도 같은 첫 `current_turn` 정보와 `server_time`을 포함한다.
 
-현재 client command는 `ping`, `word.submit`, `vote.submit`이다. `ping`은 `match.pong`으로 응답한다.
+현재 client command는 `ping`, `word.submit`, `vote.submit`이다. `ping`은 client payload에
+`server_time`을 더한 `match.pong`으로 응답한다. 클라이언트는 `match.snapshot.server_time`,
+`match.pong.server_time`, 진행/라운드/투표/결과 event의 `server_time`을 사용해 로컬 시계와 서버 시계의
+offset을 보정하고, 화면 타이머는 `deadline_at - (local_now + offset)` 방식으로 표시한다. 실제 timeout과
+결과 확정은 항상 서버 deadline 판정이 권위자다.
 `word.submit`은 연결 identity의 participant, payload의 `phase_id`, 서버 시각, DB current
 phase/turn/deadline, `word_game.valid_words`, 현재 라운드 used_words를 기준으로 검증한다. 성공하면 `participant_actions.action_type =
 word_submit`, `word_game.submissions`, `word_game.used_words`, `score_ledger`, `game_events.event_type =
@@ -152,7 +156,8 @@ heartbeat 대기 시간과 현재 턴 deadline 중 더 이른 시점까지만 cl
 도달하면 Backend가 이미 끝난 phase가 아니고 deadline이 지난 current phase를
 `participant_actions.action_type = turn_timeout`, `game_events.event_type = turn_timeout`,
 `session_phases.result_status = timeout`으로 저장하고, commit 이후 같은 game session의 match 연결에
-`match.turn.resolved`를 `payload.result=timeout`으로 broadcast한다. deadline 이후 도착한 `word.submit`도
+`match.turn.resolved`를 `payload.result=timeout`으로 broadcast한다. `match.turn.resolved` payload에는
+`created_at`과 같은 서버 기준 현재 시각인 `server_time`을 포함한다. deadline 이후 도착한 `word.submit`도
 WebSocket 연결 오류가 아니라 같은 timeout 확정 경로로 처리해 `match.turn.resolved`를 broadcast하고
 연결은 유지한다.
 Timeout으로 끝말잇기 한판이 종료되면 event payload에 남은 판의 첫 턴인 `next_turn` 또는 모든 판 종료 후
@@ -160,8 +165,8 @@ Timeout으로 끝말잇기 한판이 종료되면 event payload에 남은 판의
 `phase_type=voting`인 `session_phases` row를 만들고 `game_sessions.current_phase_id`로 지정해 재접속
 snapshot에서 deadline을 복구할 수 있게 한다.
 남은 판의 첫 턴은 `started_at`을 timeout 확정 시각보다 5초 뒤로 잡고, `required_start_char`는 활성
-유효 단어셋의 `starts_with` 중 하나를 무작위로 선택한다. `match.round.started`는 그 시작 시각에 맞춰
-broadcast한다.
+유효 단어셋의 `starts_with` 중 하나를 무작위로 선택한다. `match.round.finished`와 `match.round.started`도
+`server_time`을 포함하며, `match.round.started`는 그 시작 시각에 맞춰 broadcast한다.
 
 AI 손님의 차례에서 Agent API가 timeout, 네트워크 오류, 4xx/5xx, invalid payload, `no_candidate` 등으로
 단어를 확정하지 못하면 Backend가 실패를 확정한다. 실패는 `participant_actions.action_type =
@@ -196,7 +201,8 @@ AI 턴 처리는 Agent API 호출을 DB 쓰기 transaction과 분리한다. 먼�
 seat number를 target participant로 해석한다. 투표 저장 후 `match.vote.accepted`를 broadcast하되 다른
 참가자의 선택을 누설하지 않도록 target은 포함하지 않고 투표자와 제출 현황만 보낸다. 모든 실제 유저가
 투표하면 Backend가 투표 점수와 최종 순위를 저장하고 `match.result.published`를 broadcast한다. 결과
-event에서만 `revealed_participant_type`으로 `user`/`ai`를 공개한다. 미투표자는 투표 점수 0점으로 남긴다.
+event에서만 `revealed_participant_type`으로 `user`/`ai`를 공개한다. 투표 접수, 투표 timeout, 결과 공개
+event도 모두 `server_time`을 포함한다. 미투표자는 투표 점수 0점으로 남긴다.
 deadline 이후 도착한 `vote.submit`은 저장하지 않고 WebSocket 연결 오류도 내지 않으며, 같은 timeout 확정
 경로로 `match.vote.timeout`과 `match.result.published`를 broadcast한다.
 여러 `/ws/match` 연결의 timer가 같은 voting deadline을 감지할 수 있으므로, 이미 `result` 상태가 된 세션의

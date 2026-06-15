@@ -100,6 +100,7 @@ class MatchVoteService:
                         "submitted_vote_count": record.accepted.submitted_vote_count,
                         "required_vote_count": record.accepted.required_vote_count,
                         "created_at": record.accepted.created_at,
+                        "server_time": record.accepted.created_at,
                     },
                 },
             )
@@ -129,6 +130,7 @@ class MatchVoteService:
                                 for result in record.result
                             ],
                             "created_at": record.result_created_at,
+                            "server_time": record.result_created_at,
                         },
                     },
                 )
@@ -159,6 +161,7 @@ class MatchVoteService:
                         "submitted_vote_count": record.accepted.submitted_vote_count,
                         "required_vote_count": record.accepted.required_vote_count,
                         "created_at": record.accepted.created_at,
+                        "server_time": record.accepted.created_at,
                     },
                 },
             )
@@ -190,6 +193,7 @@ class MatchVoteService:
                         for result in record.result or []
                     ],
                     "created_at": record.result_created_at,
+                    "server_time": record.result_created_at,
                 },
             },
         )

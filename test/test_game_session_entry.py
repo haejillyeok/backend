@@ -1453,6 +1453,11 @@ def test_start_game_session_endpoint_returns_session_for_authenticated_owner(mon
         broadcast_calls.append((room_public_id, message))
 
     monkeypatch.setattr(
+        game_endpoint,
+        "kst_now",
+        lambda: datetime(2026, 6, 12, 0, 0, 0, tzinfo=KST),
+    )
+    monkeypatch.setattr(
         game_endpoint.lobby_connection_manager,
         "broadcast_room",
         record_broadcast,
@@ -1474,6 +1479,7 @@ def test_start_game_session_endpoint_returns_session_for_authenticated_owner(mon
             "game_session_token": "owner-resume-token",
             "game_session_token_expires_at": "2026-06-12T01:00:00+09:00",
             "rule_config": {"max_rounds": 8, "turn_time_seconds": 10},
+            "server_time": "2026-06-12T00:00:00+09:00",
             "current_turn": {
                 "phase_id": str(phase_id),
                 "round_number": 1,
@@ -1506,6 +1512,7 @@ def test_start_game_session_endpoint_returns_session_for_authenticated_owner(mon
                     "game_type": "word_chain",
                     "status": "starting",
                     "rule_config": {"max_rounds": 8, "turn_time_seconds": 10},
+                    "server_time": "2026-06-12T00:00:00+09:00",
                     "current_turn": {
                         "phase_id": str(phase_id),
                         "round_number": 1,

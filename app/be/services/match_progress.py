@@ -5,6 +5,8 @@ from datetime import datetime
 from typing import Any, Protocol
 from uuid import UUID
 
+from app.shared.core.timezone import kst_now
+
 
 AI_ANSWER_FAILED_EVENT_TYPE = "ai_answer_failed"
 TURN_TIMEOUT_EVENT_TYPE = "turn_timeout"
@@ -204,6 +206,7 @@ class MatchProgressService:
             "details": public_details,
             "score_delta": 0,
             "created_at": record.created_at,
+            "server_time": record.created_at or kst_now(),
         }
         if record.next_turn is not None:
             payload["next_turn"] = _serialize_next_turn(record.next_turn)
@@ -249,6 +252,7 @@ class MatchProgressService:
             "score_delta": 0,
             "deadline_at": record.deadline_at,
             "created_at": record.created_at,
+            "server_time": record.created_at,
         }
         if record.round_number is not None:
             payload["round_number"] = record.round_number
@@ -304,6 +308,7 @@ class MatchProgressService:
                     "score_delta": record.score_delta,
                     "next_turn": _serialize_next_turn(record.next_turn),
                     "created_at": record.created_at,
+                    "server_time": record.created_at,
                 },
             },
         )
@@ -348,6 +353,7 @@ class MatchProgressService:
                     "details": record.details,
                     "score_delta": record.score_delta,
                     "created_at": record.created_at,
+                    "server_time": record.created_at,
                 },
             },
         )

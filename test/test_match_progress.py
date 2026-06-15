@@ -162,6 +162,7 @@ async def test_match_progress_service_commits_ai_failure_and_returns_broadcast_e
             "details": {"timeout_seconds": 3},
             "score_delta": 0,
             "created_at": datetime(2026, 6, 13, tzinfo=KST),
+            "server_time": datetime(2026, 6, 13, tzinfo=KST),
         },
     }
     assert "participant_type" not in str(event.message)
@@ -407,6 +408,7 @@ async def test_match_progress_service_commits_turn_timeout_and_returns_broadcast
             "score_delta": 0,
             "deadline_at": datetime(2026, 6, 13, 0, 0, 10, tzinfo=KST),
             "created_at": now,
+            "server_time": now,
         },
     }
 
@@ -482,6 +484,7 @@ async def test_match_progress_service_commits_word_submission_and_returns_broadc
     assert event.message["payload"]["score_delta"] == 10
     assert event.message["payload"]["next_turn"]["actor_seat_number"] == 2
     assert event.message["payload"]["next_turn"]["required_start_char"] == "과"
+    assert event.message["payload"]["server_time"] == now
 
 
 async def test_match_progress_service_commits_word_rejection_and_returns_broadcast_event() -> None:
@@ -554,6 +557,7 @@ async def test_match_progress_service_commits_word_rejection_and_returns_broadca
             "details": {"required_start_char": "가"},
             "score_delta": -5,
             "created_at": now,
+            "server_time": now,
         },
     }
 

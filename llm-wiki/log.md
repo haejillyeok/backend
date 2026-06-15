@@ -4,6 +4,12 @@
 코드 변경 상세는 Git history, PR, issue에서 확인하고, 이 파일에는 위키 페이지의 지식, 계약, 정책,
 컨벤션이 어떻게 바뀌었는지만 남깁니다.
 
+## [2026-06-15] maintenance | Add match server time synchronization contract
+
+- `game.started`, Match `snapshot`/`pong`/진행/라운드/투표/결과 event가 `server_time`을 포함해 client가 서버-로컬 시계 offset을 보정한다는 계약을 정리했다.
+- 화면 timer는 `server_time` 기반 offset과 `started_at`/`deadline_at`/`voting_deadline_at`으로 표시하되, 실제 timeout과 결과 확정은 서버 deadline 판정이 권위자라는 기준을 명시했다.
+- 테스트 페이지 기준에 `server_time`을 이용한 카운트다운 보정 원칙을 추가했다.
+
 ## [2026-06-15] maintenance | Add random round start character contract
 
 - 끝말잇기 각 라운드 첫 턴 `required_start_char`는 활성 `word_game.valid_words.starts_with` 후보 중 무작위로 선택한다는 계약을 추가했다.

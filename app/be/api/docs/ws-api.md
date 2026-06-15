@@ -290,6 +290,7 @@ Payload:
 | `game_type` | string | 게임 종류 |
 | `status` | string | 시작된 게임 세션 상태 |
 | `rule_config` | object | 시작 시점에 세션으로 고정된 룰 설정 |
+| `server_time` | datetime | 이 handoff를 만든 서버 기준 현재 시각 |
 | `current_turn` | object/null | 시작 직후 첫 턴 정보 |
 | `current_turn.phase_id` | uuid | `word.submit.phase_id`에 사용할 현재 턴 phase ID |
 | `current_turn.round_number` | number | 현재 끝말잇기 판 번호. 시작 직후는 1 |
@@ -391,8 +392,9 @@ Payload 주요 필드:
 
 방향: Client -> Server
 
-서버는 같은 payload를 `match.pong`으로 반환합니다. 지원하지 않는 message type은 `error` envelope를 보낸 뒤
-`1008` close code로 연결을 닫습니다.
+서버는 client payload에 `server_time`을 더해 `match.pong`으로 반환합니다. 클라이언트는 이 값을
+`match.snapshot.server_time`과 함께 서버-클라이언트 시계 offset 보정에 사용할 수 있습니다.
+지원하지 않는 message type은 `error` envelope를 보낸 뒤 `1008` close code로 연결을 닫습니다.
 
 ### 요청(Request): `word.submit`
 
@@ -494,6 +496,7 @@ Payload:
 | `next_status` | string 또는 null | 모든 판이 끝난 경우 다음 세션 상태. 현재는 `voting` |
 | `voting_deadline_at` | datetime/null | 투표가 강제 종료될 서버 기준 시각 |
 | `created_at` | datetime | 서버가 판정을 확정한 시각 |
+| `server_time` | datetime | 이 이벤트를 만든 서버 기준 현재 시각. 보통 `created_at`과 같습니다 |
 
 ### 이벤트(Event): `match.round.finished`
 
@@ -522,6 +525,7 @@ Payload:
 | `next_status` | string 또는 null | 모든 판이 끝난 경우 다음 세션 상태. 현재는 `voting` |
 | `voting_deadline_at` | datetime/null | 투표가 강제 종료될 서버 기준 시각 |
 | `created_at` | datetime | 서버가 라운드 종료를 확정한 시각 |
+| `server_time` | datetime | 이 이벤트를 만든 서버 기준 현재 시각 |
 
 ### 이벤트(Event): `match.round.started`
 
@@ -545,6 +549,7 @@ Payload:
 | `current_turn.required_start_char` | string/null | 첫 턴의 시작 글자. 활성 유효 단어셋의 시작 글자 중 무작위 선택 |
 | `started_at` | datetime/null | 라운드 시작 시각 |
 | `created_at` | datetime/null | 서버가 이벤트를 만든 시각 |
+| `server_time` | datetime | 라운드 시작 이벤트를 보낸 서버 기준 현재 시각 |
 
 ### 요청(Request): `vote.submit`
 
@@ -576,6 +581,7 @@ Payload:
 | `submitted_vote_count` | number | 제출된 실제 유저 투표 수 |
 | `required_vote_count` | number | 결과 확정에 필요한 실제 유저 투표 수 |
 | `created_at` | datetime | 서버가 투표를 확정한 시각 |
+| `server_time` | datetime | 이 이벤트를 만든 서버 기준 현재 시각 |
 
 ### 이벤트(Event): `match.vote.timeout`
 
@@ -593,6 +599,7 @@ Payload:
 | `submitted_vote_count` | number | deadline까지 제출된 실제 유저 투표 수 |
 | `required_vote_count` | number | 결과 확정에 필요했던 실제 유저 투표 수 |
 | `created_at` | datetime | 서버가 투표 timeout을 확정한 시각 |
+| `server_time` | datetime | 이 이벤트를 만든 서버 기준 현재 시각 |
 
 ### 이벤트(Event): `match.result.published`
 
@@ -614,6 +621,7 @@ Payload:
 | `results[].is_winner` | boolean | 최종 공동/단독 우승 여부 |
 | `results[].vote_score_delta` | number | 투표로 발생한 점수 변화 |
 | `created_at` | datetime | 서버가 결과를 확정한 시각 |
+| `server_time` | datetime | 이 이벤트를 만든 서버 기준 현재 시각 |
 
 ## Realtime WebSocket
 

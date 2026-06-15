@@ -99,6 +99,7 @@ class StartGameSessionResponse(SchemaModel):
     game_session_token: str
     game_session_token_expires_at: datetime
     rule_config: GameRoomRuleConfigResponse
+    server_time: datetime
     current_turn: GameSessionTurnResponse | None
     participants: list[GameSessionParticipantResponse]
 

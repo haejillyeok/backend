@@ -158,7 +158,7 @@ hash와 만료 시각으로 저장하는 match 복구 credential이다. `/ws/mat
 payload를 broadcast할 때는 토큰을 넣지 말고, 토큰은 현재 유저에게만 돌아가는 REST response 또는
 사용자별 handoff payload에만 포함한다. `game.started`에는 시작 transaction에서 생성한 첫
 `current_turn`을 포함해 client가 match 연결 전에도 첫 차례 참가자, `phase_id`, `started_at` 기반 시작
-카운트다운을 알 수 있게 한다.
+카운트다운을 알 수 있게 하며, 로컬 시계 보정을 위한 `server_time`도 포함한다.
 
 ## Room and Session State
 
@@ -345,6 +345,9 @@ idle -> matching -> settled -> countdown -> transitioning -> playing
 ## State Management Notes
 
 - 서버 timer를 기준으로 timeout을 판정한다. 클라이언트 timer는 표시용이다.
+- `game.started`, `match.snapshot`, `match.pong`, `match.turn.resolved`, `match.round.finished`,
+  `match.round.started`, `match.vote.accepted`, `match.vote.timeout`, `match.result.published`는
+  `server_time`을 포함해 클라이언트가 서버-로컬 시계 offset을 보정할 수 있게 한다.
 - `/ws/match` snapshot의 `current_turn.phase_id`는 client가 단어 제출 시 `word.submit.phase_id`로
   되돌려 보내는 현재 턴 식별자다.
 - `/ws/match` loop는 heartbeat 대기 시간과 현재 턴 또는 투표 deadline 중 더 이른 시점까지만 client
@@ -358,8 +361,8 @@ idle -> matching -> settled -> countdown -> transitioning -> playing
   `next_status=voting`과 `voting_deadline_at`을 함께 보내 화면 전환을 동기화한다.
 - 라운드 종료가 확정된 timeout은 호환용 `match.turn.resolved`를 먼저 보내고, 이어서 `match.round.finished`를
   같은 세션에 broadcast한다. `match.round.finished` payload에는 종료된 `round_number`, 원인 참가자,
-  `next_turn` 또는 `next_status`/`voting_deadline_at`, `created_at`을 포함해 클라이언트가 큰 전환 UI를
-  분명히 표시할 수 있게 한다.
+  `next_turn` 또는 `next_status`/`voting_deadline_at`, `created_at`, `server_time`을 포함해 클라이언트가
+  큰 전환 UI를 분명히 표시할 수 있게 한다.
 - 남은 판이 있어 다음 라운드 첫 턴이 생성되면 첫 턴의 `started_at`과 `deadline_at`을 라운드 종료 확정
   시각보다 5초 뒤로 민다. `match.round.finished` 뒤에는 5초 텀을 둔 다음 `match.round.started`를
   broadcast한다. `match.round.started`에는 시작된 `round_number`와 `current_turn`을 담고, 투표로 넘어가는

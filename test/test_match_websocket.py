@@ -511,8 +511,10 @@ async def test_process_match_turn_timeout_broadcasts_round_finished_event() -> N
     ]
     assert manager.broadcasts[1][1]["payload"]["round_number"] == 1
     assert manager.broadcasts[1][1]["payload"]["next_turn"]["round_number"] == 2
+    assert manager.broadcasts[1][1]["payload"]["server_time"] == now
     assert manager.broadcasts[2][1]["payload"]["round_number"] == 2
     assert manager.broadcasts[2][1]["payload"]["current_turn"]["phase_id"] == next_phase_id
+    assert manager.broadcasts[2][1]["payload"]["server_time"] == now
 
 
 async def test_broadcast_match_event_waits_until_delayed_round_start() -> None:
@@ -574,6 +576,8 @@ async def test_broadcast_match_event_waits_until_delayed_round_start() -> None:
         "match.round.started",
     ]
     assert manager.broadcasts[2][1]["payload"]["started_at"] == round_started_at
+    assert manager.broadcasts[1][1]["payload"]["server_time"] == now
+    assert manager.broadcasts[2][1]["payload"]["server_time"] == round_started_at
 
 
 async def test_process_match_turn_timeout_does_not_trigger_ai_when_round_moves_to_voting() -> None:
@@ -627,6 +631,7 @@ async def test_process_match_turn_timeout_does_not_trigger_ai_when_round_moves_t
         "match.turn.resolved",
         "match.round.finished",
     ]
+    assert manager.broadcasts[1][1]["payload"]["server_time"] == now
 
 
 async def test_process_match_turn_timeout_keeps_ai_timer_after_failed_ai_answer() -> None:
@@ -781,10 +786,11 @@ def test_match_websocket_replies_to_ping_after_snapshot() -> None:
         assert websocket.receive_json()["type"] == "match.snapshot"
         websocket.send_json({"type": "ping", "payload": {"client_time": "now"}})
 
-        assert websocket.receive_json() == {
-            "type": "match.pong",
-            "payload": {"client_time": "now"},
-        }
+        pong_event = websocket.receive_json()
+
+    assert pong_event["type"] == "match.pong"
+    assert pong_event["payload"]["client_time"] == "now"
+    assert isinstance(pong_event["payload"]["server_time"], str)
 
 
 def test_match_websocket_accepts_word_submit_and_broadcasts_result() -> None:
@@ -1080,10 +1086,9 @@ def test_match_websocket_broadcasts_dictionary_rejection_without_closing() -> No
     assert rejected_event["type"] == "match.turn.resolved"
     assert rejected_event["payload"]["result"] == "rejected"
     assert rejected_event["payload"]["reason"] == "word_not_in_dictionary"
-    assert pong_event == {
-        "type": "match.pong",
-        "payload": {"client_time": "after-reject"},
-    }
+    assert pong_event["type"] == "match.pong"
+    assert pong_event["payload"]["client_time"] == "after-reject"
+    assert isinstance(pong_event["payload"]["server_time"], str)
     assert progress_service.rejected_words
 
 
@@ -1172,10 +1177,9 @@ def test_match_websocket_broadcasts_turn_timeout_without_closing_on_late_word_su
     assert timeout_event["type"] == "match.turn.resolved"
     assert timeout_event["payload"]["result"] == "timeout"
     assert timeout_event["payload"]["reason"] == "deadline_exceeded"
-    assert pong_event == {
-        "type": "match.pong",
-        "payload": {"client_time": "after-timeout"},
-    }
+    assert pong_event["type"] == "match.pong"
+    assert pong_event["payload"]["client_time"] == "after-timeout"
+    assert isinstance(pong_event["payload"]["server_time"], str)
     assert progress_service.timeout_calls
 
 
@@ -1378,10 +1382,9 @@ def test_match_websocket_broadcasts_vote_timeout_without_closing_on_late_vote_su
 
     assert timeout_event["type"] == "match.vote.timeout"
     assert result_event["type"] == "match.result.published"
-    assert pong_event == {
-        "type": "match.pong",
-        "payload": {"client_time": "after-vote-timeout"},
-    }
+    assert pong_event["type"] == "match.pong"
+    assert pong_event["payload"]["client_time"] == "after-vote-timeout"
+    assert isinstance(pong_event["payload"]["server_time"], str)
     assert vote_service.timeout_calls
 
 

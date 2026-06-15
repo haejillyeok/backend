@@ -452,6 +452,7 @@ Response:
 게임 시작 카운트다운을 표시할 수 있게 합니다. 각 라운드의 첫 턴 `required_start_char`는
 `word_game.valid_words`의 활성 단어가 실제로 가진 `starts_with` 중 하나를 무작위로 선택합니다.
 후보 단어셋이 비어 있을 때만 `null`로 시작합니다.
+응답의 `server_time`은 클라이언트가 서버 기준 시작/마감 시각과 로컬 시계 offset을 맞출 때 사용합니다.
 
 이 endpoint는 방장의 반복 요청에 대해 멱등적으로 동작합니다. 같은 room에 `starting`, `playing`,
 `voting`처럼 아직 종료되지 않은 active session이 있으면 새 session을 만들지 않고 기존
@@ -475,6 +476,7 @@ Response:
       "max_rounds": 8,
       "turn_time_seconds": 10
     },
+    "server_time": "2026-06-12T03:00:00+09:00",
     "current_turn": {
       "phase_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b81",
       "round_number": 1,

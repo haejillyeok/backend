@@ -334,11 +334,13 @@ async def handle_match_message(
 ) -> list[MatchMessage]:
     """`/ws/match` WebSocket message type을 처리합니다.
 
-    현재 구현된 공개 command는 연결 유지 확인용 `ping`입니다. 단어 제출과 투표 command는 이후
-    match 진행 service가 준비되면 같은 handler에 추가합니다.
+    현재 공개 command는 연결 유지 확인용 `ping`, 단어 제출 `word.submit`, AI 지목 투표
+    `vote.submit`입니다.
     """
     if message["type"] == "ping":
-        await manager.send(websocket, {"type": "match.pong", "payload": message["payload"]})
+        payload = dict(message["payload"])
+        payload["server_time"] = now
+        await manager.send(websocket, {"type": "match.pong", "payload": payload})
         return []
 
     if message["type"] == "word.submit":
@@ -574,6 +576,7 @@ def round_finished_message_from_turn_resolved(message: MatchMessage) -> MatchMes
         "participant": payload.get("participant"),
         "deadline_at": payload.get("deadline_at"),
         "created_at": payload.get("created_at"),
+        "server_time": payload.get("server_time") or payload.get("created_at"),
     }
     for key in ("next_turn", "next_status", "voting_deadline_at"):
         if key in payload:
@@ -602,6 +605,9 @@ def round_started_message_from_turn_resolved(message: MatchMessage) -> MatchMess
             "current_turn": next_turn,
             "started_at": next_turn.get("started_at") or payload.get("created_at"),
             "created_at": payload.get("created_at"),
+            "server_time": next_turn.get("started_at")
+            or payload.get("server_time")
+            or payload.get("created_at"),
         },
     }
 

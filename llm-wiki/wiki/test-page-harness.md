@@ -44,10 +44,11 @@ Lobby WebSocket을 연결한다. 게임 시작에 성공하면 match session tok
 이동해 Match WebSocket을 연결한다. Lobby `game.started` event를 받은 경우에는 session entry API로
 토큰을 발급받은 뒤 게임 진행 페이지로 이동한다.
 
-게임 진행 화면은 `match.snapshot.server_time`, `current_turn.started_at`, `current_turn.deadline_at`,
-`voting_deadline_at`을 사용해 시작 전 카운트다운과 남은 시간을 표시한다. 화면 타이머는 표시용이며,
-실제 timeout과 상태 전환은 계속 서버 deadline 판정이 권위자다. 현재 참가자 판정은 participant `is_me`와
-`current_turn.actor_seat_number`를 비교해 내 턴이면 타이머, 배너, 단어 입력 영역을 강조한다.
+게임 진행 화면은 `game.started.server_time`, `match.snapshot.server_time`, `match.pong.server_time`,
+진행/라운드/투표/결과 event의 `server_time`, `current_turn.started_at`, `current_turn.deadline_at`,
+`voting_deadline_at`을 사용해 서버-로컬 시계 offset을 보정하고 시작 전 카운트다운과 남은 시간을 표시한다.
+화면 타이머는 표시용이며, 실제 timeout과 상태 전환은 계속 서버 deadline 판정이 권위자다. 현재 참가자 판정은
+participant `is_me`와 `current_turn.actor_seat_number`를 비교해 내 턴이면 타이머, 배너, 단어 입력 영역을 강조한다.
 Match WebSocket의 `match.turn.resolved` event는 원본 로그에만 남기지 않고 화면 상태에도 반영한다.
 `accepted`는 `next_turn`으로 현재 턴과 phase id를 갱신하고, `rejected`/`failed`는 현재 턴을 유지한 채
 사용자 notice로 판정 사유를 보여준다. `rejected`/`failed`에 `word`가 포함되어 있으면 notice와 최근 판정

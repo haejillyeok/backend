@@ -355,6 +355,7 @@ def map_start_result(result: GameSessionStartResult) -> StartGameSessionResponse
         game_session_token=result.game_session_token,
         game_session_token_expires_at=result.game_session_token_expires_at,
         rule_config=result.rule_config,
+        server_time=kst_now(),
         current_turn=(
             GameSessionTurnResponse(
                 phase_id=result.current_turn.phase_id,
