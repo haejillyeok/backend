@@ -4,6 +4,12 @@
 코드 변경 상세는 Git history, PR, issue에서 확인하고, 이 파일에는 위키 페이지의 지식, 계약, 정책,
 컨벤션이 어떻게 바뀌었는지만 남깁니다.
 
+## [2026-06-15] maintenance | Add random round start character contract
+
+- 끝말잇기 각 라운드 첫 턴 `required_start_char`는 활성 `word_game.valid_words.starts_with` 후보 중 무작위로 선택한다는 계약을 추가했다.
+- 후보 단어셋이 비어 있을 때만 라운드 첫 턴을 `required_start_char=null`로 시작한다는 fallback 기준을 정리했다.
+- start REST 응답, Lobby `game.started`, Match `match.snapshot`/`match.round.started`가 같은 시작글자 조건을 전달한다는 기준을 반영했다.
+
 ## [2026-06-15] maintenance | Add audit payload logging rules
 
 - `observability-stack.md`에 HTTP, WebSocket, Agent outbound 감사 로그의 logger, phase, operation, payload 검열 기준을 정리했다.

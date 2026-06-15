@@ -1421,7 +1421,7 @@ def test_start_game_session_endpoint_returns_session_for_authenticated_owner(mon
                             "actor_seat_number": 1,
                             "started_at": datetime(2026, 6, 12, 0, 0, 5, tzinfo=KST),
                             "deadline_at": datetime(2026, 6, 12, 0, 0, 10, tzinfo=KST),
-                            "required_start_char": None,
+                            "required_start_char": "가",
                         },
                     )(),
                     "participants": [
@@ -1481,7 +1481,7 @@ def test_start_game_session_endpoint_returns_session_for_authenticated_owner(mon
                 "actor_seat_number": 1,
                 "started_at": "2026-06-12T00:00:05+09:00",
                 "deadline_at": "2026-06-12T00:00:10+09:00",
-                "required_start_char": None,
+                "required_start_char": "가",
             },
             "participants": [
                 {
@@ -1513,7 +1513,7 @@ def test_start_game_session_endpoint_returns_session_for_authenticated_owner(mon
                         "actor_seat_number": 1,
                         "started_at": "2026-06-12T00:00:05+09:00",
                         "deadline_at": "2026-06-12T00:00:10+09:00",
-                        "required_start_char": None,
+                        "required_start_char": "가",
                     },
                     "participants": [
                         {

@@ -110,7 +110,9 @@ Backend가 소유하는 게임 상태, WebSocket event, Agent 경계를 우선�
   - 시작 시점의 room `rule_config`를 `game_sessions.rule_config`에 snapshot으로 고정한다.
   - 끝말잇기 세션 시작 시 첫 번째 턴 phase와 `word_game.turns` row를 함께 생성하고 `game_sessions.current_phase_id`로 지정한다.
   - `game_sessions.current_phase_id`는 `session_phases.id` FK이므로 시작 transaction은 game session과 participants를 먼저 flush하고, 첫 phase와 turn을 flush한 뒤 마지막에 `current_phase_id`를 갱신한다.
-  - 첫 턴은 `round_number=1`, `turn_number=1`, actor는 `seat_number=1`, `required_start_char=null`이다.
+  - 첫 턴은 `round_number=1`, `turn_number=1`, actor는 `seat_number=1`이다.
+  - 각 라운드 첫 턴의 `required_start_char`는 `word_game.valid_words`의 활성 단어가 실제로 가진
+    `starts_with` 중 하나를 무작위로 선택한다. 후보 단어셋이 비어 있을 때만 `null`로 시작한다.
   - 첫 턴 `started_at`은 시작 확정 시각보다 5초 뒤이고, `deadline_at`은 그 `started_at`에 `turn_time_seconds`를 더한 시각이다.
   - 응답은 `game_sessions.public_id`인 `game_session_public_id`를 반환한다. 이 값은 한 게임 세션의 공개 식별자이며 라운드 ID가 아니다.
 - `GET /api/v1/game/sessions/{game_session_public_id}/entry`
@@ -361,7 +363,8 @@ idle -> matching -> settled -> countdown -> transitioning -> playing
 - 남은 판이 있어 다음 라운드 첫 턴이 생성되면 첫 턴의 `started_at`과 `deadline_at`을 라운드 종료 확정
   시각보다 5초 뒤로 민다. `match.round.finished` 뒤에는 5초 텀을 둔 다음 `match.round.started`를
   broadcast한다. `match.round.started`에는 시작된 `round_number`와 `current_turn`을 담고, 투표로 넘어가는
-  마지막 라운드에서는 보내지 않는다.
+  마지막 라운드에서는 보내지 않는다. 다음 라운드 첫 턴의 `required_start_char`도 활성 유효 단어셋의
+  `starts_with` 중 하나를 무작위로 선택한다.
 - reconnect가 필요하므로 room/session snapshot을 재전송할 수 있어야 한다.
 - disconnect cleanup은 room membership과 game session 정책을 분리해 다룬다.
 - AI answer 요청은 Backend가 현재 GameSession 상태를 검증한 뒤 Agent에 보낸다.

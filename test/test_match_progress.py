@@ -921,6 +921,7 @@ async def test_match_progress_repository_starts_next_round_after_timeout_before_
             FakeResult(row=(turn, participant)),
             FakeResult(scalars=[participant, next_participant]),
             FakeResult(scalar=8),
+            FakeResult(scalar="나"),
             FakeResult(scalar=12),
         ]
     )
@@ -936,20 +937,23 @@ async def test_match_progress_repository_starts_next_round_after_timeout_before_
     assert isinstance(next_phase, SessionPhase)
     assert next_phase.phase_number == 5
     assert next_phase.actor_participant_id == next_participant_id
-    assert next_phase.condition_payload == {"required_start_char": None}
+    assert next_phase.condition_payload == {"required_start_char": "나"}
     assert next_phase.started_at == datetime(2026, 6, 13, 0, 0, 16, tzinfo=KST)
     assert next_phase.deadline_at == datetime(2026, 6, 13, 0, 0, 26, tzinfo=KST)
     assert isinstance(next_turn, WordTurn)
     assert next_turn.round_number == 2
     assert next_turn.turn_number == 1
+    assert next_turn.condition_payload == {"required_start_char": "나"}
     assert next_turn.participant_id == next_participant_id
     assert game_session.current_phase_id == next_phase.id
     assert game_session.status == "playing"
     assert event.payload["next_turn"]["round_number"] == 2
     assert event.payload["next_turn"]["actor_seat_number"] == 2
+    assert event.payload["next_turn"]["required_start_char"] == "나"
     assert event.payload["next_turn"]["started_at"] == "2026-06-13T00:00:16+09:00"
     assert record.next_turn is not None
     assert record.next_turn.round_number == 2
+    assert record.next_turn.required_start_char == "나"
     assert record.next_turn.started_at == datetime(2026, 6, 13, 0, 0, 16, tzinfo=KST)
     assert action.action_type == "turn_timeout"
     assert db_session.flushed_item_types[0] == ["ParticipantAction"]

@@ -277,6 +277,8 @@ REST start API가 세션 생성을 확정한 뒤 로비에서 매치로 넘어�
 방 전체 공통 payload에는 사용자별 `game_session_token`을 포함하지 않습니다.
 끝말잇기 세션은 시작 transaction 안에서 첫 번째 턴을 함께 생성하며, 첫 턴 `started_at`은 시작 확정
 시각보다 5초 뒤로 잡습니다. `game.started.current_turn`에는 이 첫 차례 정보를 포함합니다.
+첫 턴 `required_start_char`는 `word_game.valid_words`의 활성 단어가 실제로 가진 `starts_with` 중
+하나를 무작위로 선택하며, 후보 단어셋이 비어 있을 때만 `null`입니다.
 `/ws/match` 연결 직후에도 `match.snapshot.current_turn`으로 같은 정보를 복구할 수 있습니다.
 
 Payload:
@@ -295,7 +297,7 @@ Payload:
 | `current_turn.actor_seat_number` | number | 첫 차례 참가자의 순서 |
 | `current_turn.started_at` | datetime | 첫 턴이 실제로 시작되는 서버 기준 시각. 시작 확정 후 5초 뒤 |
 | `current_turn.deadline_at` | datetime/null | 서버 기준 턴 제한 시각 |
-| `current_turn.required_start_char` | string/null | 첫 턴에 필요한 시작 글자. 시작 직후는 `null` |
+| `current_turn.required_start_char` | string/null | 첫 턴에 필요한 시작 글자. 활성 유효 단어셋의 시작 글자 중 무작위 선택 |
 | `participants` | array | 시작 시 고정된 익명 참가자 snapshot |
 | `participants[].display_name` | string | `1번 손님` 같은 익명 표시명 |
 | `participants[].seat_number` | number | 게임 세션 안 순서 |
@@ -370,7 +372,7 @@ Payload 주요 필드:
 | `current_turn.actor_seat_number` | number | 현재 차례 참가자의 순서 |
 | `current_turn.started_at` | datetime | 현재 턴이 실제로 시작되는 서버 기준 시각 |
 | `current_turn.deadline_at` | datetime/null | 서버 기준 턴 제한 시각 |
-| `current_turn.required_start_char` | string/null | 이번 턴에 필요한 시작 글자. 첫 턴은 `null` |
+| `current_turn.required_start_char` | string/null | 이번 턴에 필요한 시작 글자. 라운드 첫 턴은 활성 유효 단어셋의 시작 글자 중 무작위 선택 |
 | `used_words` | array | 현재 끝말잇기 판에서 이미 사용된 정규화 단어 |
 | `scoreboard` | array | 익명 점수판 |
 | `server_time` | datetime | 서버 기준 현재 시각 |
@@ -462,7 +464,8 @@ timeout으로 현재 끝말잇기 한판이 종료되면 payload에는 종료된
 이 경우 서버는 같은 내용을 사용자 화면에서 더 명확히 처리할 수 있도록 `match.round.finished`도 이어서
 broadcast합니다. 남은 판이 있어 `next_turn`이 생성되면 다음 라운드 첫 턴의 `started_at`을 timeout 확정
 시각보다 5초 뒤로 잡고, `match.round.started`도 그 시작 시각에 맞춰 보내 다음 라운드 첫 턴을 명확히
-알립니다.
+알립니다. 다음 라운드 첫 턴의 `required_start_char`도 활성 유효 단어셋의 시작 글자 중 무작위로
+선택합니다.
 
 Payload:
 
@@ -539,7 +542,7 @@ Payload:
 | `current_turn.actor_seat_number` | number | 첫 차례 참가자의 순서 |
 | `current_turn.started_at` | datetime | 첫 턴이 실제로 시작되는 서버 기준 시각 |
 | `current_turn.deadline_at` | datetime | 첫 턴의 서버 기준 제한 시각 |
-| `current_turn.required_start_char` | string/null | 첫 턴의 시작 글자. 새 라운드 첫 턴은 `null` |
+| `current_turn.required_start_char` | string/null | 첫 턴의 시작 글자. 활성 유효 단어셋의 시작 글자 중 무작위 선택 |
 | `started_at` | datetime/null | 라운드 시작 시각 |
 | `created_at` | datetime/null | 서버가 이벤트를 만든 시각 |
 

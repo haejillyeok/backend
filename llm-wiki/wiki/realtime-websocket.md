@@ -129,9 +129,10 @@ event payload는 익명 표시명과 seat number만 공개하고, 원래 닉네�
 `game_sessions.current_phase_id`를 이 phase로 지정한다. 따라서 match snapshot은 현재 phase를 조회해
 `current_turn.phase_id`, `round_number`, `turn_number`, `actor_seat_number`, `started_at`, `deadline_at`,
 `required_start_char`를 복구한다. `phase_id`는 client가 `word.submit.phase_id`로 다시 보내는 현재 턴
-식별자다. 첫 턴은 `round_number=1`, `turn_number=1`, `required_start_char=null`이고, `started_at`은
-게임 시작 확정 시각보다 5초 뒤다. 로비 `game.started` handoff event도 같은 첫 `current_turn` 정보를
-포함한다.
+식별자다. 첫 턴은 `round_number=1`, `turn_number=1`이고, `started_at`은 게임 시작 확정 시각보다
+5초 뒤다. 각 라운드 첫 턴의 `required_start_char`는 `word_game.valid_words`의 활성 단어가 실제로 가진
+`starts_with` 중 하나를 무작위로 선택하며, 후보 단어셋이 비어 있을 때만 `null`이다. 로비
+`game.started` handoff event도 같은 첫 `current_turn` 정보를 포함한다.
 
 현재 client command는 `ping`, `word.submit`, `vote.submit`이다. `ping`은 `match.pong`으로 응답한다.
 `word.submit`은 연결 identity의 participant, payload의 `phase_id`, 서버 시각, DB current
@@ -158,8 +159,9 @@ Timeout으로 끝말잇기 한판이 종료되면 event payload에 남은 판의
 투표 전환을 뜻하는 `next_status=voting`과 `voting_deadline_at`을 포함한다. 투표 전환 시 Backend는
 `phase_type=voting`인 `session_phases` row를 만들고 `game_sessions.current_phase_id`로 지정해 재접속
 snapshot에서 deadline을 복구할 수 있게 한다.
-남은 판의 첫 턴은 `started_at`을 timeout 확정 시각보다 5초 뒤로 잡고, `match.round.started`는 그 시작
-시각에 맞춰 broadcast한다.
+남은 판의 첫 턴은 `started_at`을 timeout 확정 시각보다 5초 뒤로 잡고, `required_start_char`는 활성
+유효 단어셋의 `starts_with` 중 하나를 무작위로 선택한다. `match.round.started`는 그 시작 시각에 맞춰
+broadcast한다.
 
 AI 손님의 차례에서 Agent API가 timeout, 네트워크 오류, 4xx/5xx, invalid payload, `no_candidate` 등으로
 단어를 확정하지 못하면 Backend가 실패를 확정한다. 실패는 `participant_actions.action_type =

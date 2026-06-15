@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from app.be.models.game import GameSession, Room, RoomMember, SessionParticipant, SessionPhase
+from app.be.models.game import ValidWord
 from app.be.models.game import WordTurn
 from app.be.models.user import User
 from app.be.schemas.game_enum import GameSessionStatus, GameType, RoomStatus
@@ -592,12 +593,16 @@ class GameRepository:
         await self.db_session.flush()
 
         if session.game_type == GameType.WORD_CHAIN.value and participant_rows:
+            required_start_char = await self._select_random_round_start_char(
+                game_type=session.game_type
+            )
             initial_phase = self._build_initial_word_turn_phase(
                 game_session=game_session,
                 first_participant=min(
                     participant_rows, key=lambda participant: participant.seat_number
                 ),
                 rule_config=session.rule_config,
+                required_start_char=required_start_char,
             )
             self.db_session.add(initial_phase)
             self.db_session.add(
@@ -636,11 +641,12 @@ class GameRepository:
         game_session: GameSession,
         first_participant: SessionParticipant,
         rule_config: dict[str, int],
+        required_start_char: str | None,
     ) -> SessionPhase:
         """끝말잇기 세션 시작 직후 첫 번째 턴 phase를 만듭니다."""
         started_at = kst_now() + timedelta(seconds=INITIAL_TURN_START_DELAY_SECONDS)
         turn_time_seconds = int(rule_config.get("turn_time_seconds", 10))
-        condition_payload = {"required_start_char": None}
+        condition_payload = {"required_start_char": required_start_char}
         return SessionPhase(
             id=generate_uuid_v7(),
             session_id=game_session.id,
@@ -652,6 +658,20 @@ class GameRepository:
             started_at=started_at,
             deadline_at=started_at + timedelta(seconds=turn_time_seconds),
         )
+
+    async def _select_random_round_start_char(self, *, game_type: str) -> str | None:
+        """활성 유효 단어셋에 실제 후보가 있는 시작글자 중 하나를 무작위로 고릅니다."""
+        result = await self.db_session.execute(
+            select(ValidWord.starts_with)
+            .where(
+                ValidWord.game_type == game_type,
+                ValidWord.is_active.is_(True),
+            )
+            .group_by(ValidWord.starts_with)
+            .order_by(func.random())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
 
     async def get_user_participant_for_session(
         self,

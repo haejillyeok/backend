@@ -175,15 +175,19 @@ class MatchProgressRepository:
         phase.finished_at = now
         phase.result_status = "timeout"
 
-        next_items, transition_payload, next_turn_record, next_status, voting_deadline_at = (
-            self._build_round_end_transition(
-                game_session=game_session,
-                phase=phase,
-                turn=turn,
-                participant=participant,
-                participants=participants,
-                now=now,
-            )
+        (
+            next_items,
+            transition_payload,
+            next_turn_record,
+            next_status,
+            voting_deadline_at,
+        ) = await self._build_round_end_transition(
+            game_session=game_session,
+            phase=phase,
+            turn=turn,
+            participant=participant,
+            participants=participants,
+            now=now,
         )
         next_phases = [item for item in next_items if isinstance(item, SessionPhase)]
         next_non_phases = [item for item in next_items if not isinstance(item, SessionPhase)]
@@ -681,7 +685,7 @@ class MatchProgressRepository:
         )
         return later_participant or participants[0]
 
-    def _build_round_end_transition(
+    async def _build_round_end_transition(
         self,
         *,
         game_session: GameSession,
@@ -727,13 +731,16 @@ class MatchProgressRepository:
         next_participant = self._next_participant(participants, participant)
         turn_time_seconds = int(game_session.rule_config.get("turn_time_seconds", 10))
         next_round_started_at = now + timedelta(seconds=ROUND_START_DELAY_SECONDS)
+        required_start_char = await self._select_random_round_start_char(
+            game_type=game_session.game_type
+        )
         next_phase = SessionPhase(
             id=generate_uuid_v7(),
             session_id=game_session.id,
             phase_type="turn",
             phase_number=phase.phase_number + 1,
             actor_participant_id=next_participant.id,
-            condition_payload={"required_start_char": None},
+            condition_payload={"required_start_char": required_start_char},
             time_limit_seconds=turn_time_seconds,
             started_at=next_round_started_at,
             deadline_at=next_round_started_at + timedelta(seconds=turn_time_seconds),
@@ -754,7 +761,7 @@ class MatchProgressRepository:
             "actor_seat_number": next_participant.seat_number,
             "started_at": next_phase.started_at.isoformat(),
             "deadline_at": next_phase.deadline_at.isoformat(),
-            "required_start_char": None,
+            "required_start_char": required_start_char,
         }
         return (
             [next_phase, next_turn],
@@ -766,11 +773,25 @@ class MatchProgressRepository:
                 actor_seat_number=next_participant.seat_number,
                 started_at=next_phase.started_at,
                 deadline_at=next_phase.deadline_at,
-                required_start_char=None,
+                required_start_char=required_start_char,
             ),
             None,
             None,
         )
+
+    async def _select_random_round_start_char(self, *, game_type: str) -> str | None:
+        """활성 유효 단어셋에 실제 후보가 있는 시작글자 중 하나를 무작위로 고릅니다."""
+        result = await self.db_session.execute(
+            select(ValidWord.starts_with)
+            .where(
+                ValidWord.game_type == game_type,
+                ValidWord.is_active.is_(True),
+            )
+            .group_by(ValidWord.starts_with)
+            .order_by(func.random())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
 
     def _normalize_word(self, word: str) -> str:
         normalized_word = word.strip()
