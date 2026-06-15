@@ -122,6 +122,7 @@ def snapshot_with_current_turn(
             round_number=1,
             turn_number=3,
             actor_seat_number=1,
+            started_at=datetime(2099, 6, 13, 0, 0, 0, tzinfo=KST),
             deadline_at=datetime(2099, 6, 13, 0, 0, 10, tzinfo=KST),
             required_start_char="가",
         ),

@@ -16,6 +16,7 @@ from app.be.services.game import (
     GameSessionParticipantRecord,
     GameSessionStartResult,
     GameSessionTurnRecord,
+    INITIAL_TURN_START_DELAY_SECONDS,
     RoomLeaveResult,
     RoomMemberRecord,
     RoomUpdateResult,
@@ -297,6 +298,7 @@ class GameRepository:
             round_number=turn.round_number,
             turn_number=turn.turn_number,
             actor_seat_number=participant.seat_number,
+            started_at=phase.started_at,
             deadline_at=phase.deadline_at,
             required_start_char=turn.condition_payload.get("required_start_char"),
         )
@@ -621,6 +623,7 @@ class GameRepository:
                     round_number=1,
                     turn_number=1,
                     actor_seat_number=first_participant.seat_number,
+                    started_at=initial_phase.started_at,
                     deadline_at=initial_phase.deadline_at,
                     required_start_char=initial_phase.condition_payload.get("required_start_char"),
                 ),
@@ -635,7 +638,7 @@ class GameRepository:
         rule_config: dict[str, int],
     ) -> SessionPhase:
         """끝말잇기 세션 시작 직후 첫 번째 턴 phase를 만듭니다."""
-        now = kst_now()
+        started_at = kst_now() + timedelta(seconds=INITIAL_TURN_START_DELAY_SECONDS)
         turn_time_seconds = int(rule_config.get("turn_time_seconds", 10))
         condition_payload = {"required_start_char": None}
         return SessionPhase(
@@ -646,8 +649,8 @@ class GameRepository:
             actor_participant_id=first_participant.id,
             condition_payload=condition_payload,
             time_limit_seconds=turn_time_seconds,
-            started_at=now,
-            deadline_at=now + timedelta(seconds=turn_time_seconds),
+            started_at=started_at,
+            deadline_at=started_at + timedelta(seconds=turn_time_seconds),
         )
 
     async def get_user_participant_for_session(

@@ -41,6 +41,7 @@ class MatchTurnSnapshot:
     round_number: int
     turn_number: int
     actor_seat_number: int
+    started_at: datetime
     deadline_at: datetime | None
     required_start_char: str | None
 
@@ -258,6 +259,7 @@ class MatchConnectionManager:
                             "round_number": snapshot.current_turn.round_number,
                             "turn_number": snapshot.current_turn.turn_number,
                             "actor_seat_number": snapshot.current_turn.actor_seat_number,
+                            "started_at": to_kst_isoformat(snapshot.current_turn.started_at),
                             "deadline_at": (
                                 to_kst_isoformat(snapshot.current_turn.deadline_at)
                                 if snapshot.current_turn.deadline_at

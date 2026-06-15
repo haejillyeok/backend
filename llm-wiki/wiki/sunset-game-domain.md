@@ -111,6 +111,7 @@ Backend가 소유하는 게임 상태, WebSocket event, Agent 경계를 우선�
   - 끝말잇기 세션 시작 시 첫 번째 턴 phase와 `word_game.turns` row를 함께 생성하고 `game_sessions.current_phase_id`로 지정한다.
   - `game_sessions.current_phase_id`는 `session_phases.id` FK이므로 시작 transaction은 game session과 participants를 먼저 flush하고, 첫 phase와 turn을 flush한 뒤 마지막에 `current_phase_id`를 갱신한다.
   - 첫 턴은 `round_number=1`, `turn_number=1`, actor는 `seat_number=1`, `required_start_char=null`이다.
+  - 첫 턴 `started_at`은 시작 확정 시각보다 5초 뒤이고, `deadline_at`은 그 `started_at`에 `turn_time_seconds`를 더한 시각이다.
   - 응답은 `game_sessions.public_id`인 `game_session_public_id`를 반환한다. 이 값은 한 게임 세션의 공개 식별자이며 라운드 ID가 아니다.
 - `GET /api/v1/game/sessions/{game_session_public_id}/entry`
   - `session_token` 쿠키로 현재 유저를 인증한다.
@@ -154,7 +155,8 @@ hash와 만료 시각으로 저장하는 match 복구 credential이다. `/ws/mat
 `game_session_token` hash로 participant identity를 복원할 수 있다. 방 전체에 같은 `game.started`
 payload를 broadcast할 때는 토큰을 넣지 말고, 토큰은 현재 유저에게만 돌아가는 REST response 또는
 사용자별 handoff payload에만 포함한다. `game.started`에는 시작 transaction에서 생성한 첫
-`current_turn`을 포함해 client가 match 연결 전에도 첫 차례 참가자와 `phase_id`를 알 수 있게 한다.
+`current_turn`을 포함해 client가 match 연결 전에도 첫 차례 참가자, `phase_id`, `started_at` 기반 시작
+카운트다운을 알 수 있게 한다.
 
 ## Room and Session State
 

@@ -361,6 +361,7 @@ def map_start_result(result: GameSessionStartResult) -> StartGameSessionResponse
                 round_number=result.current_turn.round_number,
                 turn_number=result.current_turn.turn_number,
                 actor_seat_number=result.current_turn.actor_seat_number,
+                started_at=result.current_turn.started_at,
                 deadline_at=result.current_turn.deadline_at,
                 required_start_char=result.current_turn.required_start_char,
             )

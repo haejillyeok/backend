@@ -447,8 +447,9 @@ Response:
 사용할 `game_session_public_id`를 반환합니다. 실제 유저 참가자 뒤에 AI 손님 1명이
 내부 참가자로 추가됩니다. 시작 시점의 객실 `rule_config`는 `game_sessions.rule_config`에 snapshot으로
 고정됩니다. `game_session_public_id`는 한 게임 세션의 공개 식별자이며, 라운드 ID가 아닙니다.
-끝말잇기 세션은 시작 transaction 안에서 첫 턴을 함께 만들고, 응답과 `game.started` event에
-`current_turn`으로 포함합니다.
+끝말잇기 세션은 시작 transaction 안에서 첫 턴을 함께 만들고, 첫 턴 `started_at`은 시작 확정 시각보다
+5초 뒤로 잡습니다. 응답과 `game.started` event에는 이 첫 턴을 `current_turn`으로 포함해 클라이언트가
+게임 시작 카운트다운을 표시할 수 있게 합니다.
 
 이 endpoint는 방장의 반복 요청에 대해 멱등적으로 동작합니다. 같은 room에 `starting`, `playing`,
 `voting`처럼 아직 종료되지 않은 active session이 있으면 새 session을 만들지 않고 기존
@@ -477,7 +478,8 @@ Response:
       "round_number": 1,
       "turn_number": 1,
       "actor_seat_number": 1,
-      "deadline_at": "2026-06-12T03:00:10+09:00",
+      "started_at": "2026-06-12T03:00:05+09:00",
+      "deadline_at": "2026-06-12T03:00:15+09:00",
       "required_start_char": null
     },
     "participants": [

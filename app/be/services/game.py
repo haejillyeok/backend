@@ -18,6 +18,7 @@ STARTING_STATUS = GameSessionStatus.STARTING.value
 WAITING_ROOM_STATUS = RoomStatus.WAITING.value
 SOLO_ABORTABLE_ROOM_STATUSES = (RoomStatus.STARTING.value, RoomStatus.PLAYING.value)
 DEFAULT_ROOM_RULE_CONFIG = {"max_rounds": 8, "turn_time_seconds": 10}
+INITIAL_TURN_START_DELAY_SECONDS = 5
 
 
 def default_room_rule_config() -> dict[str, int]:
@@ -159,6 +160,7 @@ class GameSessionTurnRecord:
     round_number: int
     turn_number: int
     actor_seat_number: int
+    started_at: datetime
     deadline_at: datetime | None
     required_start_char: str | None
 

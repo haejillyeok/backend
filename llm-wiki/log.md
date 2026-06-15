@@ -4,6 +4,12 @@
 코드 변경 상세는 Git history, PR, issue에서 확인하고, 이 파일에는 위키 페이지의 지식, 계약, 정책,
 컨벤션이 어떻게 바뀌었는지만 남깁니다.
 
+## [2026-06-15] maintenance | Add initial game start countdown
+
+- 끝말잇기 세션 시작 직후 첫 턴 `started_at`은 시작 확정 시각보다 5초 뒤이고, `deadline_at`은 그 시각에 `turn_time_seconds`를 더한 값이라는 계약을 추가했다.
+- start REST 응답, Lobby `game.started`, Match `match.snapshot`의 `current_turn`이 `started_at`을 포함해 client가 게임 시작 카운트다운을 표시할 수 있다는 기준을 정리했다.
+- 테스트 페이지 기준에 첫 턴 시작 전 카운트다운 표시 기준을 추가했다.
+
 ## [2026-06-15] maintenance | Hide AI internals from match clients
 
 - `payload.result=failed`의 공개 `reason`은 내부 `agent_error`/`agent_timeout` 대신 `answer_unavailable`로 통일한다는 기준을 추가했다.

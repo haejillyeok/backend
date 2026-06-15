@@ -275,9 +275,9 @@ Payload:
 
 REST start API가 세션 생성을 확정한 뒤 로비에서 매치로 넘어가는 handoff용으로 broadcast합니다.
 방 전체 공통 payload에는 사용자별 `game_session_token`을 포함하지 않습니다.
-끝말잇기 세션은 시작 transaction 안에서 첫 번째 턴을 함께 생성하며, `game.started.current_turn`에
-첫 차례 정보를 포함합니다. `/ws/match` 연결 직후에도 `match.snapshot.current_turn`으로 같은 정보를
-복구할 수 있습니다.
+끝말잇기 세션은 시작 transaction 안에서 첫 번째 턴을 함께 생성하며, 첫 턴 `started_at`은 시작 확정
+시각보다 5초 뒤로 잡습니다. `game.started.current_turn`에는 이 첫 차례 정보를 포함합니다.
+`/ws/match` 연결 직후에도 `match.snapshot.current_turn`으로 같은 정보를 복구할 수 있습니다.
 
 Payload:
 
@@ -293,6 +293,7 @@ Payload:
 | `current_turn.round_number` | number | 현재 끝말잇기 판 번호. 시작 직후는 1 |
 | `current_turn.turn_number` | number | 현재 판 안의 턴 번호. 시작 직후는 1 |
 | `current_turn.actor_seat_number` | number | 첫 차례 참가자의 순서 |
+| `current_turn.started_at` | datetime | 첫 턴이 실제로 시작되는 서버 기준 시각. 시작 확정 후 5초 뒤 |
 | `current_turn.deadline_at` | datetime/null | 서버 기준 턴 제한 시각 |
 | `current_turn.required_start_char` | string/null | 첫 턴에 필요한 시작 글자. 시작 직후는 `null` |
 | `participants` | array | 시작 시 고정된 익명 참가자 snapshot |
@@ -367,6 +368,7 @@ Payload 주요 필드:
 | `current_turn.round_number` | number | 현재 끝말잇기 판 번호 |
 | `current_turn.turn_number` | number | 현재 판 안의 턴 번호 |
 | `current_turn.actor_seat_number` | number | 현재 차례 참가자의 순서 |
+| `current_turn.started_at` | datetime | 현재 턴이 실제로 시작되는 서버 기준 시각 |
 | `current_turn.deadline_at` | datetime/null | 서버 기준 턴 제한 시각 |
 | `current_turn.required_start_char` | string/null | 이번 턴에 필요한 시작 글자. 첫 턴은 `null` |
 | `used_words` | array | 현재 끝말잇기 판에서 이미 사용된 정규화 단어 |

@@ -127,10 +127,11 @@ participant identity를 복원한다. 연결 직후 `match.connected`, `match.sn
 event payload는 익명 표시명과 seat number만 공개하고, 원래 닉네임, user id, AI 여부는 노출하지 않는다.
 끝말잇기 세션 시작 transaction은 첫 번째 `turn` phase와 `word_game.turns` row를 함께 만들고,
 `game_sessions.current_phase_id`를 이 phase로 지정한다. 따라서 match snapshot은 현재 phase를 조회해
-`current_turn.phase_id`, `round_number`, `turn_number`, `actor_seat_number`, `deadline_at`,
+`current_turn.phase_id`, `round_number`, `turn_number`, `actor_seat_number`, `started_at`, `deadline_at`,
 `required_start_char`를 복구한다. `phase_id`는 client가 `word.submit.phase_id`로 다시 보내는 현재 턴
-식별자다. 첫 턴은 `round_number=1`, `turn_number=1`, `required_start_char=null`이다. 로비
-`game.started` handoff event도 같은 첫 `current_turn` 정보를 포함한다.
+식별자다. 첫 턴은 `round_number=1`, `turn_number=1`, `required_start_char=null`이고, `started_at`은
+게임 시작 확정 시각보다 5초 뒤다. 로비 `game.started` handoff event도 같은 첫 `current_turn` 정보를
+포함한다.
 
 현재 client command는 `ping`, `word.submit`, `vote.submit`이다. `ping`은 `match.pong`으로 응답한다.
 `word.submit`은 연결 identity의 participant, payload의 `phase_id`, 서버 시각, DB current

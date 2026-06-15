@@ -562,10 +562,12 @@ async def test_game_repository_creates_game_session_and_participant_snapshot() -
     assert db_session.committed is True
 
 
-async def test_game_repository_creates_initial_word_chain_turn_with_session() -> None:
+async def test_game_repository_creates_initial_word_chain_turn_with_session(monkeypatch) -> None:
     owner_id = uuid4()
     room = build_room(owner_user_id=owner_id)
     game_session_public_id = uuid4()
+    now = datetime(2026, 6, 13, tzinfo=KST)
+    monkeypatch.setattr("app.be.repository.game.kst_now", lambda: now)
     db_session = FakeDbSession([FakeResult(scalar=room)])
     repository = GameRepository(db_session)
 
@@ -617,6 +619,7 @@ async def test_game_repository_creates_initial_word_chain_turn_with_session() ->
     assert initial_phase.actor_participant_id == first_participant.id
     assert initial_phase.condition_payload == {"required_start_char": None}
     assert initial_phase.time_limit_seconds == 10
+    assert initial_phase.started_at == now + timedelta(seconds=5)
     assert initial_phase.deadline_at - initial_phase.started_at == timedelta(seconds=10)
     assert initial_turn.phase_id == initial_phase.id
     assert initial_turn.participant_id == first_participant.id
@@ -628,6 +631,7 @@ async def test_game_repository_creates_initial_word_chain_turn_with_session() ->
     assert result.current_turn.round_number == 1
     assert result.current_turn.turn_number == 1
     assert result.current_turn.actor_seat_number == 1
+    assert result.current_turn.started_at == initial_phase.started_at
     assert result.current_turn.deadline_at == initial_phase.deadline_at
     assert result.current_turn.required_start_char is None
 

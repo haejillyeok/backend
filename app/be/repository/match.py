@@ -148,6 +148,7 @@ class MatchRepository:
             round_number=turn.round_number,
             turn_number=turn.turn_number,
             actor_seat_number=participant.seat_number,
+            started_at=phase.started_at,
             deadline_at=phase.deadline_at,
             required_start_char=turn.condition_payload.get("required_start_char"),
         )
