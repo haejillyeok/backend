@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from datetime import datetime, timedelta
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
@@ -343,6 +344,61 @@ def test_room_lobby_websocket_records_apm_metrics_and_spans(monkeypatch) -> None
     assert "WebSocket.lobby.connect" in span_names
     assert "WebSocket.lobby.message" in span_names
     assert "WebSocket.lobby.disconnect" in span_names
+
+
+def test_room_lobby_websocket_records_audit_logs_for_message_with_redaction(caplog) -> None:
+    caplog.set_level(logging.INFO, logger="audit.request")
+    user = current_user()
+    room_public_id = uuid4()
+
+    class FakeGameService:
+        async def authorize_room_lobby_connection(
+            self,
+            *,
+            room_public_id: UUID,
+            user_id: UUID,
+        ) -> RoomLobbyConnectionResult:
+            return RoomLobbyConnectionResult(
+                room_public_id=room_public_id,
+                snapshot=build_lobby_snapshot(room_public_id=room_public_id, owner=user),
+            )
+
+    app = create_app()
+    use_fake_db_session(app)
+    app.dependency_overrides[get_auth_service] = lambda: FakeAuthService(user)
+    app.dependency_overrides[get_game_service] = lambda: FakeGameService()
+    client = TestClient(app)
+    client.cookies.set("session_token", "valid-session")
+
+    with client.websocket_connect(f"/ws/lobby/rooms/{room_public_id}") as websocket:
+        assert websocket.receive_json()["type"] == "lobby.room.connected"
+        assert websocket.receive_json()["type"] == "lobby.room.snapshot"
+        websocket.send_json(
+            {
+                "type": "ping",
+                "payload": {"client_time": "now", "game_session_token": "plain-token"},
+            }
+        )
+        assert websocket.receive_json()["type"] == "lobby.pong"
+
+    audit_messages = [
+        record.message for record in caplog.records if record.name == "audit.request"
+    ]
+    assert any(
+        "operation=CONNECT /ws/lobby/rooms/{room_public_id} status_code=101" in message
+        for message in audit_messages
+    )
+    assert any(
+        "operation=MESSAGE /ws/lobby/rooms/{room_public_id} status_code=200" in message
+        and "message_type=ping" in message
+        and '"game_session_token":"***REDACTED***"' in message
+        and "plain-token" not in message
+        for message in audit_messages
+    )
+    assert any(
+        "operation=DISCONNECT /ws/lobby/rooms/{room_public_id} status_code=1000" in message
+        for message in audit_messages
+    )
 
 
 def test_room_lobby_websocket_closes_when_heartbeat_timeout_passes(monkeypatch) -> None:

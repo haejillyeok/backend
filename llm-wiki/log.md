@@ -4,6 +4,12 @@
 코드 변경 상세는 Git history, PR, issue에서 확인하고, 이 파일에는 위키 페이지의 지식, 계약, 정책,
 컨벤션이 어떻게 바뀌었는지만 남깁니다.
 
+## [2026-06-15] maintenance | Add audit payload logging rules
+
+- `observability-stack.md`에 HTTP, WebSocket, Agent outbound 감사 로그의 logger, phase, operation, payload 검열 기준을 정리했다.
+- `backend-guidelines-summary.md`에 WebSocket 감사 로그와 Agent 요청/응답 payload 로그를 다음 작업 기준으로 추가했다.
+- token/password/API key 계열 payload key는 재귀적으로 검열하고, 게임 단어와 Agent answer/status 같은 비밀값이 아닌 도메인 값은 로그에 남긴다는 기준을 명시했다.
+
 ## [2026-06-15] maintenance | Add initial game start countdown
 
 - 끝말잇기 세션 시작 직후 첫 턴 `started_at`은 시작 확정 시각보다 5초 뒤이고, `deadline_at`은 그 시각에 `turn_time_seconds`를 더한 값이라는 계약을 추가했다.

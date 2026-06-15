@@ -1,7 +1,7 @@
 ---
 title: Observability Stack
 type: guide
-updated: 2026-06-14
+updated: 2026-06-15
 audience: ai
 ---
 
@@ -148,6 +148,7 @@ Grafana log dashboard는 `Haejillyeok FastAPI Logs` 제목으로 provision 된�
   contains filter를 사용해 전체 라인 highlight를 피한다.
 - Error Log Lines: ERROR/CRITICAL 로그 tail
 - Audit Request Logs: `audit.request` logger 로그 tail
+- Agent outbound logs: `audit.agent` logger 로그 tail
 
 ## Logs
 
@@ -158,6 +159,22 @@ stdout logging만 유지하고 `File logging setup failed path=... Continuing wi
 ERROR 로그를 남긴다.
 등록되지 않은 HTTP path를 route guard가 차단한 경우에는 해당 path의 Uvicorn access log도 필터링해
 scanner 요청이 파일 로그를 채우지 않게 한다.
+
+감사 로그는 `app/shared/core/audit.py`의 key=value 포맷을 사용한다.
+
+- HTTP inbound 요청은 `audit.request`에 `protocol=http`, `phase=started|completed|failed`,
+  `operation=<METHOD> <path>`, `status_code`, `duration_ms`, `peer`를 남긴다.
+- WebSocket endpoint는 `audit.request`에 `protocol=websocket`으로 연결, 유효 inbound message,
+  disconnect를 남긴다. `CONNECT /ws/...`는 수락 시 `status_code=101`, `MESSAGE /ws/...`는
+  정상 처리 시 `status_code=200`, 오류 시 WebSocket close code와 `error_code`를 남긴다.
+- WebSocket message audit에는 낮은 cardinality의 route template, `message_type`, `direction`,
+  검열된 `payload`만 남긴다. 쿠키, query token, raw session token은 남기지 않는다.
+- BE에서 Agent로 나가는 HTTP 호출은 `audit.agent`에 `agent_http phase=started|completed|failed`,
+  `operation=<METHOD> <agent path>`, `status_code`, `duration_ms`, 검열된 request/response payload를
+  남긴다.
+- 감사 payload 검열은 `password`, `token`, `secret`, `authorization`, `cookie`, `api_key`
+  계열 key를 재귀적으로 `***REDACTED***`로 치환한다. 게임 단어, 조건, Agent answer/status처럼
+  인증 비밀값이 아닌 도메인 값은 그대로 남긴다.
 
 - `LOG_FILE_ENABLED`: 파일 로그 활성화 여부, 기본값 `true`
 - `LOG_DIR`: 파일 로그 디렉터리, 기본값 `logs`

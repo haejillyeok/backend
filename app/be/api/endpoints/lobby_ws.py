@@ -19,6 +19,7 @@ from app.be.services.lobby import (
     lobby_connection_manager,
     parse_lobby_message,
 )
+from app.shared.core.audit import AuditEvent, log_audit_event
 from app.shared.core.observability import get_websocket_metrics, start_span
 from app.shared.core.exceptions import AppException
 from app.shared.core.timezone import kst_now, to_kst_isoformat
@@ -43,12 +44,23 @@ async def lobby_websocket(
     활성 room member인지 확인합니다. 연결 후에는 해당 room event를 자동 구독합니다.
     """
     metrics = get_websocket_metrics(websocket.app)
+    service_name = websocket.app.title
+    peer = websocket.client.host if websocket.client else None
     close_code = 1000
     connected_at = perf_counter()
     span_attributes = {
         "ws.route": LOBBY_WS_ROUTE,
         "ws.endpoint": LOBBY_WS_ENDPOINT,
     }
+    log_audit_event(
+        AuditEvent(
+            protocol="websocket",
+            phase="started",
+            service=service_name,
+            operation="CONNECT /ws/lobby/rooms/{room_public_id}",
+            peer=peer,
+        )
+    )
     try:
         with start_span("WebSocket.lobby.connect", attributes=span_attributes):
             current_user = await auth_service.authenticate_session(
@@ -61,6 +73,18 @@ async def lobby_websocket(
             # WebSocket loop가 오래 유지되어도 인증/권한 확인용 read transaction은 붙잡지 않습니다.
             await db_session.rollback()
     except AppException as exc:
+        log_audit_event(
+            AuditEvent(
+                protocol="websocket",
+                phase="failed",
+                service=service_name,
+                operation="CONNECT /ws/lobby/rooms/{room_public_id}",
+                status_code=str(exc.websocket_close_code),
+                duration_ms=(perf_counter() - connected_at) * 1000,
+                peer=peer,
+                error_code=str(exc.code),
+            )
+        )
         metrics.record_error(
             ws_route=LOBBY_WS_ROUTE,
             ws_endpoint=LOBBY_WS_ENDPOINT,
@@ -70,6 +94,17 @@ async def lobby_websocket(
         return
 
     await lobby_connection_manager.connect(websocket, current_user, connection.room_public_id)
+    log_audit_event(
+        AuditEvent(
+            protocol="websocket",
+            phase="completed",
+            service=service_name,
+            operation="CONNECT /ws/lobby/rooms/{room_public_id}",
+            status_code="101",
+            duration_ms=(perf_counter() - connected_at) * 1000,
+            peer=peer,
+        )
+    )
     metrics.record_connect(ws_route=LOBBY_WS_ROUTE, ws_endpoint=LOBBY_WS_ENDPOINT)
     await lobby_connection_manager.send_connected(websocket)
     metrics.record_message(
@@ -86,6 +121,9 @@ async def lobby_websocket(
             message_type="lobby.room.snapshot",
             direction="outbound",
         )
+    message_started_at: float | None = None
+    message_type: str | None = None
+    message_payload: object | None = None
     try:
         while True:
             raw_message = await asyncio.wait_for(
@@ -94,6 +132,8 @@ async def lobby_websocket(
             )
             message_started_at = perf_counter()
             message = parse_lobby_message(raw_message)
+            message_type = message["type"]
+            message_payload = message.get("payload")
             metrics.record_message(
                 ws_route=LOBBY_WS_ROUTE,
                 ws_endpoint=LOBBY_WS_ENDPOINT,
@@ -122,6 +162,20 @@ async def lobby_websocket(
                     message_type="lobby.pong",
                     direction="outbound",
                 )
+            log_audit_event(
+                AuditEvent(
+                    protocol="websocket",
+                    phase="completed",
+                    service=service_name,
+                    operation="MESSAGE /ws/lobby/rooms/{room_public_id}",
+                    status_code="200",
+                    duration_ms=(perf_counter() - message_started_at) * 1000,
+                    peer=peer,
+                    message_type=message_type,
+                    direction="inbound",
+                    payload=message_payload,
+                )
+            )
     except TimeoutError:
         close_code = 1001
         metrics.record_error(
@@ -135,6 +189,25 @@ async def lobby_websocket(
         pass
     except AppException as exc:
         close_code = exc.websocket_close_code
+        log_audit_event(
+            AuditEvent(
+                protocol="websocket",
+                phase="failed",
+                service=service_name,
+                operation="MESSAGE /ws/lobby/rooms/{room_public_id}",
+                status_code=str(exc.websocket_close_code),
+                duration_ms=(
+                    (perf_counter() - message_started_at) * 1000
+                    if message_started_at is not None
+                    else None
+                ),
+                peer=peer,
+                error_code=str(exc.code),
+                message_type=message_type,
+                direction="inbound",
+                payload=message_payload,
+            )
+        )
         metrics.record_error(
             ws_route=LOBBY_WS_ROUTE,
             ws_endpoint=LOBBY_WS_ENDPOINT,
@@ -157,6 +230,17 @@ async def lobby_websocket(
                 ws_endpoint=LOBBY_WS_ENDPOINT,
                 duration_seconds=perf_counter() - connected_at,
                 close_code=close_code,
+            )
+            log_audit_event(
+                AuditEvent(
+                    protocol="websocket",
+                    phase="completed",
+                    service=service_name,
+                    operation="DISCONNECT /ws/lobby/rooms/{room_public_id}",
+                    status_code=str(close_code),
+                    duration_ms=(perf_counter() - connected_at) * 1000,
+                    peer=peer,
+                )
             )
             if disconnect is not None:
                 schedule_room_leave_after_grace(websocket, disconnect)

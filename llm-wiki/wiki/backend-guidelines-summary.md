@@ -1,7 +1,7 @@
 ---
 title: Backend Guidelines Summary
 type: overview
-updated: 2026-06-09
+updated: 2026-06-15
 source_docs:
   - backend-guidelines.md
   - code-conventions.md
@@ -26,6 +26,8 @@ source_docs:
 - 한 서버가 다른 서버의 service/repository를 직접 import하지 않는다.
 - outbound HTTP 호출에는 timeout을 명시한다.
 - retry가 필요하면 멱등성과 timeout budget을 먼저 확인한다.
+- BE에서 Agent로 나가는 HTTP 호출은 `audit.agent`에 요청/응답 payload를 남기되 token/password/API key
+  계열 값은 검열한다.
 
 ## WebSocket
 
@@ -33,6 +35,8 @@ source_docs:
 - 서버 간 단순 호출은 WebSocket이 아니라 HTTP API 호출을 우선한다.
 - connection manager를 endpoint에서 분리한다.
 - 메시지는 `type`, `payload` 중심의 JSON envelope로 보낸다.
+- 연결, 유효 inbound message, disconnect는 `audit.request`에 `protocol=websocket` 감사 로그로 남기고
+  payload 안의 token/password/API key 계열 값은 검열한다.
 - disconnect cleanup, 인증 실패, 재연결 전제를 테스트한다.
 
 ## Code Conventions

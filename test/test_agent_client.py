@@ -1,4 +1,5 @@
 import json
+import logging
 
 import httpx
 import pytest
@@ -92,6 +93,53 @@ async def test_agent_answer_client_sends_used_words_and_maps_answer_payload() ->
 
     assert result.answer == "자동차"
     assert result.status == "ok"
+
+
+async def test_agent_answer_client_logs_redacted_request_and_response_payloads(caplog) -> None:
+    caplog.set_level(logging.INFO, logger="audit.agent")
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "request_id": "turn-1",
+                "room_id": "session-1",
+                "game_type": "word_chain",
+                "answer": "자동차",
+                "status": "ok",
+                "reason": None,
+                "session_token": "agent-should-not-log-this",
+            },
+        )
+
+    client = AgentAnswerClient(settings=build_settings(), transport=httpx.MockTransport(handler))
+
+    result = await client.get_answer(
+        AgentAnswerRequest(
+            request_id="turn-1",
+            room_id="session-1",
+            game_type="word_chain",
+            used_words=["사과", "과자"],
+            last_char="자",
+            condition={"last_char": "자"},
+        )
+    )
+
+    assert result.answer == "자동차"
+    audit_messages = [record.message for record in caplog.records if record.name == "audit.agent"]
+    assert any(
+        "agent_http phase=started operation=POST /api/v1/agent/answer" in message
+        and '"used_words":["사과","과자"]' in message
+        and "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" not in message
+        for message in audit_messages
+    )
+    assert any(
+        "agent_http phase=completed operation=POST /api/v1/agent/answer status_code=200" in message
+        and '"answer":"자동차"' in message
+        and "agent-should-not-log-this" not in message
+        and '"session_token":"***REDACTED***"' in message
+        for message in audit_messages
+    )
 
 
 async def test_agent_answer_client_maps_no_candidate_payload() -> None:

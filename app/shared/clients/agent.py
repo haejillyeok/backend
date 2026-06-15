@@ -1,9 +1,11 @@
 from typing import Any, Literal
+from time import perf_counter
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.shared.core.audit import log_agent_http_event
 from app.shared.core.observability import start_span
 
 
@@ -110,12 +112,20 @@ class AgentHealthClient:
         요청에는 Agent 비즈니스 API와 같은 `X-Agent-API-Key` 헤더를 넣습니다.
         네트워크 오류, timeout, 4xx/5xx 응답은 `AgentClientError`로 변환합니다.
         """
+        operation = f"GET {AGENT_HEALTH_PATH}"
+        request_headers = {
+            AGENT_API_KEY_HEADER: self._settings.k3s_agent_key.get_secret_value(),
+        }
+        log_agent_http_event(
+            phase="started",
+            operation=operation,
+            payload=_build_agent_request_audit_payload(headers=request_headers),
+        )
+        started_at = perf_counter()
         try:
             async with httpx.AsyncClient(
                 base_url=self._settings.agent_url,
-                headers={
-                    AGENT_API_KEY_HEADER: self._settings.k3s_agent_key.get_secret_value(),
-                },
+                headers=request_headers,
                 timeout=httpx.Timeout(self._settings.timeout_seconds),
                 transport=self._transport,
             ) as client:
@@ -132,9 +142,29 @@ class AgentHealthClient:
                     if hasattr(span, "set_attribute"):
                         span.set_attribute("http.response.status_code", response.status_code)
         except httpx.TimeoutException as exc:
+            log_agent_http_event(
+                phase="failed",
+                operation=operation,
+                duration_ms=(perf_counter() - started_at) * 1000,
+                error_code=exc.__class__.__name__,
+            )
             raise AgentClientError("agent health check timed out") from exc
         except httpx.HTTPError as exc:
+            log_agent_http_event(
+                phase="failed",
+                operation=operation,
+                duration_ms=(perf_counter() - started_at) * 1000,
+                error_code=exc.__class__.__name__,
+            )
             raise AgentClientError("agent health check request failed") from exc
+
+        log_agent_http_event(
+            phase="completed",
+            operation=operation,
+            status_code=str(response.status_code),
+            duration_ms=(perf_counter() - started_at) * 1000,
+            payload=_build_agent_response_audit_payload(response),
+        )
 
         if response.status_code >= 400:
             raise AgentClientError(
@@ -163,12 +193,24 @@ class AgentAnswerClient:
         요청에는 현재 게임에서 이미 사용된 단어 목록과 끝말잇기 조건을 포함합니다. 네트워크 오류,
         timeout, 4xx/5xx 응답은 `AgentClientError`로 변환합니다.
         """
+        operation = f"POST {AGENT_ANSWER_PATH}"
+        request_body = payload.model_dump(mode="json")
+        request_headers = {
+            AGENT_API_KEY_HEADER: self._settings.k3s_agent_key.get_secret_value(),
+        }
+        log_agent_http_event(
+            phase="started",
+            operation=operation,
+            payload=_build_agent_request_audit_payload(
+                headers=request_headers,
+                body=request_body,
+            ),
+        )
+        started_at = perf_counter()
         try:
             async with httpx.AsyncClient(
                 base_url=self._settings.agent_url,
-                headers={
-                    AGENT_API_KEY_HEADER: self._settings.k3s_agent_key.get_secret_value(),
-                },
+                headers=request_headers,
                 timeout=httpx.Timeout(self._settings.timeout_seconds),
                 transport=self._transport,
             ) as client:
@@ -183,14 +225,34 @@ class AgentAnswerClient:
                 ) as span:
                     response = await client.post(
                         AGENT_ANSWER_PATH,
-                        json=payload.model_dump(mode="json"),
+                        json=request_body,
                     )
                     if hasattr(span, "set_attribute"):
                         span.set_attribute("http.response.status_code", response.status_code)
         except httpx.TimeoutException as exc:
+            log_agent_http_event(
+                phase="failed",
+                operation=operation,
+                duration_ms=(perf_counter() - started_at) * 1000,
+                error_code=exc.__class__.__name__,
+            )
             raise AgentClientError("agent answer request timed out") from exc
         except httpx.HTTPError as exc:
+            log_agent_http_event(
+                phase="failed",
+                operation=operation,
+                duration_ms=(perf_counter() - started_at) * 1000,
+                error_code=exc.__class__.__name__,
+            )
             raise AgentClientError("agent answer request failed") from exc
+
+        log_agent_http_event(
+            phase="completed",
+            operation=operation,
+            status_code=str(response.status_code),
+            duration_ms=(perf_counter() - started_at) * 1000,
+            payload=_build_agent_response_audit_payload(response),
+        )
 
         if response.status_code >= 400:
             raise AgentClientError(
@@ -228,3 +290,24 @@ def _extract_agent_payload(response: httpx.Response, label: str) -> dict[str, An
         f"{label} returned invalid payload",
         status_code=response.status_code,
     )
+
+
+def _build_agent_request_audit_payload(
+    *,
+    headers: dict[str, str],
+    body: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Agent outbound 요청 로그에 남길 header/body 구조를 만듭니다."""
+    payload: dict[str, Any] = {"headers": headers}
+    if body is not None:
+        payload["body"] = body
+    return payload
+
+
+def _build_agent_response_audit_payload(response: httpx.Response) -> dict[str, Any]:
+    """Agent outbound 응답 로그에 남길 body를 JSON 우선으로 추출합니다."""
+    try:
+        body: Any = response.json()
+    except ValueError:
+        body = response.text
+    return {"body": body}

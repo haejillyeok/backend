@@ -34,6 +34,7 @@ from app.be.services.match import (
 from app.be.services.match_ai import MatchAiTurnService
 from app.be.services.match_progress import MatchProgressService
 from app.be.services.match_vote import MatchVoteService
+from app.shared.core.audit import AuditEvent, log_audit_event
 from app.shared.core.error_codes import ErrorCode
 from app.shared.core.exceptions import AppException
 from app.shared.core.observability import get_websocket_metrics, start_span
@@ -69,12 +70,23 @@ async def match_websocket(
 ) -> None:
     """게임 세션 참가자의 match WebSocket 연결을 열고 현재 snapshot을 전송합니다."""
     metrics = get_websocket_metrics(websocket.app)
+    service_name = websocket.app.title
+    peer = websocket.client.host if websocket.client else None
     close_code = 1000
     connected_at = perf_counter()
     span_attributes = {
         "ws.route": MATCH_WS_ROUTE,
         "ws.endpoint": MATCH_WS_ENDPOINT,
     }
+    log_audit_event(
+        AuditEvent(
+            protocol="websocket",
+            phase="started",
+            service=service_name,
+            operation="CONNECT /ws/match",
+            peer=peer,
+        )
+    )
     try:
         with start_span("WebSocket.match.connect", attributes=span_attributes):
             if game_session_token:
@@ -106,6 +118,18 @@ async def match_websocket(
             # WebSocket loop가 오래 유지되어도 인증/권한 확인용 transaction은 붙잡지 않습니다.
             await db_session.rollback()
     except AppException as exc:
+        log_audit_event(
+            AuditEvent(
+                protocol="websocket",
+                phase="failed",
+                service=service_name,
+                operation="CONNECT /ws/match",
+                status_code=str(exc.websocket_close_code),
+                duration_ms=(perf_counter() - connected_at) * 1000,
+                peer=peer,
+                error_code=str(exc.code),
+            )
+        )
         metrics.record_error(
             ws_route=MATCH_WS_ROUTE,
             ws_endpoint=MATCH_WS_ENDPOINT,
@@ -119,6 +143,17 @@ async def match_websocket(
         game_session_public_id=entry.game_session_public_id,
         participant_id=participant_id,
         participant=entry.participant,
+    )
+    log_audit_event(
+        AuditEvent(
+            protocol="websocket",
+            phase="completed",
+            service=service_name,
+            operation="CONNECT /ws/match",
+            status_code="101",
+            duration_ms=(perf_counter() - connected_at) * 1000,
+            peer=peer,
+        )
     )
     metrics.record_connect(ws_route=MATCH_WS_ROUTE, ws_endpoint=MATCH_WS_ENDPOINT)
     await match_connection_manager.send_connected(websocket)
@@ -136,6 +171,9 @@ async def match_websocket(
         direction="outbound",
     )
     match_timer = current_match_timer_from_snapshot(snapshot)
+    message_started_at: float | None = None
+    message_type: str | None = None
+    message_payload: object | None = None
     try:
         while True:
             now = kst_now()
@@ -169,6 +207,8 @@ async def match_websocket(
                 raise
             message_started_at = perf_counter()
             message = parse_match_message(raw_message)
+            message_type = message["type"]
+            message_payload = message.get("payload")
             metrics.record_message(
                 ws_route=MATCH_WS_ROUTE,
                 ws_endpoint=MATCH_WS_ENDPOINT,
@@ -219,6 +259,20 @@ async def match_websocket(
                     message_type=broadcast_message_type,
                     direction="outbound",
                 )
+            log_audit_event(
+                AuditEvent(
+                    protocol="websocket",
+                    phase="completed",
+                    service=service_name,
+                    operation="MESSAGE /ws/match",
+                    status_code="200",
+                    duration_ms=(perf_counter() - message_started_at) * 1000,
+                    peer=peer,
+                    message_type=message_type,
+                    direction="inbound",
+                    payload=message_payload,
+                )
+            )
     except TimeoutError:
         close_code = 1001
         metrics.record_error(
@@ -231,6 +285,25 @@ async def match_websocket(
         close_code = exc.code
     except AppException as exc:
         close_code = exc.websocket_close_code
+        log_audit_event(
+            AuditEvent(
+                protocol="websocket",
+                phase="failed",
+                service=service_name,
+                operation="MESSAGE /ws/match",
+                status_code=str(exc.websocket_close_code),
+                duration_ms=(
+                    (perf_counter() - message_started_at) * 1000
+                    if message_started_at is not None
+                    else None
+                ),
+                peer=peer,
+                error_code=str(exc.code),
+                message_type=message_type,
+                direction="inbound",
+                payload=message_payload,
+            )
+        )
         metrics.record_error(
             ws_route=MATCH_WS_ROUTE,
             ws_endpoint=MATCH_WS_ENDPOINT,
@@ -253,4 +326,15 @@ async def match_websocket(
                 ws_endpoint=MATCH_WS_ENDPOINT,
                 duration_seconds=perf_counter() - connected_at,
                 close_code=close_code,
+            )
+            log_audit_event(
+                AuditEvent(
+                    protocol="websocket",
+                    phase="completed",
+                    service=service_name,
+                    operation="DISCONNECT /ws/match",
+                    status_code=str(close_code),
+                    duration_ms=(perf_counter() - connected_at) * 1000,
+                    peer=peer,
+                )
             )
