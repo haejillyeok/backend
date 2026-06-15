@@ -7,6 +7,7 @@ from app.agent.core.config import AgentSettings
 from app.agent.core.security import verify_api_key
 from app.agent.main import create_app
 from app.agent.prompts import get_word_chain_fallback_prompt
+from app.agent.schemas.request.answer import AgentAnswerRequest, GameType
 
 
 def test_health_does_not_require_api_key() -> None:
@@ -30,6 +31,30 @@ def test_business_api_rejects_missing_api_key() -> None:
         )
 
     assert response.status_code == 401
+
+
+def test_agent_game_type_contract_uses_word_chain() -> None:
+    request = AgentAnswerRequest(
+        room_id="room-1",
+        game_type="word_chain",
+        used_words=[],
+        last_char="줄",
+    )
+
+    assert request.game_type is GameType.WORD_CHAIN
+    assert request.model_dump(mode="json")["game_type"] == "word_chain"
+
+
+def test_agent_normalizes_legacy_shiritori_game_type() -> None:
+    request = AgentAnswerRequest(
+        room_id="room-1",
+        game_type="shiritori",
+        used_words=[],
+        last_char="줄",
+    )
+
+    assert request.game_type is GameType.WORD_CHAIN
+    assert request.model_dump(mode="json")["game_type"] == "word_chain"
 
 
 def test_openapi_declares_agent_api_key_scheme() -> None:
