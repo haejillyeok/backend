@@ -9,7 +9,7 @@ from app.be.models.user import User
 from app.be.models.user_session import UserSession
 from app.be.repository.auth import AuthRepository
 from app.be.repository.game import GameRepository, waiting_membership_lock_key
-from app.be.services.game import GameSessionParticipantRecord, GameSessionStartResult
+from app.be.services.game import GameSessionParticipantRecord
 
 KST = ZoneInfo("Asia/Seoul")
 
@@ -317,7 +317,7 @@ async def test_game_repository_gets_room_without_lock_for_lobby_connection() -> 
     assert missing is None
 
 
-async def test_game_repository_returns_active_session_with_participant_snapshot() -> None:
+async def test_game_repository_reads_active_session_snapshot_with_db_steps() -> None:
     owner_id = uuid4()
     room = build_room(owner_user_id=owner_id)
     game_session = GameSession(
@@ -343,17 +343,26 @@ async def test_game_repository_returns_active_session_with_participant_snapshot(
             FakeResult(row=(game_session, room)),
             FakeResult(scalars=[participant]),
             FakeResult(row=None),
+            FakeResult(row=None),
         ]
     )
     repository = GameRepository(db_session)
 
-    active_session = await repository.get_active_session_by_room_id(room.id)
-    missing_session = await repository.get_active_session_by_room_id(uuid4())
+    active_row = await repository.get_active_game_session_for_room(room.id)
+    assert active_row is not None
+    active_game_session, active_room = active_row
+    participants = await repository.list_session_participants(
+        game_session_id=active_game_session.id,
+        game_session_public_id=active_game_session.public_id,
+    )
+    current_turn = await repository.get_current_word_turn(game_session=active_game_session)
+    missing_session = await repository.get_active_game_session_for_room(uuid4())
 
-    assert active_session is not None
-    assert active_session.game_session_public_id == game_session.public_id
-    assert active_session.participants[0].participant_id == participant.id
-    assert active_session.participants[0].display_name == "방장"
+    assert active_game_session.public_id == game_session.public_id
+    assert active_room.public_id == room.public_id
+    assert participants[0].participant_id == participant.id
+    assert participants[0].display_name == "방장"
+    assert current_turn is None
     assert missing_session is None
 
 
@@ -517,102 +526,116 @@ async def test_game_repository_creates_game_session_and_participant_snapshot() -
     owner_id = uuid4()
     room = build_room(owner_user_id=owner_id)
     game_session_public_id = uuid4()
-    db_session = FakeDbSession([FakeResult(scalar=room), FakeResult(scalar="가")])
+    db_session = FakeDbSession([FakeResult(scalar=room)])
     repository = GameRepository(db_session)
 
-    result = await repository.create_game_session(
-        session=GameSessionStartResult(
-            game_session_public_id=game_session_public_id,
-            room_public_id=room.public_id,
-            game_type="word_chain",
-            status="starting",
-            participants=[
-                GameSessionParticipantRecord(
-                    participant_id=None,
-                    game_session_public_id=game_session_public_id,
-                    user_id=owner_id,
-                    participant_type="user",
-                    display_name="1번 손님",
-                    seat_number=1,
-                    is_uninvited_guest=False,
-                    original_nickname="방장",
-                ),
-                GameSessionParticipantRecord(
-                    participant_id=None,
-                    game_session_public_id=game_session_public_id,
-                    user_id=None,
-                    participant_type="ai",
-                    display_name="2번 손님",
-                    seat_number=2,
-                    is_uninvited_guest=True,
-                ),
-            ],
-        )
+    game_session = await repository.create_game_session_row(
+        room_id=room.id,
+        game_session_public_id=game_session_public_id,
+        game_type="word_chain",
+        status="starting",
+        rule_config={"max_rounds": 8, "turn_time_seconds": 10},
+        started_at=datetime(2026, 6, 13, tzinfo=KST),
+    )
+    participant_rows = [
+        await repository.create_session_participant_row(
+            game_session_id=game_session.id,
+            participant=GameSessionParticipantRecord(
+                participant_id=None,
+                game_session_public_id=game_session_public_id,
+                user_id=owner_id,
+                participant_type="user",
+                display_name="1번 손님",
+                seat_number=1,
+                is_uninvited_guest=False,
+                original_nickname="방장",
+            ),
+        ),
+        await repository.create_session_participant_row(
+            game_session_id=game_session.id,
+            participant=GameSessionParticipantRecord(
+                participant_id=None,
+                game_session_public_id=game_session_public_id,
+                user_id=None,
+                participant_type="ai",
+                display_name="2번 손님",
+                seat_number=2,
+                is_uninvited_guest=True,
+            ),
+        ),
+    ]
+    await repository.mark_room_status(
+        room_id=room.id,
+        status="starting",
+        updated_at=datetime(2026, 6, 13, tzinfo=KST),
     )
     await repository.commit()
 
-    assert result.game_session_public_id == game_session_public_id
+    assert game_session.public_id == game_session_public_id
     assert room.status == "starting"
     assert isinstance(db_session.added[0], GameSession)
-    assert [participant.original_nickname for participant in db_session.added_batches[0]] == [
-        "방장",
-        None,
-    ]
-    assert db_session.flush_count == 3
+    assert [participant.original_nickname for participant in participant_rows] == ["방장", None]
+    assert db_session.flush_count == 4
     assert db_session.committed is True
 
 
-async def test_game_repository_creates_initial_word_chain_turn_with_session(monkeypatch) -> None:
+async def test_game_repository_creates_initial_word_chain_turn_rows() -> None:
     owner_id = uuid4()
-    room = build_room(owner_user_id=owner_id)
     game_session_public_id = uuid4()
     now = datetime(2026, 6, 13, tzinfo=KST)
-    monkeypatch.setattr("app.be.repository.game.kst_now", lambda: now)
-    db_session = FakeDbSession([FakeResult(scalar=room), FakeResult(scalar="가")])
+    db_session = FakeDbSession([])
     repository = GameRepository(db_session)
 
-    result = await repository.create_game_session(
-        session=GameSessionStartResult(
+    game_session = await repository.create_game_session_row(
+        room_id=uuid4(),
+        game_session_public_id=game_session_public_id,
+        game_type="word_chain",
+        status="starting",
+        rule_config={"max_rounds": 8, "turn_time_seconds": 10},
+        started_at=now,
+    )
+    first_participant = await repository.create_session_participant_row(
+        game_session_id=game_session.id,
+        participant=GameSessionParticipantRecord(
+            participant_id=None,
             game_session_public_id=game_session_public_id,
-            room_public_id=room.public_id,
-            game_type="word_chain",
-            status="starting",
-            rule_config={"max_rounds": 8, "turn_time_seconds": 10},
-            participants=[
-                GameSessionParticipantRecord(
-                    participant_id=None,
-                    game_session_public_id=game_session_public_id,
-                    user_id=owner_id,
-                    participant_type="user",
-                    display_name="1번 손님",
-                    seat_number=1,
-                    is_uninvited_guest=False,
-                    original_nickname="방장",
-                ),
-                GameSessionParticipantRecord(
-                    participant_id=None,
-                    game_session_public_id=game_session_public_id,
-                    user_id=None,
-                    participant_type="ai",
-                    display_name="2번 손님",
-                    seat_number=2,
-                    is_uninvited_guest=True,
-                ),
-            ],
-        )
+            user_id=owner_id,
+            participant_type="user",
+            display_name="1번 손님",
+            seat_number=1,
+            is_uninvited_guest=False,
+            original_nickname="방장",
+        ),
+    )
+    initial_phase = await repository.create_session_phase_row(
+        session_id=game_session.id,
+        phase_type="turn",
+        phase_number=1,
+        actor_participant_id=first_participant.id,
+        condition_payload={"required_start_char": "가"},
+        time_limit_seconds=10,
+        started_at=now + timedelta(seconds=5),
+        deadline_at=now + timedelta(seconds=15),
+    )
+    initial_turn = await repository.create_word_turn_row(
+        phase_id=initial_phase.id,
+        participant_id=first_participant.id,
+        round_number=1,
+        turn_number=1,
+        condition_payload={"required_start_char": "가"},
+    )
+    await repository.mark_game_session_current_phase(
+        game_session=game_session,
+        current_phase_id=initial_phase.id,
     )
 
     game_session = db_session.added[0]
-    initial_phase = db_session.added[1]
-    initial_turn = db_session.added[2]
-    first_participant = db_session.added_batches[0][0]
     assert isinstance(game_session, GameSession)
     assert isinstance(initial_phase, SessionPhase)
     assert isinstance(initial_turn, WordTurn)
     assert game_session.current_phase_id == initial_phase.id
     assert db_session.flushed_game_session_current_phase_ids[0] == [None]
-    assert db_session.flushed_game_session_current_phase_ids[1] == [None]
-    assert db_session.flushed_game_session_current_phase_ids[2] == [initial_phase.id]
+    assert db_session.flushed_game_session_current_phase_ids[-1] == [initial_phase.id]
     assert initial_phase.session_id == game_session.id
     assert initial_phase.phase_type == "turn"
     assert initial_phase.phase_number == 1
@@ -626,14 +649,6 @@ async def test_game_repository_creates_initial_word_chain_turn_with_session(monk
     assert initial_turn.round_number == 1
     assert initial_turn.turn_number == 1
     assert initial_turn.condition_payload == {"required_start_char": "가"}
-    assert result.current_turn is not None
-    assert result.current_turn.phase_id == initial_phase.id
-    assert result.current_turn.round_number == 1
-    assert result.current_turn.turn_number == 1
-    assert result.current_turn.actor_seat_number == 1
-    assert result.current_turn.started_at == initial_phase.started_at
-    assert result.current_turn.deadline_at == initial_phase.deadline_at
-    assert result.current_turn.required_start_char == "가"
 
 
 async def test_game_repository_resolves_user_participant_for_session_entry() -> None:

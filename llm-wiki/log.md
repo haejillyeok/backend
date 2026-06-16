@@ -4,6 +4,34 @@
 코드 변경 상세는 Git history, PR, issue에서 확인하고, 이 파일에는 위키 페이지의 지식, 계약, 정책,
 컨벤션이 어떻게 바뀌었는지만 남깁니다.
 
+## [2026-06-16] maintenance | Move transaction ownership into services
+
+- `code-conventions.md`에 HTTP/WebSocket controller는 DB session, repository 생성, transaction rollback/commit을 직접 다루지 않는다는 레이어 기준을 추가했다.
+- service/usecase가 app sessionmaker 기반 repository context factory로 짧은 repository scope를 열고 transaction 흐름을 소유한다는 기준을 정리했다.
+- 외부 HTTP/API 호출은 DB transaction 밖에서 실행하고, 필요한 DB context는 먼저 snapshot화한 뒤 새 transaction에서 결과를 반영한다는 기준을 추가했다.
+- `backend-guidelines.md`에 dependency provider는 repository 객체가 아니라 repository context factory를 service에 넘긴다는 기준을 반영했다.
+
+## [2026-06-15] maintenance | Add foreign key insert ordering rule
+
+- `code-conventions.md`에 같은 transaction에서 새 row의 기본키를 다른 row의 외래키로 사용할 때 부모 row를 먼저 추가하고 `flush()`한 뒤 자식 row를 추가한다는 기준을 명시했다.
+- SQLAlchemy flush ordering이나 애플리케이션 생성 UUID에 의존해 외래키 insert 순서를 숨기지 않는다는 재발 방지 규칙을 추가했다.
+
+## [2026-06-15] maintenance | Clarify repository and service responsibility boundary
+
+- `code-conventions.md`에서 repository를 기능별 mixin으로 나누는 기준을 도메인 단위 repository 기준으로 대체했다.
+- repository 메서드는 하나의 DB 실행 책임만 담당하고, 여러 DB 함수를 조합하는 비즈니스 플로우는 service/usecase에 둔다는 레이어 기준을 추가했다.
+- 게임 검증, 점수, 투표, 턴 판단 정책은 DB에 직접 의존하지 않는 주입 가능한 policy 객체/함수로 service/usecase에서 호출한다는 기준을 정리했다.
+
+## [2026-06-15] maintenance | Add BE service file boundary and policy injection rules
+
+- `code-conventions.md`에 BE service 계층의 핵심 class 파일 분리 기준을 추가했다.
+- 작은 DTO 묶음 파일 허용, 기존 import re-export, 주입 가능한 policy 객체 기준을 AI 작업 규칙으로 정리했다.
+- ORM model class는 table/model class별 파일로 나누고 schema 상수와 public export를 분리한다는 기준을 추가했다.
+- 큰 repository class는 기존 public repository facade를 유지하고 기능별 mixin class로 나누는 기준을 추가했다.
+- 큰 API endpoint 모듈은 기존 router import facade를 유지하고 REST 자원 또는 유스케이스별 router 모듈로 나누는 기준을 추가했다.
+- 큰 WebSocket endpoint 모듈은 기존 router import facade를 유지하고 연결 인증, message loop, timeout/grace 처리 같은 lifecycle 책임별 모듈로 나누는 기준을 추가했다.
+- 문서/HTML endpoint가 커질 때 route 함수와 Markdown/HTML renderer 책임을 분리하는 기준을 추가했다.
+
 ## [2026-06-15] maintenance | Add match server time synchronization contract
 
 - `game.started`, Match `snapshot`/`pong`/진행/라운드/투표/결과 event가 `server_time`을 포함해 client가 서버-로컬 시계 offset을 보정한다는 계약을 정리했다.

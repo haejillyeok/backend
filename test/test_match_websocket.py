@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from datetime import datetime
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
@@ -6,7 +7,6 @@ import pytest
 from fastapi.testclient import TestClient
 from fastapi.websockets import WebSocketDisconnect
 
-from app.be.dependencies.database import get_db_session
 from app.be.dependencies.services import (
     get_auth_service,
     get_game_service,
@@ -50,10 +50,11 @@ class FakeDbSession:
 def use_fake_db_session(app, db_session: FakeDbSession | None = None) -> FakeDbSession:
     fake_db_session = db_session or FakeDbSession()
 
-    async def fake_db_session_dependency():
+    @asynccontextmanager
+    async def fake_db_session_context():
         yield fake_db_session
 
-    app.dependency_overrides[get_db_session] = fake_db_session_dependency
+    app.state.db_sessionmaker = lambda: fake_db_session_context()
     app.dependency_overrides[get_optional_match_ai_turn_service] = lambda: None
     return fake_db_session
 
@@ -247,7 +248,7 @@ def test_match_websocket_connects_with_session_cookie_and_sends_anonymous_snapsh
     assert "participant_type" not in str(received_snapshot)
     assert "is_uninvited_guest" not in str(received_snapshot)
     assert "방장" not in str(received_snapshot)
-    assert db_session.rolled_back is True
+    assert db_session.rolled_back is False
     assert match_connection_manager.connection_count == 0
 
 

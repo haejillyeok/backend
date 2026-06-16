@@ -1,21 +1,22 @@
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request, Response, status
 
+from app.be.api.endpoints.auth_cookies import (
+    set_session_cookie,
+    settings,
+)
+from app.be.api.endpoints.auth_mappers import map_login_response, map_signup_response
 from app.be.dependencies.services import get_auth_service
 from app.be.schemas.request.auth import LoginRequest, SignupRequest
-from app.be.schemas.response.auth import AuthUserResponse, LoginResponse, SignupResponse
+from app.be.schemas.response.auth import LoginResponse, SignupResponse
 from app.be.services.auth import AuthService
 from app.shared.core.client_ip import resolve_best_effort_client_ip
-from app.shared.core.config import AppSettings
 from app.shared.core.error_codes import ErrorCode
 from app.shared.core.openapi import error_responses_by_status
 from app.shared.core.responses import SuccessResponse, ok
 
-
-SESSION_COOKIE_NAME = "session_token"
-settings = AppSettings(app_name="haejillyeok-be")
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -51,16 +52,7 @@ async def login(
     )
 
     _set_session_cookie(response, session_token=result.session_token, expires_at=result.expires_at)
-    return ok(
-        LoginResponse(
-            user=AuthUserResponse(
-                public_id=result.user.public_id,
-                account_id=result.user.account_id,
-                nickname=result.user.nickname,
-            ),
-            expires_at=result.expires_at,
-        ),
-    )
+    return ok(map_login_response(result))
 
 
 @router.post(
@@ -95,16 +87,7 @@ async def signup(
     )
 
     _set_session_cookie(response, session_token=result.session_token, expires_at=result.expires_at)
-    return ok(
-        SignupResponse(
-            user=AuthUserResponse(
-                public_id=result.user.public_id,
-                account_id=result.user.account_id,
-                nickname=result.user.nickname,
-            ),
-            expires_at=result.expires_at,
-        ),
-    )
+    return ok(map_signup_response(result))
 
 
 def _set_session_cookie(
@@ -113,17 +96,10 @@ def _set_session_cookie(
     session_token: str,
     expires_at: datetime,
 ) -> None:
-    """로그인/회원가입 성공 시 공통 세션 쿠키 속성을 적용합니다."""
-    cookie_expires_at = expires_at.astimezone(UTC)
-    is_prod = settings.environment == "prod"
-    response.set_cookie(
-        key=SESSION_COOKIE_NAME,
-        value=session_token,
-        # HTTP cookie Expires는 GMT 형식만 허용하므로 저장/응답 시간 기준과 별도로 변환합니다.
-        expires=cookie_expires_at,
-        httponly=True,
-        secure=is_prod,
-        # 로컬 테스트는 HTTP라 Lax를 유지하고, 운영 API는 localhost 테스트 페이지 같은 cross-site
-        # credential 요청에서도 쿠키가 전송되도록 None+Secure 조합을 사용합니다.
-        samesite="none" if is_prod else "lax",
+    """기존 테스트/호출자가 쓰던 세션 쿠키 helper 경로를 유지합니다."""
+    set_session_cookie(
+        response,
+        session_token=session_token,
+        expires_at=expires_at,
+        app_settings=settings,
     )

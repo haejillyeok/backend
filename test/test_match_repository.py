@@ -11,7 +11,7 @@ from app.be.models.game import (
     WordTurn,
 )
 from app.be.repository.match import MatchRepository
-from app.be.services.match import MatchSnapshotResult
+from app.be.services.match import MatchService, MatchSnapshotResult
 
 
 KST = ZoneInfo("Asia/Seoul")
@@ -89,9 +89,10 @@ async def test_match_repository_builds_anonymous_snapshot_from_session_state() -
             FakeResult(rows=[(first_participant.id, 10), (second_participant.id, -10)]),
         ]
     )
-    repository = MatchRepository(db_session, now_provider=lambda: datetime(2026, 6, 13, tzinfo=KST))
+    repository = MatchRepository(db_session)
+    service = MatchService(repository, now_provider=lambda: datetime(2026, 6, 13, tzinfo=KST))
 
-    snapshot = await repository.get_snapshot(
+    snapshot = await service.get_snapshot(
         game_session_public_id=game_session_public_id,
         participant_id=first_participant.id,
     )
@@ -175,9 +176,10 @@ async def test_match_repository_includes_current_turn_from_session_phase() -> No
             ),
         ]
     )
-    repository = MatchRepository(db_session, now_provider=lambda: datetime(2026, 6, 13, tzinfo=KST))
+    repository = MatchRepository(db_session)
+    service = MatchService(repository, now_provider=lambda: datetime(2026, 6, 13, tzinfo=KST))
 
-    snapshot = await repository.get_snapshot(
+    snapshot = await service.get_snapshot(
         game_session_public_id=game_session_public_id,
         participant_id=first_participant.id,
     )
@@ -234,9 +236,10 @@ async def test_match_repository_includes_voting_deadline_from_current_phase() ->
             FakeResult(scalar=voting_phase),
         ]
     )
-    repository = MatchRepository(db_session, now_provider=lambda: datetime(2026, 6, 13, tzinfo=KST))
+    repository = MatchRepository(db_session)
+    service = MatchService(repository, now_provider=lambda: datetime(2026, 6, 13, tzinfo=KST))
 
-    snapshot = await repository.get_snapshot(
+    snapshot = await service.get_snapshot(
         game_session_public_id=game_session_public_id,
         participant_id=participant_id,
     )
@@ -307,9 +310,10 @@ async def test_match_repository_includes_result_snapshot_after_session_result() 
             FakeResult(rows=[(user_result, user_participant), (ai_result, ai_participant)]),
         ]
     )
-    repository = MatchRepository(db_session, now_provider=lambda: datetime(2026, 6, 13, tzinfo=KST))
+    repository = MatchRepository(db_session)
+    service = MatchService(repository, now_provider=lambda: datetime(2026, 6, 13, tzinfo=KST))
 
-    snapshot = await repository.get_snapshot(
+    snapshot = await service.get_snapshot(
         game_session_public_id=game_session_public_id,
         participant_id=user_participant_id,
     )

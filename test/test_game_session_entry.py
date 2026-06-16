@@ -7,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.be.api.endpoints import game as game_endpoint
+from app.be.api.endpoints.game import mappers as game_mappers
 from app.be.dependencies.services import get_current_user, get_game_service
 from app.be.main import create_app
 from app.be.services.auth import AuthService, CurrentUser
@@ -93,6 +94,9 @@ class FakeGameRepository(GameRepositoryProtocol):
         self.active_room_public_ids = active_room_public_ids or []
         self.active_waiting_room_public_ids = active_waiting_room_public_ids or []
         self.created_sessions: list[dict[str, object]] = []
+        self.created_participants: list[GameSessionParticipantRecord] = []
+        self.created_phases: list[object] = []
+        self.created_turns: list[object] = []
         self.created_rooms: list[dict[str, object]] = []
         self.created_members: list[RoomMemberRecord] = []
         self.left_members: list[RoomLeaveResult] = []
@@ -162,9 +166,41 @@ class FakeGameRepository(GameRepositoryProtocol):
         self.locked_room_public_ids.append(room_public_id)
         return self.rooms_by_public_id.get(room_public_id)
 
-    async def get_active_session_by_room_id(self, room_id):
-        if any(room.id == room_id for room in self.rooms_by_public_id.values()):
-            return self.active_session
+    async def get_active_game_session_for_room(self, room_id):
+        room = self._room_for_room_id(room_id)
+        if room is None or self.active_session is None:
+            return None
+        return (
+            type(
+                "GameSessionRow",
+                (),
+                {
+                    "id": uuid4(),
+                    "public_id": self.active_session.game_session_public_id,
+                    "game_type": self.active_session.game_type,
+                    "status": self.active_session.status,
+                    "rule_config": self.active_session.rule_config,
+                    "current_phase_id": None,
+                },
+            )(),
+            type("RoomRow", (), {"public_id": room.public_id})(),
+        )
+
+    async def list_session_participants(self, *, game_session_id, game_session_public_id):
+        _ = game_session_id
+        if self.active_session is None:
+            return []
+        return [
+            participant
+            for participant in self.active_session.participants
+            if participant.game_session_public_id == game_session_public_id
+        ]
+
+    async def get_current_word_turn(self, *, game_session):
+        _ = game_session
+        if self.active_session is None:
+            return None
+        return self.active_session.current_turn
         return None
 
     async def list_active_room_members(self, room_id):
@@ -285,9 +321,133 @@ class FakeGameRepository(GameRepositoryProtocol):
             rule_config=rule_config,
         )
 
-    async def create_game_session(self, **kwargs):
-        self.created_sessions.append(kwargs)
-        return kwargs["session"]
+    async def create_game_session_row(
+        self,
+        *,
+        room_id,
+        game_session_public_id,
+        game_type,
+        status,
+        rule_config,
+        started_at,
+    ):
+        session = type(
+            "GameSessionRow",
+            (),
+            {
+                "id": uuid4(),
+                "public_id": game_session_public_id,
+                "room_id": room_id,
+                "game_type": game_type,
+                "status": status,
+                "rule_config": rule_config,
+                "started_at": started_at,
+                "current_phase_id": None,
+                "participants": [],
+            },
+        )()
+        self.created_sessions.append({"session": session})
+        return session
+
+    async def create_session_participant_row(self, *, game_session_id, participant):
+        _ = game_session_id
+        row = type(
+            "SessionParticipantRow",
+            (),
+            {
+                "id": uuid4(),
+                "user_id": participant.user_id,
+                "participant_type": participant.participant_type,
+                "display_name": participant.display_name,
+                "seat_number": participant.seat_number,
+                "is_uninvited_guest": participant.is_uninvited_guest,
+                "original_nickname": participant.original_nickname,
+            },
+        )()
+        self.created_participants.append(participant)
+        if self.created_sessions:
+            self.created_sessions[0]["session"].participants.append(participant)
+        return row
+
+    async def mark_room_status(self, *, room_id, status, updated_at):
+        _ = updated_at
+        room = self._room_for_room_id(room_id)
+        if room is not None:
+            updated = GameRoomRecord(
+                id=room.id,
+                public_id=room.public_id,
+                owner_user_id=room.owner_user_id,
+                name=room.name,
+                game_type=room.game_type,
+                status=status,
+                max_players=room.max_players,
+                rule_config=room.rule_config,
+                created_at=room.created_at,
+            )
+            self.rooms_by_public_id[updated.public_id] = updated
+            if self.room and self.room.id == room_id:
+                self.room = updated
+
+    async def get_random_round_start_char(self, *, game_type):
+        _ = game_type
+        return "가"
+
+    async def create_session_phase_row(
+        self,
+        *,
+        session_id,
+        phase_type,
+        phase_number,
+        actor_participant_id,
+        condition_payload,
+        time_limit_seconds,
+        started_at,
+        deadline_at,
+    ):
+        phase = type(
+            "SessionPhaseRow",
+            (),
+            {
+                "id": uuid4(),
+                "session_id": session_id,
+                "phase_type": phase_type,
+                "phase_number": phase_number,
+                "actor_participant_id": actor_participant_id,
+                "condition_payload": condition_payload,
+                "time_limit_seconds": time_limit_seconds,
+                "started_at": started_at,
+                "deadline_at": deadline_at,
+            },
+        )()
+        self.created_phases.append(phase)
+        return phase
+
+    async def create_word_turn_row(
+        self,
+        *,
+        phase_id,
+        participant_id,
+        round_number,
+        turn_number,
+        condition_payload,
+    ):
+        turn = type(
+            "WordTurnRow",
+            (),
+            {
+                "id": uuid4(),
+                "phase_id": phase_id,
+                "participant_id": participant_id,
+                "round_number": round_number,
+                "turn_number": turn_number,
+                "condition_payload": condition_payload,
+            },
+        )()
+        self.created_turns.append(turn)
+        return turn
+
+    async def mark_game_session_current_phase(self, *, game_session, current_phase_id):
+        game_session.current_phase_id = current_phase_id
 
     async def get_user_participant_for_session(self, *, game_session_public_id, user_id):
         if self.participant is None:
@@ -1260,6 +1420,54 @@ def test_game_service_starts_session_for_room_owner_and_freezes_allowed_members(
     assert repository.committed is True
 
 
+def test_game_service_uses_injected_session_participant_policy():
+    owner_id = uuid4()
+    room_id = uuid4()
+    room_public_id = uuid4()
+
+    class CustomParticipantPolicy:
+        def build_participants(self, *, game_session_public_id, members):
+            return [
+                GameSessionParticipantRecord(
+                    participant_id=None,
+                    game_session_public_id=game_session_public_id,
+                    user_id=member.user_id,
+                    participant_type="user",
+                    display_name=f"커스텀 {index}",
+                    seat_number=index,
+                    is_uninvited_guest=False,
+                    original_nickname=member.nickname,
+                )
+                for index, member in enumerate(members, start=1)
+            ]
+
+    repository = FakeGameRepository(
+        room=GameRoomRecord(
+            id=room_id,
+            public_id=room_public_id,
+            owner_user_id=owner_id,
+            name="첫 객실",
+            game_type="word_chain",
+            status="waiting",
+            max_players=4,
+        ),
+        members=[
+            RoomMemberRecord(
+                room_id=room_id,
+                user_id=owner_id,
+                nickname="방장",
+                joined_at=datetime(2026, 6, 11, tzinfo=KST),
+            )
+        ],
+    )
+    service = GameService(repository, participant_policy=CustomParticipantPolicy())
+
+    result = asyncio.run(service.start_session(room_public_id=room_public_id, user_id=owner_id))
+
+    assert [participant.display_name for participant in result.participants] == ["커스텀 1"]
+    assert repository.created_sessions[0]["session"].participants == result.participants
+
+
 def test_game_service_returns_existing_session_for_repeated_start_request():
     owner_id = uuid4()
     room_id = uuid4()
@@ -1453,7 +1661,7 @@ def test_start_game_session_endpoint_returns_session_for_authenticated_owner(mon
         broadcast_calls.append((room_public_id, message))
 
     monkeypatch.setattr(
-        game_endpoint,
+        game_mappers,
         "kst_now",
         lambda: datetime(2026, 6, 12, 0, 0, 0, tzinfo=KST),
     )

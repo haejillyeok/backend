@@ -1,7 +1,7 @@
 ---
 title: Code Conventions
 type: guide
-updated: 2026-06-12
+updated: 2026-06-16
 audience: ai
 ---
 
@@ -48,6 +48,30 @@ audience: ai
 - 주석은 구현 세부를 장황하게 풀기보다 유지보수자가 다음 수정 때 놓치면 안 되는 맥락을 남긴다.
 - 외부 계약과 연결되는 함수는 관련 API, WebSocket message type을 주석이나 docstring에 명시한다.
 
+## File Boundaries
+
+- BE service 계층에서 핵심 service, connection manager, policy class는 파일당 하나를 기본으로 둔다.
+- ORM 모델은 table/model class 하나를 파일 하나에 두는 것을 기본으로 하고, schema 상수는
+  `constants.py`, public 호환 export는 package `__init__.py`에 둔다.
+- Repository는 도메인 단위 class를 기본으로 유지한다. `GameRepository`, `MatchVoteRepository`처럼
+  도메인 repository 하나가 그 도메인의 DB 실행 함수를 소유한다.
+- Repository 메서드 하나는 조회 1회, row 추가 1건, flush/commit 1회, 상태 row 1건 변경처럼 하나의
+  DB 실행 책임만 담당한다. 여러 조회/변경을 순서대로 조합하는 비즈니스 플로우는 service/usecase에 둔다.
+- API endpoint 모듈이 커지면 기존 router import 경로는 package facade로 유지하고, room/session/entry처럼
+  REST 자원 또는 유스케이스별 router 모듈로 분리한다.
+- WebSocket endpoint 모듈이 커지면 기존 router import 경로는 package facade로 유지하고, 연결 인증,
+  message loop, timeout/grace 처리처럼 lifecycle 책임별 모듈로 분리한다.
+- 문서/HTML을 반환하는 endpoint가 커지면 route 함수와 Markdown/HTML renderer를 분리해 route는
+  파일 읽기와 HTTP 변환만 담당하게 둔다.
+- 작은 dataclass DTO, snapshot, event payload, timer record는 `records.py`, `snapshots.py`,
+  `events.py`, `timers.py`처럼 역할별 파일에 묶을 수 있다.
+- 기존 public import 경로가 넓게 쓰이는 모듈을 패키지로 나눌 때는 `__init__.py`에서 기존 이름을
+  re-export해 endpoint, repository, test의 import churn을 줄인다.
+- 게임 규칙, 참가자 생성, 토큰 발급, 점수/투표/턴 판단처럼 바뀔 수 있는 정책은 service 내부 분기보다
+  주입 가능한 policy 객체로 분리한다.
+- policy 객체는 가능한 한 DB와 WebSocket에 직접 의존하지 않는 순수 규칙으로 두고, service가 repository,
+  client, manager와 조합한다.
+
 ## Layering
 
 ### API Endpoint
@@ -55,18 +79,30 @@ audience: ai
 - HTTP/WebSocket 프로토콜 처리와 dependency wiring을 담당한다.
 - request/response schema 변환을 담당한다.
 - 비즈니스 규칙을 길게 담지 않는다.
+- DB session, repository 생성, transaction rollback/commit을 직접 다루지 않는다. WebSocket controller도
+  연결 수명이 길어질 수 있으므로 인증/권한 확인용 DB transaction을 붙잡지 않는다.
 
 ### Service
 
 - 유스케이스와 비즈니스 규칙을 담당한다.
 - repository, client wrapper, domain helper를 조합한다.
 - FastAPI `Request`, `Response`, `WebSocket` 객체에 직접 의존하지 않는다.
+- 여러 repository DB 실행 함수를 순서대로 호출하는 transaction 흐름은 service/usecase가 담당한다.
+  service는 app sessionmaker로 만든 repository context factory를 받아 usecase 진입점에서 짧은
+  repository scope를 열고 닫는다.
+- 외부 HTTP/API 호출은 DB transaction 밖에서 실행한다. 필요한 DB context는 먼저 조회 transaction으로
+  snapshot화하고 닫은 뒤 외부 호출을 수행하며, 외부 호출 결과를 반영할 때 새 transaction을 연다.
+- 같은 transaction에서 새 row의 기본키를 다른 row의 외래키로 사용하면, 부모 row를 먼저 추가하고
+  `flush()`로 DB 제약과 식별자를 확정한 뒤 자식 row를 추가한다. SQLAlchemy flush ordering이나
+  애플리케이션 생성 UUID에 의존해 순서를 숨기지 않는다.
+- 게임 정책, 검증 정책, 점수 계산 정책은 주입 가능한 policy 객체/함수로 받아 service/usecase에서 호출한다.
 
 ### Repository
 
 - DB 접근을 담당한다.
 - SQLAlchemy session은 dependency에서 받아온다.
 - API schema를 직접 반환하지 않고 persistence model 또는 domain data를 반환한다.
+- 비즈니스 플로우, 게임 정책 판단, WebSocket broadcast payload 조립을 담당하지 않는다.
 
 ### Schemas
 

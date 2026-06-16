@@ -1,7 +1,7 @@
 ---
 title: Backend Guidelines
 type: guide
-updated: 2026-06-12
+updated: 2026-06-16
 audience: ai
 ---
 
@@ -58,8 +58,11 @@ dependency를 공유할 수 있다.
 ### Dependencies
 
 - FastAPI dependency는 요청 단위 리소스와 권한 확인에 사용한다.
-- DB session처럼 cleanup이 필요한 dependency는 `async with` 또는 `yield` dependency로 관리한다.
+- DB session처럼 cleanup이 필요한 자원은 controller가 직접 받지 않고, service/usecase가 repository
+  context factory를 통해 짧게 열고 닫는다.
 - service 객체를 만들 때 endpoint 안에서 직접 생성하지 말고 `dependencies/services.py`를 통해 주입한다.
+  dependency provider는 repository 객체가 아니라 app sessionmaker 기반 repository context factory를
+  service에 넘긴다.
 - dependency가 많아지면 endpoint 함수 본문보다 dependency provider의 책임을 먼저 정리한다.
 
 ### Error Handling

@@ -1,5 +1,7 @@
 import asyncio
+import importlib
 import logging
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
@@ -10,7 +12,8 @@ from fastapi.testclient import TestClient
 
 from app.be.api.endpoints import lobby_ws
 from app.be.api.endpoints import game as game_endpoint
-from app.be.dependencies.database import get_db_session
+from app.be.api.endpoints.lobby_ws import connection as lobby_ws_connection
+from app.be.api.endpoints.lobby_ws import message_loop as lobby_ws_message_loop
 from app.be.dependencies.services import get_auth_service, get_current_user, get_game_service
 from app.be.main import create_app
 from app.be.services.auth import CurrentUser, SessionExpiredError
@@ -75,13 +78,14 @@ class FakeDbSession:
 
 
 def use_fake_db_session(app, db_session: FakeDbSession | None = None) -> FakeDbSession:
-    """WebSocket 테스트에서 인증/권한 확인 transaction 종료 여부를 관찰할 fake session을 주입합니다."""
+    """WebSocket 테스트에서 service repository scope용 fake sessionmaker를 주입합니다."""
     fake_db_session = db_session or FakeDbSession()
 
-    async def fake_db_session_dependency():
+    @asynccontextmanager
+    async def fake_db_session_context():
         yield fake_db_session
 
-    app.dependency_overrides[get_db_session] = fake_db_session_dependency
+    app.state.db_sessionmaker = lambda: fake_db_session_context()
     return fake_db_session
 
 
@@ -248,7 +252,7 @@ def test_room_lobby_websocket_connects_with_path_room_id_and_cleans_up() -> None
     assert lobby_connection_manager.room_subscription_count(room_public_id) == 0
 
 
-def test_room_lobby_websocket_closes_auth_transaction_before_accept(monkeypatch) -> None:
+def test_room_lobby_websocket_does_not_manage_db_transaction_before_accept(monkeypatch) -> None:
     user = current_user()
     room_public_id = uuid4()
     db_session = FakeDbSession()
@@ -283,7 +287,7 @@ def test_room_lobby_websocket_closes_auth_transaction_before_accept(monkeypatch)
         assert websocket.receive_json()["type"] == "lobby.room.connected"
         assert websocket.receive_json()["type"] == "lobby.room.snapshot"
 
-    assert rollback_state_at_connect == [True]
+    assert rollback_state_at_connect == [False]
 
 
 def test_room_lobby_websocket_records_apm_metrics_and_spans(monkeypatch) -> None:
@@ -305,7 +309,12 @@ def test_room_lobby_websocket_records_apm_metrics_and_spans(monkeypatch) -> None
             )
 
     monkeypatch.setattr(
-        lobby_ws,
+        lobby_ws_connection,
+        "start_span",
+        lambda name, attributes=None: FakeSpan(span_names, name),
+    )
+    monkeypatch.setattr(
+        lobby_ws_message_loop,
         "start_span",
         lambda name, attributes=None: FakeSpan(span_names, name),
     )
@@ -381,9 +390,7 @@ def test_room_lobby_websocket_records_audit_logs_for_message_with_redaction(capl
         )
         assert websocket.receive_json()["type"] == "lobby.pong"
 
-    audit_messages = [
-        record.message for record in caplog.records if record.name == "audit.request"
-    ]
+    audit_messages = [record.message for record in caplog.records if record.name == "audit.request"]
     assert any(
         "operation=CONNECT /ws/lobby/rooms/{room_public_id} status_code=101" in message
         for message in audit_messages
@@ -417,7 +424,7 @@ def test_room_lobby_websocket_closes_when_heartbeat_timeout_passes(monkeypatch) 
                 snapshot=build_lobby_snapshot(room_public_id=room_public_id, owner=user),
             )
 
-    monkeypatch.setattr(lobby_ws, "LOBBY_HEARTBEAT_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr(lobby_ws_message_loop, "LOBBY_HEARTBEAT_TIMEOUT_SECONDS", 0.01)
     app = create_app()
     use_fake_db_session(app)
     app.dependency_overrides[get_auth_service] = lambda: FakeAuthService(user)
@@ -434,6 +441,18 @@ def test_room_lobby_websocket_closes_when_heartbeat_timeout_passes(monkeypatch) 
 
     assert exc_info.value.code == 1001
     assert lobby_connection_manager.connection_count == 0
+
+
+def test_lobby_connection_manager_exposes_registry_and_delivery_helpers() -> None:
+    """Lobby manager가 registry 조작과 메시지 전송 helper를 분리해 사용하도록 경계를 고정합니다."""
+    registry = importlib.import_module("app.be.services.lobby.connection_registry")
+    delivery = importlib.import_module("app.be.services.lobby.message_delivery")
+
+    assert hasattr(registry, "register_lobby_connection")
+    assert hasattr(registry, "remove_lobby_connection")
+    assert hasattr(registry, "has_active_room_connection")
+    assert hasattr(delivery, "send_lobby_message")
+    assert hasattr(delivery, "broadcast_lobby_room")
 
 
 async def test_lobby_manager_records_ping_as_heartbeat() -> None:

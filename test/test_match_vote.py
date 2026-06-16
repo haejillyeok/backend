@@ -17,10 +17,7 @@ from app.be.models.game import (
 )
 from app.be.repository.match_vote import MatchVoteRepository
 from app.be.services.match_vote import (
-    MatchResultParticipantPayload,
     MatchVoteService,
-    VoteAcceptedRecord,
-    VoteSubmissionRecord,
 )
 from app.shared.core.exceptions import AppException
 
@@ -126,281 +123,203 @@ class LateVoteFakeDbSession:
         pass
 
 
-async def test_match_vote_service_commits_vote_and_returns_progress_event() -> None:
+async def test_match_vote_service_orchestrates_vote_submission_repository_steps() -> None:
+    session_id = uuid4()
     game_session_public_id = uuid4()
     voter_participant_id = uuid4()
-    target_seat_number = 3
+    target_participant_id = uuid4()
     voted_at = datetime(2026, 6, 13, tzinfo=KST)
-
-    class FakeRepository:
-        def __init__(self) -> None:
-            self.committed = False
-
-        async def record_vote_submission(self, **kwargs):
-            assert kwargs == {
-                "game_session_public_id": game_session_public_id,
-                "voter_participant_id": voter_participant_id,
-                "target_seat_number": target_seat_number,
-                "now": voted_at,
-            }
-            return VoteSubmissionRecord(
-                accepted=VoteAcceptedRecord(
-                    game_session_public_id=game_session_public_id,
-                    event_sequence=5,
-                    voter_display_name="1번 손님",
-                    voter_seat_number=1,
-                    submitted_vote_count=1,
-                    required_vote_count=2,
-                    created_at=voted_at,
-                ),
-                result=None,
-            )
-
-        async def commit(self) -> None:
-            self.committed = True
-
-    repository = FakeRepository()
-    service = MatchVoteService(repository)
-
-    events = await service.submit_vote(
-        game_session_public_id=game_session_public_id,
-        voter_participant_id=voter_participant_id,
-        target_seat_number=target_seat_number,
-        now=voted_at,
+    game_session = GameSession(
+        id=session_id,
+        public_id=game_session_public_id,
+        room_id=uuid4(),
+        game_type="word_chain",
+        status="voting",
+        rule_config={"max_rounds": 1, "turn_time_seconds": 10},
     )
-
-    assert repository.committed is True
-    assert len(events) == 1
-    assert events[0].message == {
-        "type": "match.vote.accepted",
-        "payload": {
-            "event_sequence": 5,
+    voter = SessionParticipant(
+        id=voter_participant_id,
+        session_id=session_id,
+        user_id=uuid4(),
+        participant_type="user",
+        display_name="1번 손님",
+        seat_number=1,
+        is_uninvited_guest=False,
+    )
+    target = SessionParticipant(
+        id=target_participant_id,
+        session_id=session_id,
+        user_id=None,
+        participant_type="ai",
+        display_name="2번 손님",
+        seat_number=2,
+        is_uninvited_guest=True,
+    )
+    waiting_voter = SessionParticipant(
+        id=uuid4(),
+        session_id=session_id,
+        user_id=uuid4(),
+        participant_type="user",
+        display_name="3번 손님",
+        seat_number=3,
+        is_uninvited_guest=False,
+    )
+    action = ParticipantAction(
+        id=uuid4(),
+        session_id=session_id,
+        phase_id=None,
+        participant_id=voter_participant_id,
+        action_type="vote_submit",
+        action_number=1,
+        attempt_number=1,
+        payload={"target_seat_number": target.seat_number},
+        submitted_at=voted_at,
+        response_ms=None,
+        is_valid=True,
+    )
+    vote = Vote(
+        id=uuid4(),
+        session_id=session_id,
+        voter_participant_id=voter_participant_id,
+        target_participant_id=target_participant_id,
+        voted_at=voted_at,
+        is_correct=True,
+    )
+    accepted_event = GameEvent(
+        id=uuid4(),
+        session_id=session_id,
+        phase_id=None,
+        participant_id=voter_participant_id,
+        action_id=action.id,
+        sequence=2,
+        event_type="vote.accepted",
+        payload={
             "voter": {
-                "display_name": "1번 손님",
-                "seat_number": 1,
+                "display_name": voter.display_name,
+                "seat_number": voter.seat_number,
             },
             "submitted_vote_count": 1,
             "required_vote_count": 2,
-            "created_at": voted_at,
-            "server_time": voted_at,
         },
-    }
-
-
-async def test_match_vote_service_returns_result_event_when_all_users_voted() -> None:
-    game_session_public_id = uuid4()
-    voter_participant_id = uuid4()
-    target_seat_number = 3
-    voted_at = datetime(2026, 6, 13, tzinfo=KST)
+        created_at=voted_at,
+    )
 
     class FakeRepository:
-        async def record_vote_submission(self, **kwargs):
-            return VoteSubmissionRecord(
-                accepted=VoteAcceptedRecord(
-                    game_session_public_id=game_session_public_id,
-                    event_sequence=6,
-                    voter_display_name="2번 손님",
-                    voter_seat_number=2,
-                    submitted_vote_count=2,
-                    required_vote_count=2,
-                    created_at=voted_at,
-                ),
-                result=[
-                    MatchResultParticipantPayload(
-                        display_name="1번 손님",
-                        seat_number=1,
-                        final_score=20,
-                        rank=1,
-                        is_winner=True,
-                        revealed_participant_type="user",
-                        vote_score_delta=10,
-                    ),
-                    MatchResultParticipantPayload(
-                        display_name="2번 손님",
-                        seat_number=2,
-                        final_score=-5,
-                        rank=2,
-                        is_winner=False,
-                        revealed_participant_type="user",
-                        vote_score_delta=-5,
-                    ),
-                    MatchResultParticipantPayload(
-                        display_name="3번 손님",
-                        seat_number=3,
-                        final_score=-5,
-                        rank=2,
-                        is_winner=False,
-                        revealed_participant_type="ai",
-                        vote_score_delta=-5,
-                    ),
-                ],
-                result_event_sequence=7,
-                result_created_at=voted_at,
-            )
+        def __init__(self) -> None:
+            self.calls = []
 
-        async def commit(self) -> None:
-            pass
+        async def get_game_session_for_update(self, public_id):
+            self.calls.append("get_game_session_for_update")
+            assert public_id == game_session_public_id
+            return game_session
 
-    service = MatchVoteService(FakeRepository())
+        async def get_voting_phase(self, *, game_session):
+            self.calls.append("get_voting_phase")
+            return None
+
+        async def get_participant(self, *, session_id, participant_id):
+            self.calls.append("get_participant")
+            assert session_id == game_session.id
+            assert participant_id == voter_participant_id
+            return voter
+
+        async def get_participant_by_seat_number(self, *, session_id, seat_number):
+            self.calls.append("get_participant_by_seat_number")
+            assert session_id == game_session.id
+            assert seat_number == target.seat_number
+            return target
+
+        async def list_participants(self, session_id):
+            self.calls.append("list_participants")
+            assert session_id == game_session.id
+            return [voter, target, waiting_voter]
+
+        async def list_votes(self, session_id):
+            self.calls.append("list_votes")
+            assert session_id == game_session.id
+            return []
+
+        async def get_score_totals(self, session_id):
+            self.calls.append("get_score_totals")
+            assert session_id == game_session.id
+            return {}
+
+        async def get_next_action_number(self, session_id):
+            self.calls.append("get_next_action_number")
+            assert session_id == game_session.id
+            return 1
+
+        async def create_vote_submit_action(self, **kwargs):
+            self.calls.append("create_vote_submit_action")
+            assert kwargs["session_id"] == game_session.id
+            assert kwargs["voter"] is voter
+            assert kwargs["target"] is target
+            assert kwargs["now"] == voted_at
+            return action
+
+        async def create_vote(self, **kwargs):
+            self.calls.append("create_vote")
+            assert kwargs["session_id"] == game_session.id
+            assert kwargs["voter"] is voter
+            assert kwargs["target"] is target
+            assert kwargs["is_correct"] is True
+            assert kwargs["now"] == voted_at
+            return vote
+
+        async def flush(self):
+            self.calls.append("flush")
+
+        async def get_next_event_sequence(self, session_id):
+            self.calls.append("get_next_event_sequence")
+            assert session_id == game_session.id
+            return 2
+
+        async def create_vote_accepted_event(self, **kwargs):
+            self.calls.append("create_vote_accepted_event")
+            assert kwargs["session_id"] == game_session.id
+            assert kwargs["voter"] is voter
+            assert kwargs["action"] is action
+            assert kwargs["event_sequence"] == 2
+            assert kwargs["submitted_vote_count"] == 1
+            assert kwargs["required_vote_count"] == 2
+            assert kwargs["now"] == voted_at
+            return accepted_event
+
+        async def commit(self):
+            self.calls.append("commit")
+
+    repository = FakeRepository()
+    service = MatchVoteService(repository)
 
     events = await service.submit_vote(
         game_session_public_id=game_session_public_id,
         voter_participant_id=voter_participant_id,
-        target_seat_number=target_seat_number,
+        target_seat_number=target.seat_number,
         now=voted_at,
     )
 
-    assert [event.message["type"] for event in events] == [
-        "match.vote.accepted",
-        "match.result.published",
+    assert repository.calls == [
+        "get_game_session_for_update",
+        "get_voting_phase",
+        "get_participant",
+        "get_participant_by_seat_number",
+        "list_participants",
+        "list_votes",
+        "get_score_totals",
+        "get_next_action_number",
+        "create_vote_submit_action",
+        "create_vote",
+        "flush",
+        "get_next_event_sequence",
+        "create_vote_accepted_event",
+        "flush",
+        "commit",
     ]
-    assert events[1].message["payload"] == {
-        "event_sequence": 7,
-        "results": [
-            {
-                "participant": {
-                    "display_name": "1번 손님",
-                    "seat_number": 1,
-                    "revealed_participant_type": "user",
-                },
-                "final_score": 20,
-                "rank": 1,
-                "is_winner": True,
-                "vote_score_delta": 10,
-            },
-            {
-                "participant": {
-                    "display_name": "2번 손님",
-                    "seat_number": 2,
-                    "revealed_participant_type": "user",
-                },
-                "final_score": -5,
-                "rank": 2,
-                "is_winner": False,
-                "vote_score_delta": -5,
-            },
-            {
-                "participant": {
-                    "display_name": "3번 손님",
-                    "seat_number": 3,
-                    "revealed_participant_type": "ai",
-                },
-                "final_score": -5,
-                "rank": 2,
-                "is_winner": False,
-                "vote_score_delta": -5,
-            },
-        ],
-        "created_at": voted_at,
-        "server_time": voted_at,
-    }
+    assert events[0].message["payload"]["submitted_vote_count"] == 1
+    assert events[0].message["payload"]["required_vote_count"] == 2
 
 
-async def test_match_vote_service_commits_vote_timeout_and_returns_result_event() -> None:
-    game_session_public_id = uuid4()
-    timed_out_at = datetime(2026, 6, 13, tzinfo=KST)
-
-    class FakeRepository:
-        def __init__(self) -> None:
-            self.committed = False
-
-        async def publish_result_for_timeout(self, **kwargs):
-            assert kwargs == {
-                "game_session_public_id": game_session_public_id,
-                "now": timed_out_at,
-            }
-            return VoteSubmissionRecord(
-                accepted=VoteAcceptedRecord(
-                    game_session_public_id=game_session_public_id,
-                    event_sequence=8,
-                    voter_display_name="",
-                    voter_seat_number=0,
-                    submitted_vote_count=1,
-                    required_vote_count=2,
-                    created_at=timed_out_at,
-                ),
-                result=[
-                    MatchResultParticipantPayload(
-                        display_name="1번 손님",
-                        seat_number=1,
-                        final_score=10,
-                        rank=1,
-                        is_winner=True,
-                        revealed_participant_type="user",
-                        vote_score_delta=10,
-                    ),
-                    MatchResultParticipantPayload(
-                        display_name="2번 손님",
-                        seat_number=2,
-                        final_score=0,
-                        rank=2,
-                        is_winner=False,
-                        revealed_participant_type="user",
-                        vote_score_delta=0,
-                    ),
-                ],
-                result_event_sequence=9,
-                result_created_at=timed_out_at,
-            )
-
-        async def commit(self) -> None:
-            self.committed = True
-
-    repository = FakeRepository()
-    service = MatchVoteService(repository)
-
-    events = await service.timeout_vote(
-        game_session_public_id=game_session_public_id,
-        now=timed_out_at,
-    )
-
-    assert repository.committed is True
-    assert [event.message["type"] for event in events] == [
-        "match.vote.timeout",
-        "match.result.published",
-    ]
-    assert events[0].message["payload"] == {
-        "event_sequence": 8,
-        "submitted_vote_count": 1,
-        "required_vote_count": 2,
-        "created_at": timed_out_at,
-        "server_time": timed_out_at,
-    }
-    assert events[1].message["payload"]["event_sequence"] == 9
-    assert events[1].message["payload"]["server_time"] == timed_out_at
-
-
-async def test_match_vote_service_ignores_stale_vote_timeout_after_result() -> None:
-    game_session_public_id = uuid4()
-    timed_out_at = datetime(2026, 6, 13, tzinfo=KST)
-
-    class FakeRepository:
-        def __init__(self) -> None:
-            self.committed = False
-
-        async def publish_result_for_timeout(self, **kwargs):
-            assert kwargs == {
-                "game_session_public_id": game_session_public_id,
-                "now": timed_out_at,
-            }
-            return None
-
-        async def commit(self) -> None:
-            self.committed = True
-
-    repository = FakeRepository()
-    service = MatchVoteService(repository)
-
-    events = await service.timeout_vote(
-        game_session_public_id=game_session_public_id,
-        now=timed_out_at,
-    )
-
-    assert events == []
-    assert repository.committed is False
-
-
-async def test_match_vote_repository_publishes_result_when_all_users_voted() -> None:
+async def test_match_vote_service_publishes_result_when_all_users_voted() -> None:
     session_id = uuid4()
     game_session_public_id = uuid4()
     voter_id = uuid4()
@@ -474,14 +393,14 @@ async def test_match_vote_repository_publishes_result_when_all_users_voted() -> 
         ]
     )
     repository = MatchVoteRepository(db_session)
+    service = MatchVoteService(repository)
 
-    record = await repository.record_vote_submission(
+    events = await service.submit_vote(
         game_session_public_id=game_session_public_id,
         voter_participant_id=voter_id,
         target_seat_number=1,
         now=voted_at,
     )
-    await repository.commit()
 
     action = db_session.added[0]
     vote = db_session.added[1]
@@ -521,14 +440,23 @@ async def test_match_vote_repository_publishes_result_when_all_users_voted() -> 
     assert game_session.status == "result"
     assert game_session.ended_at == voted_at
     assert room.status == "waiting"
-    assert record.accepted.submitted_vote_count == 2
-    assert record.result_event_sequence == 5
-    assert record.result is not None
-    assert [result.seat_number for result in record.result] == [1, 2, 3]
+    assert [event.message["type"] for event in events] == [
+        "match.vote.accepted",
+        "match.result.published",
+    ]
+    assert events[0].message["payload"]["submitted_vote_count"] == 2
+    assert events[1].message["payload"]["event_sequence"] == 5
+    assert [
+        item["participant"]["seat_number"] for item in events[1].message["payload"]["results"]
+    ] == [
+        1,
+        2,
+        3,
+    ]
     assert db_session.committed is True
 
 
-async def test_match_vote_repository_rejects_vote_after_voting_deadline() -> None:
+async def test_match_vote_service_rejects_vote_after_voting_deadline() -> None:
     session_id = uuid4()
     game_session_public_id = uuid4()
     phase_id = uuid4()
@@ -579,9 +507,10 @@ async def test_match_vote_repository_rejects_vote_after_voting_deadline() -> Non
         target=target,
     )
     repository = MatchVoteRepository(db_session)
+    service = MatchVoteService(repository)
 
     with pytest.raises(AppException) as exc_info:
-        await repository.record_vote_submission(
+        await service.submit_vote(
             game_session_public_id=game_session_public_id,
             voter_participant_id=voter_id,
             target_seat_number=2,
@@ -592,7 +521,7 @@ async def test_match_vote_repository_rejects_vote_after_voting_deadline() -> Non
     assert db_session.added == []
 
 
-async def test_match_vote_repository_publishes_result_on_vote_timeout() -> None:
+async def test_match_vote_service_publishes_result_on_vote_timeout() -> None:
     session_id = uuid4()
     game_session_public_id = uuid4()
     first_voter_id = uuid4()
@@ -663,12 +592,12 @@ async def test_match_vote_repository_publishes_result_on_vote_timeout() -> None:
         ]
     )
     repository = MatchVoteRepository(db_session)
+    service = MatchVoteService(repository)
 
-    record = await repository.publish_result_for_timeout(
+    events = await service.timeout_vote(
         game_session_public_id=game_session_public_id,
         now=timed_out_at,
     )
-    await repository.commit()
 
     timeout_event = db_session.added[0]
     score_ledgers = [item for item in db_session.added if isinstance(item, ScoreLedger)]
@@ -696,13 +625,16 @@ async def test_match_vote_repository_publishes_result_on_vote_timeout() -> None:
     assert result_event.event_type == "result.published"
     assert game_session.status == "result"
     assert room.status == "waiting"
-    assert record.accepted.submitted_vote_count == 1
-    assert record.result_event_sequence == 6
-    assert record.result is not None
+    assert [event.message["type"] for event in events] == [
+        "match.vote.timeout",
+        "match.result.published",
+    ]
+    assert events[0].message["payload"]["submitted_vote_count"] == 1
+    assert events[1].message["payload"]["event_sequence"] == 6
     assert db_session.committed is True
 
 
-async def test_match_vote_repository_ignores_stale_vote_timeout_after_result() -> None:
+async def test_match_vote_service_ignores_stale_vote_timeout_after_result() -> None:
     game_session_public_id = uuid4()
     game_session = GameSession(
         id=uuid4(),
@@ -714,11 +646,12 @@ async def test_match_vote_repository_ignores_stale_vote_timeout_after_result() -
     )
     db_session = FakeDbSession([FakeResult(scalar=game_session)])
     repository = MatchVoteRepository(db_session)
+    service = MatchVoteService(repository)
 
-    record = await repository.publish_result_for_timeout(
+    events = await service.timeout_vote(
         game_session_public_id=game_session_public_id,
         now=datetime(2026, 6, 13, tzinfo=KST),
     )
 
-    assert record is None
+    assert events == []
     assert db_session.added == []

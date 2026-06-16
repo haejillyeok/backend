@@ -1,0 +1,8 @@
+AI_ANSWER_FAILED_EVENT_TYPE = "ai_answer_failed"
+TURN_TIMEOUT_EVENT_TYPE = "turn_timeout"
+WORD_ACCEPTED_EVENT_TYPE = "word.accepted"
+WORD_REJECTED_EVENT_TYPE = "word.rejected"
+WORD_SUBMIT_ACTION_TYPE = "word_submit"
+WORD_REJECT_ACTION_TYPE = "word_reject"
+TURN_RESOLVED_MESSAGE_TYPE = "match.turn.resolved"
+ROUND_START_DELAY_SECONDS = 5

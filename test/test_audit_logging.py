@@ -109,9 +109,7 @@ def test_realtime_websocket_writes_audit_logs_for_connection_message_and_disconn
         )
         assert websocket.receive_json()["type"] == "realtime.pong"
 
-    audit_messages = [
-        record.message for record in caplog.records if record.name == "audit.request"
-    ]
+    audit_messages = [record.message for record in caplog.records if record.name == "audit.request"]
     assert any(
         "audit protocol=websocket phase=completed service=haejillyeok-be "
         "operation=CONNECT /ws/realtime status_code=101" in message
@@ -143,7 +141,8 @@ def test_realtime_websocket_writes_failed_audit_log_for_invalid_message(caplog):
     assert any(
         record.name == "audit.request"
         and "audit protocol=websocket phase=failed service=haejillyeok-be "
-        "operation=MESSAGE /ws/realtime status_code=1008" in record.message
+        "operation=MESSAGE /ws/realtime status_code=1008"
+        in record.message
         and "error_code=VALIDATION_ERROR" in record.message
         for record in caplog.records
     )
