@@ -8,6 +8,7 @@
 - [API](api.md): REST API 계약
 - [Sunset Domain](sunset-domain.md): 해질녘 게임 도메인, 상태 흐름, WebSocket 진행 기준
 - [Development](development.md): 개발 환경, DB, 실행, 테스트 절차
+- [k6 BE Load Test Plan](load-testing/k6-be-load-test-plan.md): 로컬 BE E2E 부하테스트 계획, Docker 리소스 제한, k6/Grafana 관측 기준
 - [Backend Guidelines](backend-guidelines.md): FastAPI, WebSocket 적용 기준
 - [Code Conventions](code-conventions.md): Python 코드 스타일, 레이어 규칙, 테스트 기준
 

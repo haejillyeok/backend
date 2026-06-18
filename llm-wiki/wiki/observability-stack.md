@@ -1,7 +1,7 @@
 ---
 title: Observability Stack
 type: guide
-updated: 2026-06-15
+updated: 2026-06-18
 audience: ai
 ---
 
@@ -16,11 +16,11 @@ FastAPI app -> OTLP HTTP :4318 -> OpenTelemetry Collector -> Prometheus / Tempo 
 FastAPI app -> logs/*.log* -> Promtail -> Loki -> Grafana
 ```
 
-- `app/shared/core/observability.py`는 FastAPI 앱에 OpenTelemetry trace instrumentation과
-  HTTP metric middleware를 등록한다.
-- FastAPI/Starlette/OTel 조합에 따라 router 중간 객체가 route detail 조회 중 `.path`를 제공하지
-  않을 수 있으므로, OTel FastAPI route lookup 실패는 request path fallback으로 처리하고 실제 요청을
-  500으로 만들지 않는다.
+- `app/shared/core/observability.py`는 FastAPI 앱에 HTTP metric middleware와 수동 HTTP trace
+  middleware를 등록한다.
+- HTTP trace는 FastAPI 자동 instrumentation을 쓰지 않고 `HttpServerTracingMiddleware`가 요청마다
+  빈 OpenTelemetry context로 root span을 새로 시작한다. k6 keep-alive 연결처럼 같은 TCP connection에
+  여러 HTTP 요청이 이어지는 경우에도 signup, login, room join 같은 API 요청은 서로 다른 trace여야 한다.
 - `be`와 `agent` 앱은 `create_app()`에서 `add_observability()`를 호출한다.
 - 앱 코드는 기본적으로 APM exporter를 연결하고, 별도 설정이 없으면 `http://localhost:4318`로
   OTLP HTTP를 보낸다. Docker 배포에서는 backend 컨테이너를 collector와 같은 user-defined
@@ -84,7 +84,7 @@ Grafana dashboard는 다음 Prometheus 이름을 기준으로 query한다.
 
 ## Object-Level Tracing
 
-객체별 실행 시간은 metric label cardinality를 늘리지 않고 trace child span으로 남긴다.
+객체별 실행 시간은 metric label cardinality를 늘리지 않고 trace span으로 남긴다.
 
 - `app/shared/core/observability.py`의 `@traced_method(span_name, layer=...)`를 service,
   repository, external client wrapper 같은 의미 있는 경계에 붙인다.
@@ -93,6 +93,14 @@ Grafana dashboard는 다음 Prometheus 이름을 기준으로 query한다.
   고정되지 않고 layer별로 조회한다.
 - WebSocket endpoint는 `WebSocket.<endpoint>.connect`, `WebSocket.<endpoint>.message`,
   `WebSocket.<endpoint>.disconnect`, `WebSocket.<endpoint>.grace_leave` 같은 수동 span을 남긴다.
+- Tempo trace 경계는 하나의 긴 게임 처리 흐름이 아니라 HTTP API 요청 1개 또는 WebSocket inbound
+  message/lifecycle event 1개다. HTTP request span과 WebSocket connect, message, disconnect,
+  grace leave span은 현재 active context를 이어받지 않는 root span으로 시작한다.
+- WebSocket message root span 아래에는 `WebSocket.<endpoint>.receive`, `handle`, `broadcast`, `send`
+  child span을 남긴다. `receive_text()` 대기 시간은 유저 idle time을 처리 latency로 오해하게 만들 수
+  있으므로 root span에 포함하지 않고, 메시지를 받은 뒤 parse/metric 기록 이후 처리와 송신 흐름만 trace한다.
+- service/repository/client span은 HTTP 요청 trace 또는 WebSocket message root trace 아래의 child span으로
+  붙을 수 있다.
 - password, token, request body, cookie, authorization header 값은 span attribute에 넣지 않는다.
 
 ## Local Commands
@@ -132,8 +140,8 @@ Grafana WebSocket metric dashboard는 `Haejillyeok WebSocket APM` 제목으로 p
 Grafana trace dashboard는 `Haejillyeok FastAPI Traces` 제목으로 provision 된다.
 
 - Recent Request Traces: 요청 span 검색
-- Service Layer Spans: `app.layer="service"` span 검색
-- Repository Layer Spans: `app.layer="repository"` span 검색
+- Service Layer Spans: `span.app.layer="service"` TraceQL로 service span 검색
+- Repository Layer Spans: `span.app.layer="repository"` TraceQL로 repository span 검색
 - Selected Object Span Search: 선택한 service/repository span 검색
 
 Trace 상세 waterfall은 dashboard table에서 trace를 열거나 Grafana Explore의 Tempo datasource에서 확인한다.

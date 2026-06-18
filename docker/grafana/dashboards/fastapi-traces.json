@@ -179,7 +179,7 @@
             "uid": "tempo"
           },
           "limit": 20,
-          "query": "{resource.service.name=~\"$service\" && app.layer=\"service\"}",
+          "query": "{resource.service.name=~\"$service\" && span.app.layer=\"service\"}",
           "queryType": "traceql",
           "refId": "A"
         }
@@ -230,7 +230,7 @@
             "uid": "tempo"
           },
           "limit": 20,
-          "query": "{resource.service.name=~\"$service\" && app.layer=\"repository\"}",
+          "query": "{resource.service.name=~\"$service\" && span.app.layer=\"repository\"}",
           "queryType": "traceql",
           "refId": "A"
         }

@@ -14,6 +14,7 @@ ENV/
 .env.*
 !.env.example
 !.env.sample
+!.env.load-test.example
 .mise.local.toml
 
 # Test, coverage, and quality-tool caches

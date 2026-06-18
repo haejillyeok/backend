@@ -7,11 +7,16 @@ from starlette.websockets import WebSocketDisconnect
 
 from app.be.services.lobby.records import LobbyMessage
 from app.shared.core.exceptions import AppException
+from app.shared.core.observability import start_span
 
 
 async def send_lobby_message(websocket: WebSocket, message: LobbyMessage) -> None:
     """특정 로비 WebSocket으로 JSON envelope 메시지를 전송합니다."""
-    await websocket.send_json(jsonable_encoder(message))
+    with start_span(
+        "WebSocket.lobby.send",
+        attributes=_lobby_message_span_attributes(message),
+    ):
+        await websocket.send_json(jsonable_encoder(message))
 
 
 async def send_lobby_error_and_close(websocket: WebSocket, error: AppException) -> None:
@@ -28,8 +33,26 @@ async def broadcast_lobby_room(
     disconnect_stale_websocket: Callable[[WebSocket], object],
 ) -> None:
     """room 구독자에게 이벤트를 전송하고, 이미 닫힌 연결은 registry에서 제거합니다."""
-    for websocket in list(room_subscriptions.get(room_public_id, set())):
-        try:
-            await send_lobby_message(websocket, message)
-        except (RuntimeError, WebSocketDisconnect):
-            disconnect_stale_websocket(websocket)
+    subscribers = list(room_subscriptions.get(room_public_id, set()))
+    with start_span(
+        "WebSocket.lobby.broadcast",
+        attributes={
+            **_lobby_message_span_attributes(message),
+            "ws.subscriber.count": len(subscribers),
+        },
+    ):
+        for websocket in subscribers:
+            try:
+                await send_lobby_message(websocket, message)
+            except (RuntimeError, WebSocketDisconnect):
+                disconnect_stale_websocket(websocket)
+
+
+def _lobby_message_span_attributes(message: LobbyMessage) -> dict[str, str]:
+    """WebSocket lobby 송신 span에 낮은 cardinality 속성만 붙입니다."""
+    message_type = message.get("type")
+    return {
+        "ws.endpoint": "lobby",
+        "ws.message.direction": "outbound",
+        "ws.message.type": message_type if isinstance(message_type, str) else "unknown",
+    }

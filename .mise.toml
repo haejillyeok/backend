@@ -90,3 +90,69 @@ run = "docker compose down"
 [tasks.infra-logs]
 description = "로컬 인프라 로그를 실시간으로 확인합니다"
 run = "docker compose logs -f postgres otel-collector prometheus tempo loki promtail grafana"
+
+[tasks.load-test-up]
+description = "k6 부하테스트용 로컬 스택을 빌드하고 시작합니다"
+run = "docker compose --env-file .env.load-test -f docker-compose.yml -f docker-compose.load-test.yml up -d --build postgres otel-collector prometheus tempo loki promtail grafana be-loadtest k6-coordinator"
+
+[tasks.load-test-down]
+description = "k6 부하테스트용 로컬 스택을 중지합니다"
+run = "docker compose --env-file .env.load-test -f docker-compose.yml -f docker-compose.load-test.yml down"
+
+[tasks.load-test-logs]
+description = "k6 부하테스트용 로컬 스택 로그를 실시간으로 확인합니다"
+run = "docker compose --env-file .env.load-test -f docker-compose.yml -f docker-compose.load-test.yml logs -f postgres otel-collector prometheus grafana be-loadtest k6-coordinator"
+
+[tasks.load-test-word-fixture]
+description = "k6 끝말잇기 valid word fixture를 생성합니다"
+depends = ["install"]
+run = ".venv/bin/python scripts/generate_k6_word_fixture.py"
+
+[tasks.load-test-seed-valid-words]
+description = "word_game.valid_words에 끝말잇기 기본 단어 seed를 적재합니다"
+run = "docker compose --env-file .env.load-test -f docker-compose.yml -f docker-compose.load-test.yml exec -T postgres sh -c 'psql -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\"' < scripts/valid_words_seed.sql"
+
+[tasks.load-test-db-word-check]
+description = "DB에 k6 끝말잇기 실행용 active word_chain 단어가 적재됐는지 확인합니다"
+depends = ["install"]
+run = ".venv/bin/python scripts/k6_db_word_check.py --env-file .env.load-test"
+
+[tasks.load-test-preflight]
+description = "k6 부하테스트 실행 전 파일, 환경변수, Docker 상태를 확인합니다"
+depends = ["install"]
+run = ".venv/bin/python scripts/k6_preflight.py --env-file .env.load-test"
+
+[tasks.load-test-stack-check]
+description = "실행 중인 k6 부하테스트 스택의 health endpoint를 확인합니다"
+depends = ["install"]
+run = ".venv/bin/python scripts/k6_stack_check.py"
+
+[tasks.load-test-prometheus-check]
+description = "testid 기준으로 k6 remote-write 지표가 Prometheus에 들어왔는지 확인합니다"
+depends = ["install"]
+run = ".venv/bin/python scripts/k6_prometheus_check.py"
+
+[tasks.load-test-smoke]
+description = "k6 smoke E2E 부하테스트를 실행합니다"
+depends = ["install"]
+run = ".venv/bin/python scripts/run_k6_load_test.py smoke --env-file .env.load-test"
+
+[tasks.load-test-ramp]
+description = "k6 ramp E2E 부하테스트를 실행합니다"
+depends = ["install"]
+run = ".venv/bin/python scripts/run_k6_load_test.py ramp --env-file .env.load-test"
+
+[tasks.load-test-soak50]
+description = "k6 50 VU soak E2E 부하테스트를 실행합니다"
+depends = ["install"]
+run = ".venv/bin/python scripts/run_k6_load_test.py soak50 --env-file .env.load-test"
+
+[tasks.load-test-soak100]
+description = "k6 100 VU soak E2E 부하테스트를 실행합니다"
+depends = ["install"]
+run = ".venv/bin/python scripts/run_k6_load_test.py soak100 --env-file .env.load-test"
+
+[tasks.load-test-result]
+description = "k6 부하테스트 결과 기록 템플릿을 생성합니다"
+depends = ["install"]
+run = ".venv/bin/python scripts/k6_result_template.py"

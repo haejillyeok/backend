@@ -110,14 +110,23 @@ error rate, close code별 disconnect, 연결 지속 시간을 확인합니다. A
 label은 `service_name`, `ws_route`, `ws_endpoint`, `ws_message_type`, `ws_close_code`처럼 route template과
 낮은 cardinality 값만 사용합니다.
 
-객체별 실행 시간은 trace span으로 확인합니다. FastAPI 요청 span 아래에 service/repository span을
-수동으로 붙이려면 `app/shared/core/observability.py`의 `@traced_method`를 사용합니다.
-service/repository/client 계층 child span을 Tempo에 저장합니다. WebSocket endpoint는
+객체별 실행 시간은 trace span으로 확인합니다. HTTP API 요청은 FastAPI 자동 instrumentation이 아니라
+`app/shared/core/observability.py`의 `HttpServerTracingMiddleware`가 요청마다 독립 root span으로
+기록합니다. k6 keep-alive 연결처럼 같은 TCP connection에 여러 HTTP 요청이 이어져도 signup, login,
+room join 같은 API 요청은 서로 다른 trace로 분리됩니다. FastAPI 요청 span 아래에 service/repository
+span을 수동으로 붙이려면 `@traced_method`를 사용합니다. service/repository/client 계층 child span을
+Tempo에 저장합니다. WebSocket endpoint는
 `WebSocket.<endpoint>.connect`, `WebSocket.<endpoint>.message`, `WebSocket.<endpoint>.disconnect`,
-`WebSocket.<endpoint>.grace_leave` 같은 수동 span으로 Tempo에 기록합니다. Grafana trace dashboard는
+`WebSocket.<endpoint>.grace_leave` 같은 수동 span으로 Tempo에 기록합니다. Tempo trace 경계는 긴 게임
+흐름 전체가 아니라 HTTP API 요청 1개 또는 WebSocket inbound message/lifecycle event 1개입니다.
+HTTP request span과 WebSocket connect, message, disconnect, grace leave span은 독립 root trace로 시작합니다.
+WebSocket message trace 아래에는 `WebSocket.<endpoint>.receive`, `handle`, `broadcast`, `send` child span을
+남깁니다. `receive_text()` 대기 시간은 유저 idle time을 처리 latency처럼 보이게 만들 수 있어 root span에
+포함하지 않고, 메시지를 받은 뒤 parse/metric 기록 이후 처리와 송신 흐름만 trace합니다. Grafana trace dashboard는
 `docker/grafana/dashboards/fastapi-traces.json`에서 provision 됩니다. Dashboard 이름은
 `Haejillyeok FastAPI Traces`이며, request trace와 service/repository layer span search panel을
-포함합니다.
+포함합니다. TraceQL에서 service/repository span은 `span.app.layer="service"`,
+`span.app.layer="repository"`처럼 span attribute scope를 명시해 조회합니다.
 
 ### Migration
 

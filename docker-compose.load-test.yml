@@ -1,0 +1,84 @@
+services:
+  postgres:
+    cpus: "1.0"
+    mem_limit: 2g
+
+  prometheus:
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-lifecycle"
+      - "--web.enable-remote-write-receiver"
+
+  be-loadtest:
+    image: haejillyeok-backend:loadtest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: haejillyeok-be-loadtest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+    environment:
+      APP_MODULE: be
+      BE_ENV: ${BE_ENV:-local}
+      APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Seoul}
+      HOST: 0.0.0.0
+      PORT: "8000"
+      WORKERS: ${BE_LOADTEST_WORKERS:-1}
+      BE_DB_HOST: postgres
+      BE_DB_PORT: "5432"
+      BE_DB_USER: ${BE_DB_USER:-haejillyeok}
+      BE_DB_PASSWORD: ${BE_DB_PASSWORD:-haejillyeok}
+      BE_DB_NAME: ${BE_DB_NAME:-haejillyeok}
+      AGENT_URL: ${AGENT_URL}
+      K3S_AGENT_KEY: ${K3S_AGENT_KEY}
+      OTEL_ENABLED: ${OTEL_ENABLED:-true}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_METRIC_EXPORT_INTERVAL: ${OTEL_METRIC_EXPORT_INTERVAL:-5000}
+      LOG_FILE_ENABLED: ${LOG_FILE_ENABLED:-true}
+      LOG_DIR: /app/logs
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./logs:/app/logs
+    cpus: "2.0"
+    mem_limit: 4g
+
+  k6-coordinator:
+    image: haejillyeok-backend:loadtest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: haejillyeok-k6-coordinator
+    restart: unless-stopped
+    command: python scripts/k6_coordinator.py
+    environment:
+      K6_COORDINATOR_HOST: 0.0.0.0
+      K6_COORDINATOR_PORT: "8787"
+    ports:
+      - "8787:8787"
+
+  k6-runner:
+    image: ${K6_IMAGE:-grafana/k6:0.49.0}
+    profiles:
+      - load-test-runner
+    depends_on:
+      be-loadtest:
+        condition: service_started
+      k6-coordinator:
+        condition: service_started
+      prometheus:
+        condition: service_started
+    working_dir: /loadtest
+    environment:
+      BASE_URL: http://be-loadtest:8000
+      BASE_WS_URL: ws://be-loadtest:8000
+      K6_COORDINATOR_URL: http://k6-coordinator:8787
+      K6_PROMETHEUS_RW_SERVER_URL: http://prometheus:9090/api/v1/write
+      K6_PROMETHEUS_RW_TREND_STATS: p(95),p(99),min,max,avg
+    volumes:
+      - ./:/loadtest:ro

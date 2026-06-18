@@ -3,7 +3,7 @@ from fastapi import WebSocket
 from app.be.api.endpoints.lobby_ws.constants import LOBBY_WS_ENDPOINT, LOBBY_WS_ROUTE
 from app.be.services.game import GameService
 from app.be.services.lobby import LobbyDisconnect, lobby_connection_manager
-from app.shared.core.observability import get_websocket_metrics, start_span
+from app.shared.core.observability import get_websocket_metrics, start_root_span
 from app.shared.core.timezone import kst_now, to_kst_isoformat
 
 
@@ -15,7 +15,7 @@ def schedule_room_leave_after_grace(
     """grace timeout 이후에도 복귀하지 않은 유저를 DB에서 방 퇴장 처리하도록 예약합니다."""
 
     async def leave_after_grace(disconnect: LobbyDisconnect) -> None:
-        with start_span(
+        with start_root_span(
             "WebSocket.lobby.grace_leave",
             attributes={
                 "ws.route": LOBBY_WS_ROUTE,

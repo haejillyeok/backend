@@ -13,7 +13,7 @@ from app.be.api.endpoints.match_ws.connection_metrics import (
 )
 from app.be.api.endpoints.match_ws.handshake import MatchHandshakeResult
 from app.be.services.match import match_connection_manager
-from app.shared.core.observability import start_span
+from app.shared.core.observability import start_root_span
 
 
 async def accept_match_connection(
@@ -54,7 +54,7 @@ def disconnect_match_connection(
     span_attributes: Mapping[str, str],
 ) -> None:
     """match WebSocket 연결을 manager에서 제거하고 종료 metric/audit을 기록합니다."""
-    with start_span(
+    with start_root_span(
         "WebSocket.match.disconnect",
         attributes={**span_attributes, "ws.close_code": close_code},
     ):

@@ -18,7 +18,7 @@ from app.be.services.match import (
 from app.be.services.match_ai import MatchAiTurnService
 from app.be.services.match_progress import MatchProgressService
 from app.be.services.match_vote import MatchVoteService
-from app.shared.core.observability import start_span
+from app.shared.core.observability import start_root_span, start_span
 from app.shared.core.timezone import kst_now
 
 
@@ -42,20 +42,23 @@ async def process_match_loop_message(
     loop 본체가 반복/timeout/close 제어에 집중하게 합니다.
     """
     message_type = message["type"]
-    record_match_inbound_message(metrics, message_type=message_type)
-    with start_span(
+    message_span_attributes = {**span_attributes, "ws.message.type": message_type}
+    with start_root_span(
         "WebSocket.match.message",
-        attributes={**span_attributes, "ws.message.type": message_type},
+        attributes=message_span_attributes,
     ):
-        broadcast_messages = await handle_match_message(
-            manager=match_connection_manager,
-            websocket=websocket,
-            message=message,
-            progress_service=match_progress_service,
-            vote_service=match_vote_service,
-            ai_turn_service=match_ai_turn_service,
-            now=kst_now(),
-        )
+        with start_span("WebSocket.match.receive", attributes=message_span_attributes):
+            record_match_inbound_message(metrics, message_type=message_type)
+        with start_span("WebSocket.match.handle", attributes=message_span_attributes):
+            broadcast_messages = await handle_match_message(
+                manager=match_connection_manager,
+                websocket=websocket,
+                message=message,
+                progress_service=match_progress_service,
+                vote_service=match_vote_service,
+                ai_turn_service=match_ai_turn_service,
+                now=kst_now(),
+            )
     record_match_message_duration(
         metrics,
         message_type=message_type,

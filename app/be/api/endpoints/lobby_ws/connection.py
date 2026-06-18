@@ -24,7 +24,7 @@ from app.be.services.auth import AuthService
 from app.be.services.game import GameService
 from app.be.services.lobby import lobby_connection_manager
 from app.shared.core.exceptions import AppException
-from app.shared.core.observability import get_websocket_metrics, start_span
+from app.shared.core.observability import get_websocket_metrics, start_root_span
 
 
 router = APIRouter(prefix="/ws", tags=["websocket"])
@@ -52,7 +52,7 @@ async def lobby_websocket(
     }
     log_lobby_connect_started(service_name=service_name, peer=peer)
     try:
-        with start_span("WebSocket.lobby.connect", attributes=span_attributes):
+        with start_root_span("WebSocket.lobby.connect", attributes=span_attributes):
             current_user = await auth_service.authenticate_session(
                 websocket.cookies.get("session_token")
             )
@@ -90,7 +90,7 @@ async def lobby_websocket(
         peer=peer,
         span_attributes=span_attributes,
     )
-    with start_span(
+    with start_root_span(
         "WebSocket.lobby.disconnect",
         attributes={**span_attributes, "ws.close_code": close_code},
     ):

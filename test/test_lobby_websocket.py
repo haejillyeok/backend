@@ -310,12 +310,12 @@ def test_room_lobby_websocket_records_apm_metrics_and_spans(monkeypatch) -> None
 
     monkeypatch.setattr(
         lobby_ws_connection,
-        "start_span",
+        "start_root_span",
         lambda name, attributes=None: FakeSpan(span_names, name),
     )
     monkeypatch.setattr(
         lobby_ws_message_loop,
-        "start_span",
+        "start_root_span",
         lambda name, attributes=None: FakeSpan(span_names, name),
     )
     app = create_app()

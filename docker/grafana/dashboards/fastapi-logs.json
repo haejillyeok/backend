@@ -55,7 +55,7 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "fixedColor": "semi-dark-gray",
+            "fixedColor": "#6b7280",
             "mode": "fixed"
           },
           "custom": {
@@ -79,7 +79,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "dark-red",
+                  "fixedColor": "#991b1b",
                   "mode": "fixed"
                 }
               }
@@ -94,7 +94,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "red",
+                  "fixedColor": "#dc2626",
                   "mode": "fixed"
                 }
               }
@@ -109,7 +109,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "yellow",
+                  "fixedColor": "#f59e0b",
                   "mode": "fixed"
                 }
               }
@@ -124,7 +124,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "green",
+                  "fixedColor": "#16a34a",
                   "mode": "fixed"
                 }
               }

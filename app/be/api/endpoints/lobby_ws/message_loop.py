@@ -21,7 +21,7 @@ from app.be.services.lobby import (
     parse_lobby_message,
 )
 from app.shared.core.exceptions import AppException
-from app.shared.core.observability import get_websocket_metrics, start_span
+from app.shared.core.observability import get_websocket_metrics, start_root_span, start_span
 
 
 async def run_lobby_message_loop(
@@ -47,16 +47,19 @@ async def run_lobby_message_loop(
             message = parse_lobby_message(raw_message)
             message_type = message["type"]
             message_payload = message.get("payload")
-            record_lobby_inbound_message(metrics, message_type=message["type"])
-            with start_span(
+            message_span_attributes = {**span_attributes, "ws.message.type": message["type"]}
+            with start_root_span(
                 "WebSocket.lobby.message",
-                attributes={**span_attributes, "ws.message.type": message["type"]},
+                attributes=message_span_attributes,
             ):
-                await handle_lobby_message(
-                    manager=lobby_connection_manager,
-                    websocket=websocket,
-                    message=message,
-                )
+                with start_span("WebSocket.lobby.receive", attributes=message_span_attributes):
+                    record_lobby_inbound_message(metrics, message_type=message["type"])
+                with start_span("WebSocket.lobby.handle", attributes=message_span_attributes):
+                    await handle_lobby_message(
+                        manager=lobby_connection_manager,
+                        websocket=websocket,
+                        message=message,
+                    )
             record_lobby_message_duration(
                 metrics,
                 message_type=message["type"],

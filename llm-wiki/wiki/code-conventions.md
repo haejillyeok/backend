@@ -150,6 +150,11 @@ audience: ai
 - dependency override가 필요한 테스트는 `create_app()`으로 앱을 생성한다.
 - client wrapper는 timeout, status handling, mapping을 테스트한다.
 - WebSocket은 연결, 메시지 송수신, disconnect cleanup을 테스트한다.
+- k6 부하테스트 자산과 load-test helper script는 일반 pytest suite에 포함하지 않는다.
+  `load-test-preflight`, `load-test-stack-check`, `load-test-db-word-check`, 실제 k6 run,
+  `load-test-prometheus-check`로 실행 전후 상태를 검증한다.
+- Grafana dashboard JSON은 일반 pytest suite에 포함하지 않는다. Dashboard 변경은 Grafana provisioning,
+  datasource query, 실제 화면 또는 API 확인으로 검증한다.
 
 ## Git Commit Messages
 

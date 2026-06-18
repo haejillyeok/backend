@@ -1,15 +1,22 @@
+from pathlib import Path
+
 import pytest
 from fastapi import FastAPI, Request
 from starlette.responses import Response
 
+import app.shared.core.observability as observability
+from app.be.services.lobby import message_delivery as lobby_delivery
+from app.be.services.match.connection_manager import MatchConnectionManager
+from app.be.services.match import connection_manager as match_connection_manager_module
 from app.shared.core.observability import (
     HttpServerMetricsMiddleware,
+    HttpServerTracingMiddleware,
     ObservabilitySettings,
     WebSocketServerMetrics,
-    _safe_fastapi_route_details,
     add_observability,
     configure_observability_sdk,
     resolve_otlp_http_endpoint,
+    start_root_span,
 )
 
 
@@ -82,16 +89,236 @@ def test_otlp_endpoint_resolution_keeps_tenant_query_and_signal_path() -> None:
     )
 
 
-def test_safe_fastapi_route_details_falls_back_when_instrumentation_route_breaks() -> None:
-    def raise_included_router_error(scope):
-        raise AttributeError("'_IncludedRouter' object has no attribute 'path'")
+def test_start_root_span_starts_with_empty_context(monkeypatch) -> None:
+    contexts: list[object] = []
 
-    route = _safe_fastapi_route_details(
-        {"path": "/api/v1/auth/login"},
-        raise_included_router_error,
+    class FakeContextApi:
+        @staticmethod
+        def Context():
+            return {"root": True}
+
+    class FakeTracer:
+        def start_as_current_span(self, span_name, *, attributes=None, context=None):
+            contexts.append(context)
+            return FakeSpan()
+
+    class FakeTrace:
+        @staticmethod
+        def get_tracer(name):
+            return FakeTracer()
+
+    class FakeSpan:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback) -> bool:
+            return False
+
+    monkeypatch.setattr(observability, "trace", FakeTrace)
+    monkeypatch.setattr(observability, "otel_context", FakeContextApi)
+
+    with start_root_span("WebSocket.lobby.message", attributes={"ws.message.type": "ping"}):
+        pass
+
+    assert contexts == [{"root": True}]
+
+
+async def test_http_tracing_middleware_starts_each_request_as_root_trace(monkeypatch) -> None:
+    contexts: list[object] = []
+    span_names: list[str] = []
+    span_attributes: list[tuple[str, object]] = []
+
+    class FakeContextApi:
+        @staticmethod
+        def Context():
+            return {"root": True}
+
+    class FakeTracer:
+        def start_as_current_span(self, span_name, *, attributes=None, context=None, **kwargs):
+            contexts.append(context)
+            span_names.append(span_name)
+            return FakeSpan()
+
+    class FakeTrace:
+        @staticmethod
+        def get_tracer(name):
+            return FakeTracer()
+
+    class FakeSpan:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback) -> bool:
+            return False
+
+        def set_attribute(self, key, value):
+            span_attributes.append((key, value))
+
+        def update_name(self, name):
+            span_names.append(name)
+
+    monkeypatch.setattr(observability, "trace", FakeTrace)
+    monkeypatch.setattr(observability, "otel_context", FakeContextApi)
+
+    middleware = HttpServerTracingMiddleware(FastAPI(), "haejillyeok-test")
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/api/v1/auth/login",
+            "headers": [],
+            "server": ("testserver", 80),
+            "client": ("127.0.0.1", 50000),
+        }
     )
 
-    assert route == "/api/v1/auth/login"
+    async def return_ok(request: Request):
+        return Response(status_code=200)
+
+    response = await middleware.dispatch(request, return_ok)
+
+    assert response.status_code == 200
+    assert contexts == [{"root": True}]
+    assert span_names[0] == "POST /api/v1/auth/login"
+    assert ("http.response.status_code", 200) in span_attributes
+
+
+def test_http_route_template_restores_nested_router_prefix() -> None:
+    class FakeRoute:
+        path_format = "/game/rooms/{room_public_id}/join"
+
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/api/v1/game/rooms/019ed7fd-03e3-7e56-b529-6b4bd171f3c0/join",
+            "path_params": {"room_public_id": "019ed7fd-03e3-7e56-b529-6b4bd171f3c0"},
+            "route": FakeRoute(),
+            "headers": [],
+            "server": ("testserver", 80),
+            "client": ("127.0.0.1", 50000),
+        }
+    )
+
+    assert (
+        observability._http_route_template(request, fallback_to_path=True)
+        == "/api/v1/game/rooms/{room_public_id}/join"
+    )
+
+
+async def test_match_websocket_broadcast_records_broadcast_and_send_spans(monkeypatch) -> None:
+    span_names: list[str] = []
+    span_attributes: list[dict | None] = []
+
+    class FakeSpan:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback) -> bool:
+            return False
+
+    def fake_start_span(name, attributes=None):
+        span_names.append(name)
+        span_attributes.append(attributes)
+        return FakeSpan()
+
+    class FakeWebSocket:
+        def __init__(self) -> None:
+            self.sent_messages = []
+
+        async def send_json(self, message) -> None:
+            self.sent_messages.append(message)
+
+    monkeypatch.setattr(
+        match_connection_manager_module,
+        "start_span",
+        fake_start_span,
+        raising=False,
+    )
+
+    manager = MatchConnectionManager()
+    websocket = FakeWebSocket()
+    session_public_id = "019ed7fd-03e3-7e56-b529-6b4bd171f3c0"
+    manager._session_subscriptions[session_public_id] = {websocket}
+
+    await manager.broadcast_session(
+        session_public_id,
+        {"type": "match.turn.resolved", "payload": {}},
+    )
+
+    assert span_names == ["WebSocket.match.broadcast", "WebSocket.match.send"]
+    assert span_attributes[0]["ws.message.type"] == "match.turn.resolved"
+    assert span_attributes[0]["ws.subscriber.count"] == 1
+    assert span_attributes[1]["ws.message.type"] == "match.turn.resolved"
+
+
+async def test_lobby_websocket_send_records_send_span(monkeypatch) -> None:
+    span_names: list[str] = []
+    span_attributes: list[dict | None] = []
+
+    class FakeSpan:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback) -> bool:
+            return False
+
+    def fake_start_span(name, attributes=None):
+        span_names.append(name)
+        span_attributes.append(attributes)
+        return FakeSpan()
+
+    class FakeWebSocket:
+        def __init__(self) -> None:
+            self.sent_messages = []
+
+        async def send_json(self, message) -> None:
+            self.sent_messages.append(message)
+
+    monkeypatch.setattr(lobby_delivery, "start_span", fake_start_span, raising=False)
+
+    await lobby_delivery.send_lobby_message(
+        FakeWebSocket(),
+        {"type": "lobby.pong", "payload": {}},
+    )
+
+    assert span_names == ["WebSocket.lobby.send"]
+    assert span_attributes[0]["ws.message.type"] == "lobby.pong"
+    assert span_attributes[0]["ws.message.direction"] == "outbound"
+
+
+def test_websocket_endpoint_spans_are_root_trace_boundaries() -> None:
+    websocket_modules = [
+        "app/be/api/endpoints/lobby_ws/connection.py",
+        "app/be/api/endpoints/lobby_ws/message_loop.py",
+        "app/be/api/endpoints/lobby_ws/grace_leave.py",
+        "app/be/api/endpoints/match_ws/connection.py",
+        "app/be/api/endpoints/match_ws/connection_lifecycle.py",
+        "app/be/api/endpoints/match_ws/loop_message_processing.py",
+    ]
+
+    for module_path in websocket_modules:
+        source = Path(module_path).read_text(encoding="utf-8")
+        assert "start_root_span" in source
+        assert "import start_span" not in source
+
+
+def test_websocket_message_loops_include_receive_and_handle_child_spans() -> None:
+    expected_spans = {
+        "app/be/api/endpoints/lobby_ws/message_loop.py": [
+            "WebSocket.lobby.receive",
+            "WebSocket.lobby.handle",
+        ],
+        "app/be/api/endpoints/match_ws/loop_message_processing.py": [
+            "WebSocket.match.receive",
+            "WebSocket.match.handle",
+        ],
+    }
+
+    for module_path, span_names in expected_spans.items():
+        source = Path(module_path).read_text(encoding="utf-8")
+        for span_name in span_names:
+            assert span_name in source
 
 
 async def test_http_metrics_middleware_records_request_error_metrics() -> None:

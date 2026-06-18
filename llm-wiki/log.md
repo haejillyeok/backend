@@ -4,6 +4,37 @@
 코드 변경 상세는 Git history, PR, issue에서 확인하고, 이 파일에는 위키 페이지의 지식, 계약, 정책,
 컨벤션이 어떻게 바뀌었는지만 남깁니다.
 
+## [2026-06-18] maintenance | Exclude Grafana dashboards from pytest suite
+
+- `code-conventions.md`에 Grafana dashboard JSON은 일반 pytest suite에 포함하지 않는다는 기준을 추가했다.
+- Dashboard 변경은 Grafana provisioning, datasource query, 실제 화면 또는 API 확인으로 검증한다는 기준을 정리했다.
+
+## [2026-06-18] maintenance | Exclude k6 assets from pytest suite
+
+- `code-conventions.md`에 k6 부하테스트 자산과 load-test helper script는 일반 pytest suite에 포함하지 않는다는 기준을 추가했다.
+- k6 검증은 preflight, stack check, DB word check, 실제 k6 run, Prometheus metric check로 수행한다는 기준을 정리했다.
+
+## [2026-06-18] maintenance | Clarify WebSocket message trace child spans
+
+- `observability-stack.md`에 WebSocket message root trace 아래 `receive`, `handle`, `broadcast`, `send` child span을 남긴다는 기준을 추가했다.
+- WebSocket `receive_text()` 대기 시간은 유저 idle time을 처리 latency로 오해하게 만들 수 있으므로 root span에 포함하지 않는다는 기준을 명시했다.
+
+## [2026-06-18] maintenance | Use HTTP request root trace middleware
+
+- `observability-stack.md`에 HTTP trace는 FastAPI 자동 instrumentation이 아니라 수동 middleware가 요청마다 빈 OpenTelemetry context로 root span을 새로 시작한다는 기준을 추가했다.
+- k6 keep-alive 연결처럼 같은 TCP connection에 여러 HTTP 요청이 이어져도 API 요청 1개가 Tempo trace 1개가 되어야 한다는 운영 기준을 명시했다.
+
+## [2026-06-18] maintenance | Fix Tempo dashboard TraceQL layer filter
+
+- `observability-stack.md`의 Grafana trace dashboard 설명에서 service/repository layer span 검색은 `app.layer=...`가 아니라 `span.app.layer=...` TraceQL을 사용한다는 기준으로 정정했다.
+- dotted span attribute를 TraceQL에서 조회할 때 span attribute scope를 명시해야 한다는 dashboard 운영 기준을 추가했다.
+
+## [2026-06-17] maintenance | Clarify Tempo trace boundaries
+
+- `observability-stack.md`에 Tempo trace 경계는 긴 게임 처리 흐름이 아니라 HTTP API 요청 1개 또는 WebSocket inbound message/lifecycle event 1개라는 기준을 추가했다.
+- WebSocket connect, message, disconnect, grace leave span은 현재 active context를 이어받지 않는 root trace로 시작한다는 기준을 명시했다.
+- service/repository/client span은 HTTP 요청 trace 또는 WebSocket message root trace 아래 child span으로 붙을 수 있다는 기준을 정리했다.
+
 ## [2026-06-16] maintenance | Move transaction ownership into services
 
 - `code-conventions.md`에 HTTP/WebSocket controller는 DB session, repository 생성, transaction rollback/commit을 직접 다루지 않는다는 레이어 기준을 추가했다.

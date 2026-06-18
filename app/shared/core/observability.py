@@ -10,21 +10,22 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.responses import Response
 
 try:
+    from opentelemetry import context as otel_context
     from opentelemetry import metrics, trace
     from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
     from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
     from opentelemetry.sdk.metrics import MeterProvider
     from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
     from opentelemetry.sdk.resources import DEPLOYMENT_ENVIRONMENT, SERVICE_NAME, Resource
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
+    from opentelemetry.trace import SpanKind
 except ImportError:
+    otel_context = None
     metrics = None
     trace = None
     OTLPMetricExporter = None
     OTLPSpanExporter = None
-    FastAPIInstrumentor = None
     MeterProvider = None
     PeriodicExportingMetricReader = None
     DEPLOYMENT_ENVIRONMENT = "deployment.environment"
@@ -32,11 +33,11 @@ except ImportError:
     Resource = None
     TracerProvider = None
     BatchSpanProcessor = None
+    SpanKind = None
 
 
 logger = logging.getLogger(__name__)
 _SDK_CONFIGURED = False
-_FASTAPI_ROUTE_DETAILS_FALLBACK_WARNED = False
 P = ParamSpec("P")
 R = TypeVar("R")
 HTTP_DURATION_BUCKET_SECONDS = (
@@ -138,6 +139,44 @@ class HttpServerMetricsMiddleware(BaseHTTPMiddleware):
             self.error_counter.add(1, attributes=attributes)
         self.duration_histogram.record(duration_seconds, attributes=attributes)
         return response
+
+
+class HttpServerTracingMiddleware(BaseHTTPMiddleware):
+    """HTTP 요청마다 독립 root trace를 생성하고 하위 service/repository span을 묶습니다."""
+
+    def __init__(self, app: FastAPI, service_name: str) -> None:
+        super().__init__(app)
+        self.service_name = service_name
+
+    async def dispatch(
+        self,
+        request: Request,
+        call_next: RequestResponseEndpoint,
+    ) -> Response:
+        """하나의 HTTP 요청을 하나의 root span으로 감싸고 응답 상태를 기록합니다."""
+        span_name = _http_span_name(request)
+        attributes = _http_trace_attributes(request, self.service_name)
+        span_kind = SpanKind.SERVER if SpanKind is not None else None
+        with start_root_span(span_name, attributes=attributes, kind=span_kind) as span:
+            try:
+                response = await call_next(request)
+            except Exception:
+                _set_span_attribute(span, "http.response.status_code", 500)
+                _set_span_attribute(
+                    span,
+                    "http.route",
+                    _http_route_template(request, fallback_to_path=True),
+                )
+                _update_span_name(span, _http_span_name(request))
+                raise
+            _set_span_attribute(span, "http.response.status_code", response.status_code)
+            _set_span_attribute(
+                span,
+                "http.route",
+                _http_route_template(request, fallback_to_path=True),
+            )
+            _update_span_name(span, _http_span_name(request))
+            return response
 
 
 class WebSocketServerMetrics:
@@ -314,12 +353,7 @@ def add_observability(
     configure_observability_sdk(observability_settings, service_name, environment)
     app.state.websocket_metrics = WebSocketServerMetrics(service_name)
     app.add_middleware(HttpServerMetricsMiddleware, service_name=service_name)
-
-    if FastAPIInstrumentor is None:
-        logger.warning("OpenTelemetry FastAPI instrumentation package is not installed.")
-        return
-    _install_fastapi_route_details_fallback()
-    FastAPIInstrumentor().instrument_app(app)
+    app.add_middleware(HttpServerTracingMiddleware, service_name=service_name)
 
 
 def traced_method(
@@ -358,42 +392,20 @@ def start_span(span_name: str, attributes: dict[str, Any] | None = None):
     return trace.get_tracer(__name__).start_as_current_span(span_name, attributes=attributes)
 
 
-def _install_fastapi_route_details_fallback() -> None:
-    """OTel FastAPI route 조회 버그가 실제 요청을 500으로 만들지 않게 보호합니다."""
-    try:
-        import opentelemetry.instrumentation.fastapi as fastapi_instrumentation
-    except ImportError:
-        return
-
-    original_get_route_details = getattr(fastapi_instrumentation, "_get_route_details", None)
-    if original_get_route_details is None:
-        return
-    if getattr(original_get_route_details, "_haejillyeok_safe_fallback", False):
-        return
-
-    def safe_get_route_details(scope: dict[str, Any]):
-        return _safe_fastapi_route_details(scope, original_get_route_details)
-
-    safe_get_route_details._haejillyeok_safe_fallback = True
-    fastapi_instrumentation._get_route_details = safe_get_route_details
-
-
-def _safe_fastapi_route_details(
-    scope: dict[str, Any],
-    get_route_details: Callable[[dict[str, Any]], str | None],
-) -> str | None:
-    """OTel route matcher가 router 중간 객체에서 실패하면 원 요청 path를 span route로 사용합니다."""
-    global _FASTAPI_ROUTE_DETAILS_FALLBACK_WARNED
-    try:
-        return get_route_details(scope)
-    except AttributeError as exc:
-        if not _FASTAPI_ROUTE_DETAILS_FALLBACK_WARNED:
-            logger.warning(
-                "OpenTelemetry FastAPI route lookup failed; falling back to request path: %s",
-                exc,
-            )
-            _FASTAPI_ROUTE_DETAILS_FALLBACK_WARNED = True
-        return scope.get("path")
+def start_root_span(
+    span_name: str,
+    attributes: dict[str, Any] | None = None,
+    **kwargs: Any,
+):
+    """현재 active trace를 이어받지 않고 독립적인 root span을 생성합니다."""
+    if trace is None or otel_context is None:
+        return _NoopSpan()
+    return trace.get_tracer(__name__).start_as_current_span(
+        span_name,
+        attributes=attributes,
+        context=otel_context.Context(),
+        **{key: value for key, value in kwargs.items() if value is not None},
+    )
 
 
 def configure_observability_sdk(
@@ -486,12 +498,70 @@ def _http_metric_attributes(
     }
 
 
-def _http_route_template(request: Request) -> str:
+def _http_trace_attributes(request: Request, service_name: str) -> dict[str, str | int]:
+    attributes: dict[str, str | int] = {
+        "service.name": service_name,
+        "http.request.method": request.method,
+        "http.route": _http_route_template(request, fallback_to_path=True),
+        "url.path": request.url.path,
+        "server.address": request.url.hostname or "",
+    }
+    if request.url.port is not None:
+        attributes["server.port"] = request.url.port
+    if request.client is not None:
+        attributes["client.address"] = request.client.host
+        attributes["client.port"] = request.client.port
+    return attributes
+
+
+def _http_span_name(request: Request) -> str:
+    return f"{request.method} {_http_route_template(request, fallback_to_path=True)}"
+
+
+def _http_route_template(request: Request, *, fallback_to_path: bool = False) -> str:
     route = request.scope.get("route")
-    route_path = getattr(route, "path", None)
+    route_path = getattr(route, "path_format", None) or getattr(route, "path", None)
     if route_path:
-        return str(route_path)
+        return _with_request_path_prefix(
+            str(route_path),
+            request.scope.get("path") or "",
+            request.scope.get("path_params") or {},
+        )
+    if fallback_to_path:
+        return request.scope.get("path") or "unmatched"
     return "unmatched"
+
+
+def _with_request_path_prefix(
+    route_template: str,
+    request_path: str,
+    path_params: dict[str, Any],
+) -> str:
+    """중첩 router에서 빠진 prefix를 실제 path에서 복원하되 route parameter template은 유지합니다."""
+    if not request_path:
+        return route_template
+
+    concrete_route_path = route_template
+    for key, value in path_params.items():
+        concrete_route_path = concrete_route_path.replace(f"{{{key}}}", str(value))
+
+    if concrete_route_path and request_path.endswith(concrete_route_path):
+        prefix = request_path[: -len(concrete_route_path)]
+        return f"{prefix}{route_template}"
+
+    return route_template
+
+
+def _set_span_attribute(span: Any, key: str, value: Any) -> None:
+    setter = getattr(span, "set_attribute", None)
+    if setter is not None:
+        setter(key, value)
+
+
+def _update_span_name(span: Any, name: str) -> None:
+    update_name = getattr(span, "update_name", None)
+    if update_name is not None:
+        update_name(name)
 
 
 def _otel_sdk_available() -> bool:

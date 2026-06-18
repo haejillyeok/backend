@@ -33,7 +33,7 @@ from app.be.services.match_ai import MatchAiTurnService
 from app.be.services.match_progress import MatchProgressService
 from app.be.services.match_vote import MatchVoteService
 from app.shared.core.exceptions import AppException
-from app.shared.core.observability import get_websocket_metrics, start_span
+from app.shared.core.observability import get_websocket_metrics, start_root_span
 
 
 router = APIRouter(prefix="/ws", tags=["websocket"])
@@ -71,7 +71,7 @@ async def match_websocket(
     }
     log_match_connect_started(service_name=service_name, peer=peer)
     try:
-        with start_span("WebSocket.match.connect", attributes=span_attributes):
+        with start_root_span("WebSocket.match.connect", attributes=span_attributes):
             handshake = await authorize_match_handshake(
                 auth_service=auth_service,
                 game_service=game_service,

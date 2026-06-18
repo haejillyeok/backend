@@ -13,6 +13,7 @@ from app.be.services.match.connection_messages import (
 from app.be.services.match.connection_records import MatchConnection
 from app.be.services.match.snapshots import MatchSnapshotResult
 from app.shared.core.exceptions import AppException
+from app.shared.core.observability import start_span
 
 
 MatchMessage = dict[str, Any]
@@ -64,7 +65,11 @@ class MatchConnectionManager:
 
     async def send(self, websocket: WebSocket, message: MatchMessage) -> None:
         """특정 match WebSocket 연결로 JSON envelope 메시지를 전송합니다."""
-        await websocket.send_json(jsonable_encoder(message))
+        with start_span(
+            "WebSocket.match.send",
+            attributes=_match_message_span_attributes(message),
+        ):
+            await websocket.send_json(jsonable_encoder(message))
 
     def get_connection(self, websocket: WebSocket) -> MatchConnection | None:
         """WebSocket에 고정된 match 참가자 identity를 반환합니다."""
@@ -90,11 +95,29 @@ class MatchConnectionManager:
 
     async def broadcast_session(self, game_session_public_id: UUID, message: MatchMessage) -> None:
         """특정 game session에 연결된 모든 match WebSocket에 event를 전송합니다."""
-        for websocket in list(self._session_subscriptions.get(game_session_public_id, set())):
-            try:
-                await self.send(websocket, message)
-            except (RuntimeError, WebSocketDisconnect):
-                self.disconnect(websocket)
+        subscribers = list(self._session_subscriptions.get(game_session_public_id, set()))
+        with start_span(
+            "WebSocket.match.broadcast",
+            attributes={
+                **_match_message_span_attributes(message),
+                "ws.subscriber.count": len(subscribers),
+            },
+        ):
+            for websocket in subscribers:
+                try:
+                    await self.send(websocket, message)
+                except (RuntimeError, WebSocketDisconnect):
+                    self.disconnect(websocket)
 
 
 match_connection_manager = MatchConnectionManager()
+
+
+def _match_message_span_attributes(message: MatchMessage) -> dict[str, str]:
+    """WebSocket match 송신 span에 낮은 cardinality 속성만 붙입니다."""
+    message_type = message.get("type")
+    return {
+        "ws.endpoint": "match",
+        "ws.message.direction": "outbound",
+        "ws.message.type": message_type if isinstance(message_type, str) else "unknown",
+    }
