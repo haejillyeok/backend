@@ -2,18 +2,24 @@ from datetime import datetime
 from typing import Protocol
 from uuid import UUID
 
-from app.be.services.match_ai.context import AiTurnContext
+from app.be.models.game import GameSession, SessionParticipant, SessionPhase, WordTurn
 from app.be.services.match_progress import MatchBroadcastEvent
 
 
 class MatchAiTurnRepositoryProtocol(Protocol):
-    async def get_ai_turn_context(
+    async def get_game_session(self, game_session_public_id: UUID) -> GameSession | None:
+        """AI 턴 조회 기준 game session row를 조회합니다."""
+
+    async def get_active_turn_actor(
         self,
         *,
-        game_session_public_id: UUID,
+        session_id: UUID,
         phase_id: UUID,
-    ) -> AiTurnContext | None:
-        """현재 phase가 AI 턴이면 Agent 요청에 필요한 context를 반환합니다."""
+    ) -> tuple[SessionPhase, WordTurn, SessionParticipant] | None:
+        """현재 active turn phase와 actor row를 조회합니다."""
+
+    async def list_used_words(self, *, session_id: UUID, round_number: int) -> list[str]:
+        """현재 라운드에서 이미 사용한 정규화 단어 목록을 조회합니다."""
 
 
 class MatchAiTurnProgressServiceProtocol(Protocol):

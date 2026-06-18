@@ -1755,6 +1755,70 @@ async def test_match_progress_repository_rejects_word_missing_from_dictionary() 
     assert game_session.current_phase_id == phase_id
 
 
+async def test_match_progress_repository_returns_none_when_session_is_missing() -> None:
+    db_session = FakeDbSession([FakeResult(scalar=None)])
+    repository = MatchProgressRepository(db_session)
+
+    game_session = await repository.get_game_session(uuid4())
+
+    assert game_session is None
+
+
+async def test_match_progress_service_rejects_missing_session() -> None:
+    db_session = FakeDbSession([FakeResult(scalar=None)])
+    repository = MatchProgressRepository(db_session)
+    service = MatchProgressService(repository)
+
+    with pytest.raises(AppException) as exc_info:
+        await service.submit_word(
+            game_session_public_id=uuid4(),
+            phase_id=uuid4(),
+            participant_id=uuid4(),
+            word="사과",
+            now=datetime(2026, 6, 13, tzinfo=KST),
+        )
+
+    assert exc_info.value.details == {"reason": "game_session_not_found"}
+    assert db_session.added == []
+
+
+async def test_match_progress_service_rejects_missing_turn_actor() -> None:
+    session_id = uuid4()
+    game_session = build_session(session_id, uuid4())
+    phase = SessionPhase(
+        id=uuid4(),
+        session_id=session_id,
+        phase_type="turn",
+        phase_number=1,
+        actor_participant_id=uuid4(),
+        condition_payload={"required_start_char": None},
+        time_limit_seconds=10,
+        started_at=datetime(2026, 6, 13, tzinfo=KST),
+        deadline_at=datetime(2026, 6, 13, 0, 0, 10, tzinfo=KST),
+    )
+    db_session = FakeDbSession(
+        [
+            FakeResult(scalar=game_session),
+            FakeResult(scalar=phase),
+            FakeResult(row=None),
+        ]
+    )
+    repository = MatchProgressRepository(db_session)
+    service = MatchProgressService(repository)
+
+    with pytest.raises(AppException) as exc_info:
+        await service.submit_word(
+            game_session_public_id=game_session.public_id,
+            phase_id=phase.id,
+            participant_id=phase.actor_participant_id,
+            word="사과",
+            now=datetime(2026, 6, 13, tzinfo=KST),
+        )
+
+    assert exc_info.value.details == {"reason": "turn_not_found"}
+    assert db_session.added == []
+
+
 async def test_match_progress_repository_records_word_rejection_without_advancing_turn() -> None:
     session_id = uuid4()
     game_session_public_id = uuid4()

@@ -5,6 +5,8 @@ from app.be.services.match_progress import MatchBroadcastEvent
 from app.be.services.match_vote.constants import VOTE_ACCEPTED_MESSAGE_TYPE
 from app.be.services.match_vote.records import VoteAcceptedRecord, VoteSubmissionRecord
 from app.be.services.match_vote.result_events import result_event_from_vote_record
+from app.shared.core.error_codes import ErrorCode
+from app.shared.core.exceptions import AppException
 
 
 class MatchVoteSubmissionUseCaseMixin:
@@ -35,8 +37,18 @@ class MatchVoteSubmissionUseCaseMixin:
     ) -> list[MatchBroadcastEvent]:
         """투표 제출 transaction 안에서 vote, event, 결과 확정을 처리합니다."""
         game_session = await self.repository.get_game_session_for_update(game_session_public_id)
+        if game_session is None:
+            raise AppException(
+                code=ErrorCode.GAME_SESSION_ENTRY_FORBIDDEN,
+                details={"reason": "game_session_not_found"},
+            )
         self.vote_policy.ensure_voting_session(game_session)
-        voting_phase = await self.repository.get_voting_phase(game_session=game_session)
+        voting_phase = None
+        if game_session.current_phase_id is not None:
+            voting_phase = await self.repository.get_voting_phase(
+                session_id=game_session.id,
+                phase_id=game_session.current_phase_id,
+            )
         self.vote_policy.ensure_voting_deadline_not_exceeded(
             voting_phase=voting_phase,
             now=now,
@@ -45,10 +57,20 @@ class MatchVoteSubmissionUseCaseMixin:
             session_id=game_session.id,
             participant_id=voter_participant_id,
         )
+        if voter is None:
+            raise AppException(
+                code=ErrorCode.GAME_SESSION_ENTRY_FORBIDDEN,
+                details={"reason": "participant_not_found"},
+            )
         target = await self.repository.get_participant_by_seat_number(
             session_id=game_session.id,
             seat_number=target_seat_number,
         )
+        if target is None:
+            raise AppException(
+                code=ErrorCode.GAME_SESSION_ENTRY_FORBIDDEN,
+                details={"reason": "target_participant_not_found"},
+            )
         self.vote_policy.ensure_user_voter(voter)
 
         participants = await self.repository.list_participants(game_session.id)

@@ -5,6 +5,7 @@ from app.be.services.match_ai.protocols import (
     MatchAiTurnProgressServiceProtocol,
     MatchAiTurnRepositoryProtocol,
 )
+from app.be.services.match_ai.context import AiTurnContext
 from app.be.services.match_ai.rejection_helpers import (
     ai_answer_rejection_details,
     ai_answer_rejection_reason,
@@ -12,6 +13,7 @@ from app.be.services.match_ai.rejection_helpers import (
     is_ai_turn_deadline_exception,
     is_stale_ai_turn_exception,
 )
+from app.be.schemas.game_enum import ParticipantType
 from app.be.services.match_progress import MatchBroadcastEvent
 from app.be.services.repository_scope import RepositoryContextFactory, RepositoryScopedService
 from app.shared.clients.agent import (
@@ -20,6 +22,7 @@ from app.shared.clients.agent import (
     AgentAnswerRequest,
     AgentClientError,
 )
+from app.shared.core.error_codes import ErrorCode
 from app.shared.core.exceptions import AppException
 
 
@@ -53,12 +56,36 @@ class MatchAiTurnService(RepositoryScopedService[MatchAiTurnRepositoryProtocol])
     ) -> MatchBroadcastEvent | None:
         """현재 phase가 AI 턴이면 Agent 답변을 받아 제출 또는 실패 event로 확정합니다."""
         async with self.repository_scope():
-            context = await self.repository.get_ai_turn_context(
-                game_session_public_id=game_session_public_id,
+            game_session = await self.repository.get_game_session(game_session_public_id)
+            if game_session is None:
+                raise AppException(
+                    code=ErrorCode.GAME_SESSION_ENTRY_FORBIDDEN,
+                    details={"reason": "game_session_not_found"},
+                )
+            turn_actor = await self.repository.get_active_turn_actor(
+                session_id=game_session.id,
                 phase_id=phase_id,
             )
-        if context is None:
-            return None
+            if turn_actor is None:
+                raise AppException(
+                    code=ErrorCode.VALIDATION_ERROR,
+                    details={"reason": "active_turn_not_found"},
+                )
+            phase, turn, participant = turn_actor
+            if participant.participant_type != ParticipantType.AI.value:
+                return None
+            used_words = await self.repository.list_used_words(
+                session_id=game_session.id,
+                round_number=turn.round_number,
+            )
+            context = AiTurnContext(
+                game_session_public_id=game_session.public_id,
+                phase_id=phase.id,
+                participant_id=participant.id,
+                game_type=game_session.game_type,
+                used_words=used_words,
+                required_start_char=turn.condition_payload.get("required_start_char"),
+            )
 
         try:
             result = await self.agent_answer_client.get_answer(

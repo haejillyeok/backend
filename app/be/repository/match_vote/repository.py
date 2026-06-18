@@ -23,8 +23,6 @@ from app.be.repository.match_vote.constants import (
 )
 from app.be.schemas.game_enum import GameSessionStatus, RoomStatus
 from app.be.services.match_vote.records import MatchResultParticipantPayload
-from app.shared.core.error_codes import ErrorCode
-from app.shared.core.exceptions import AppException
 from app.shared.core.identifiers import generate_uuid_v7
 
 
@@ -34,40 +32,31 @@ class MatchVoteRepository:
     def __init__(self, db_session: AsyncSession) -> None:
         self.db_session = db_session
 
-    async def get_game_session_for_update(self, public_id: UUID) -> GameSession:
+    async def get_game_session_for_update(self, public_id: UUID) -> GameSession | None:
         """투표 처리 기준 game session row를 잠그고 조회합니다."""
         result = await self.db_session.execute(
             select(GameSession).where(GameSession.public_id == public_id).with_for_update()
         )
-        game_session = result.scalar_one_or_none()
-        if game_session is None:
-            raise AppException(
-                code=ErrorCode.GAME_SESSION_ENTRY_FORBIDDEN,
-                details={"reason": "game_session_not_found"},
-            )
-        return game_session
+        return result.scalar_one_or_none()
 
-    async def get_room_for_update(self, room_id: UUID) -> Room:
+    async def get_room_for_update(self, room_id: UUID) -> Room | None:
         """결과 확정 후 room 상태를 바꾸기 위해 room row를 잠그고 조회합니다."""
         result = await self.db_session.execute(
             select(Room).where(Room.id == room_id).with_for_update()
         )
-        room = result.scalar_one_or_none()
-        if room is None:
-            raise AppException(
-                code=ErrorCode.GAME_ROOM_NOT_FOUND,
-                details={"reason": "room_not_found"},
-            )
-        return room
+        return result.scalar_one_or_none()
 
-    async def get_voting_phase(self, *, game_session: GameSession) -> SessionPhase | None:
+    async def get_voting_phase(
+        self,
+        *,
+        session_id: UUID,
+        phase_id: UUID,
+    ) -> SessionPhase | None:
         """현재 voting phase row를 조회합니다."""
-        if game_session.current_phase_id is None:
-            return None
         result = await self.db_session.execute(
             select(SessionPhase).where(
-                SessionPhase.id == game_session.current_phase_id,
-                SessionPhase.session_id == game_session.id,
+                SessionPhase.id == phase_id,
+                SessionPhase.session_id == session_id,
                 SessionPhase.phase_type == "voting",
             )
         )
@@ -78,7 +67,7 @@ class MatchVoteRepository:
         *,
         session_id: UUID,
         participant_id: UUID,
-    ) -> SessionParticipant:
+    ) -> SessionParticipant | None:
         """세션 안의 참가자를 참가자 id로 조회합니다."""
         result = await self.db_session.execute(
             select(SessionParticipant).where(
@@ -86,20 +75,14 @@ class MatchVoteRepository:
                 SessionParticipant.id == participant_id,
             )
         )
-        participant = result.scalar_one_or_none()
-        if participant is None:
-            raise AppException(
-                code=ErrorCode.GAME_SESSION_ENTRY_FORBIDDEN,
-                details={"reason": "participant_not_found"},
-            )
-        return participant
+        return result.scalar_one_or_none()
 
     async def get_participant_by_seat_number(
         self,
         *,
         session_id: UUID,
         seat_number: int,
-    ) -> SessionParticipant:
+    ) -> SessionParticipant | None:
         """세션 안의 참가자를 좌석 번호로 조회합니다."""
         result = await self.db_session.execute(
             select(SessionParticipant).where(
@@ -107,13 +90,7 @@ class MatchVoteRepository:
                 SessionParticipant.seat_number == seat_number,
             )
         )
-        participant = result.scalar_one_or_none()
-        if participant is None:
-            raise AppException(
-                code=ErrorCode.GAME_SESSION_ENTRY_FORBIDDEN,
-                details={"reason": "target_participant_not_found"},
-            )
-        return participant
+        return result.scalar_one_or_none()
 
     async def list_participants(self, session_id: UUID) -> list[SessionParticipant]:
         """세션 참가자 목록을 좌석 번호 순서로 조회합니다."""

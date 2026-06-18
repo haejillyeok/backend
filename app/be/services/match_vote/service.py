@@ -11,6 +11,8 @@ from app.be.services.match_vote.vote_submission_use_cases import (
 from app.be.services.match_vote.vote_timeout_use_cases import MatchVoteTimeoutUseCaseMixin
 from app.be.services.match_vote.vote_policy import MatchVotePolicy
 from app.be.services.repository_scope import RepositoryContextFactory, RepositoryScopedService
+from app.shared.core.error_codes import ErrorCode
+from app.shared.core.exceptions import AppException
 
 
 class MatchVoteService(
@@ -88,6 +90,11 @@ class MatchVoteService(
 
         await self.repository.mark_game_session_result(game_session=game_session, now=now)
         room = await self.repository.get_room_for_update(game_session.room_id)
+        if room is None:
+            raise AppException(
+                code=ErrorCode.GAME_ROOM_NOT_FOUND,
+                details={"reason": "room_not_found"},
+            )
         await self.repository.mark_room_waiting(room=room, now=now)
         await self.repository.create_result_published_event(
             session_id=game_session.id,

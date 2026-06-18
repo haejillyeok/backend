@@ -102,8 +102,11 @@ audience: ai
 - DB 접근을 담당한다.
 - SQLAlchemy session은 dependency에서 받아온다.
 - API schema를 직접 반환하지 않고 persistence model 또는 domain data를 반환한다.
-- 조회 결과가 없거나 조건에 맞지 않는 경우에도 `AppException`/`ErrorCode`로 변환하지 않고 `None`이나
-  빈 목록 같은 DB 조회 결과를 그대로 반환한다. 예외 변환은 service/usecase 책임이다.
+- Repository 메서드는 쿼리 실행과 DB row/list 반환에 집중한다. 조회 결과가 없거나 조건에 맞지 않는
+  경우에도 `AppException`/`ErrorCode`로 변환하지 않고 `None`이나 빈 목록 같은 DB 조회 결과를 그대로
+  반환한다.
+- 여러 조회 결과를 조합해 application DTO를 만들거나, row 값의 의미를 판단해 흐름을 나누는 작업은
+  service/usecase 책임이다.
 - 비즈니스 플로우, 게임 정책 판단, WebSocket broadcast payload 조립을 담당하지 않는다.
 
 ### Schemas

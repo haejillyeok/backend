@@ -17,13 +17,18 @@ from app.be.services.match_vote.records import MatchResultParticipantPayload
 
 
 class MatchVoteRepositoryProtocol(Protocol):
-    async def get_game_session_for_update(self, public_id: UUID) -> GameSession:
+    async def get_game_session_for_update(self, public_id: UUID) -> GameSession | None:
         """투표 처리 기준 game session row를 잠그고 조회합니다."""
 
-    async def get_room_for_update(self, room_id: UUID) -> Room:
+    async def get_room_for_update(self, room_id: UUID) -> Room | None:
         """결과 확정 후 room 상태 변경 대상 row를 잠그고 조회합니다."""
 
-    async def get_voting_phase(self, *, game_session: GameSession) -> SessionPhase | None:
+    async def get_voting_phase(
+        self,
+        *,
+        session_id: UUID,
+        phase_id: UUID,
+    ) -> SessionPhase | None:
         """현재 voting phase row를 조회합니다."""
 
     async def get_participant(
@@ -31,7 +36,7 @@ class MatchVoteRepositoryProtocol(Protocol):
         *,
         session_id: UUID,
         participant_id: UUID,
-    ) -> SessionParticipant:
+    ) -> SessionParticipant | None:
         """세션 안의 참가자를 참가자 id로 조회합니다."""
 
     async def get_participant_by_seat_number(
@@ -39,7 +44,7 @@ class MatchVoteRepositoryProtocol(Protocol):
         *,
         session_id: UUID,
         seat_number: int,
-    ) -> SessionParticipant:
+    ) -> SessionParticipant | None:
         """세션 안의 참가자를 좌석 번호로 조회합니다."""
 
     async def list_participants(self, session_id: UUID) -> list[SessionParticipant]:

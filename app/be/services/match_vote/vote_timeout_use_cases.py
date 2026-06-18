@@ -5,6 +5,8 @@ from app.be.services.match_progress import MatchBroadcastEvent
 from app.be.services.match_vote.constants import VOTE_TIMEOUT_MESSAGE_TYPE
 from app.be.services.match_vote.records import VoteAcceptedRecord, VoteSubmissionRecord
 from app.be.services.match_vote.result_events import result_event_from_vote_record
+from app.shared.core.error_codes import ErrorCode
+from app.shared.core.exceptions import AppException
 
 
 class MatchVoteTimeoutUseCaseMixin:
@@ -29,6 +31,11 @@ class MatchVoteTimeoutUseCaseMixin:
     ) -> list[MatchBroadcastEvent]:
         """투표 timeout transaction 안에서 결과를 확정합니다."""
         game_session = await self.repository.get_game_session_for_update(game_session_public_id)
+        if game_session is None:
+            raise AppException(
+                code=ErrorCode.GAME_SESSION_ENTRY_FORBIDDEN,
+                details={"reason": "game_session_not_found"},
+            )
         if self.vote_policy.is_result_session(game_session):
             return []
         self.vote_policy.ensure_voting_session(game_session)

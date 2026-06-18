@@ -2,6 +2,8 @@ from datetime import datetime
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
+import pytest
+
 from app.be.models.game import GameSession, SessionParticipant, SessionPhase, UsedWord, WordTurn
 from app.be.repository.match_ai import MatchAiTurnRepository
 from app.be.services.match_ai import AiTurnContext, MatchAiTurnService
@@ -118,23 +120,85 @@ def ai_context(
     )
 
 
+class FakeAiTurnRepository:
+    def __init__(self, context: AiTurnContext | None) -> None:
+        self.context = context
+        self.session_id = uuid4()
+        self.game_session = None
+        self.phase = None
+        self.turn = None
+        self.participant = None
+        self.calls = []
+        if context is not None:
+            self.game_session = GameSession(
+                id=self.session_id,
+                public_id=context.game_session_public_id,
+                room_id=uuid4(),
+                game_type=context.game_type,
+                status="playing",
+                rule_config={"max_rounds": 8, "turn_time_seconds": 10},
+            )
+            self.phase = SessionPhase(
+                id=context.phase_id,
+                session_id=self.session_id,
+                phase_type="turn",
+                phase_number=1,
+                actor_participant_id=context.participant_id,
+                condition_payload={"required_start_char": context.required_start_char},
+            )
+            self.turn = WordTurn(
+                id=uuid4(),
+                phase_id=context.phase_id,
+                participant_id=context.participant_id,
+                round_number=1,
+                turn_number=1,
+                condition_payload={"required_start_char": context.required_start_char},
+            )
+            self.participant = SessionParticipant(
+                id=context.participant_id,
+                session_id=self.session_id,
+                user_id=None,
+                participant_type="ai",
+                display_name="2번 손님",
+                seat_number=2,
+                is_uninvited_guest=True,
+            )
+
+    async def get_game_session(self, game_session_public_id):
+        self.calls.append(("get_game_session", game_session_public_id))
+        if self.context is None:
+            return None
+        assert game_session_public_id == self.context.game_session_public_id
+        return self.game_session
+
+    async def get_active_turn_actor(self, *, session_id, phase_id):
+        self.calls.append(("get_active_turn_actor", session_id, phase_id))
+        assert self.context is not None
+        assert session_id == self.session_id
+        assert phase_id == self.context.phase_id
+        return self.phase, self.turn, self.participant
+
+    async def list_used_words(self, *, session_id, round_number):
+        self.calls.append(("list_used_words", session_id, round_number))
+        assert self.context is not None
+        assert session_id == self.session_id
+        assert round_number == self.turn.round_number
+        return self.context.used_words
+
+
 async def test_match_ai_turn_service_requests_agent_with_used_words_and_submits_answer() -> None:
     game_session_public_id = uuid4()
     phase_id = uuid4()
     participant_id = uuid4()
     now = datetime(2026, 6, 13, tzinfo=KST)
 
-    class FakeRepository:
-        async def get_ai_turn_context(self, **kwargs):
-            assert kwargs == {
-                "game_session_public_id": game_session_public_id,
-                "phase_id": phase_id,
-            }
-            return ai_context(
-                game_session_public_id=game_session_public_id,
-                phase_id=phase_id,
-                participant_id=participant_id,
-            )
+    repository = FakeAiTurnRepository(
+        ai_context(
+            game_session_public_id=game_session_public_id,
+            phase_id=phase_id,
+            participant_id=participant_id,
+        )
+    )
 
     agent_client = FakeAgentAnswerClient(
         result=AgentAnswerResult(
@@ -147,7 +211,7 @@ async def test_match_ai_turn_service_requests_agent_with_used_words_and_submits_
         )
     )
     progress_service = FakeProgressService()
-    service = MatchAiTurnService(FakeRepository(), agent_client, progress_service)
+    service = MatchAiTurnService(repository, agent_client, progress_service)
 
     event = await service.play_ai_turn(
         game_session_public_id=game_session_public_id,
@@ -162,6 +226,11 @@ async def test_match_ai_turn_service_requests_agent_with_used_words_and_submits_
     assert request.used_words == ["사과", "과자"]
     assert request.last_char == "자"
     assert request.condition.last_char == "자"
+    assert repository.calls == [
+        ("get_game_session", game_session_public_id),
+        ("get_active_turn_actor", repository.session_id, phase_id),
+        ("list_used_words", repository.session_id, 1),
+    ]
     assert progress_service.submitted_words == [
         {
             "game_session_public_id": game_session_public_id,
@@ -182,13 +251,13 @@ async def test_match_ai_turn_service_records_failure_when_agent_has_no_candidate
     participant_id = uuid4()
     now = datetime(2026, 6, 13, tzinfo=KST)
 
-    class FakeRepository:
-        async def get_ai_turn_context(self, **kwargs):
-            return ai_context(
-                game_session_public_id=game_session_public_id,
-                phase_id=phase_id,
-                participant_id=participant_id,
-            )
+    repository = FakeAiTurnRepository(
+        ai_context(
+            game_session_public_id=game_session_public_id,
+            phase_id=phase_id,
+            participant_id=participant_id,
+        )
+    )
 
     agent_client = FakeAgentAnswerClient(
         result=AgentAnswerResult(
@@ -201,7 +270,7 @@ async def test_match_ai_turn_service_records_failure_when_agent_has_no_candidate
         )
     )
     progress_service = FakeProgressService()
-    service = MatchAiTurnService(FakeRepository(), agent_client, progress_service)
+    service = MatchAiTurnService(repository, agent_client, progress_service)
 
     event = await service.play_ai_turn(
         game_session_public_id=game_session_public_id,
@@ -230,13 +299,13 @@ async def test_match_ai_turn_service_preserves_no_candidate_answer_word() -> Non
     participant_id = uuid4()
     now = datetime(2026, 6, 13, tzinfo=KST)
 
-    class FakeRepository:
-        async def get_ai_turn_context(self, **kwargs):
-            return ai_context(
-                game_session_public_id=game_session_public_id,
-                phase_id=phase_id,
-                participant_id=participant_id,
-            )
+    repository = FakeAiTurnRepository(
+        ai_context(
+            game_session_public_id=game_session_public_id,
+            phase_id=phase_id,
+            participant_id=participant_id,
+        )
+    )
 
     agent_client = FakeAgentAnswerClient(
         result=AgentAnswerResult(
@@ -249,7 +318,7 @@ async def test_match_ai_turn_service_preserves_no_candidate_answer_word() -> Non
         )
     )
     progress_service = FakeProgressService()
-    service = MatchAiTurnService(FakeRepository(), agent_client, progress_service)
+    service = MatchAiTurnService(repository, agent_client, progress_service)
 
     event = await service.play_ai_turn(
         game_session_public_id=game_session_public_id,
@@ -282,17 +351,17 @@ async def test_match_ai_turn_service_records_failure_when_agent_request_fails() 
     participant_id = uuid4()
     now = datetime(2026, 6, 13, tzinfo=KST)
 
-    class FakeRepository:
-        async def get_ai_turn_context(self, **kwargs):
-            return ai_context(
-                game_session_public_id=game_session_public_id,
-                phase_id=phase_id,
-                participant_id=participant_id,
-            )
+    repository = FakeAiTurnRepository(
+        ai_context(
+            game_session_public_id=game_session_public_id,
+            phase_id=phase_id,
+            participant_id=participant_id,
+        )
+    )
 
     progress_service = FakeProgressService()
     service = MatchAiTurnService(
-        FakeRepository(),
+        repository,
         FakeAgentAnswerClient(error=AgentClientError("agent answer request timed out")),
         progress_service,
     )
@@ -319,13 +388,13 @@ async def test_match_ai_turn_service_rejects_agent_answer_like_player_word() -> 
     participant_id = uuid4()
     now = datetime(2026, 6, 13, tzinfo=KST)
 
-    class FakeRepository:
-        async def get_ai_turn_context(self, **kwargs):
-            return ai_context(
-                game_session_public_id=game_session_public_id,
-                phase_id=phase_id,
-                participant_id=participant_id,
-            )
+    repository = FakeAiTurnRepository(
+        ai_context(
+            game_session_public_id=game_session_public_id,
+            phase_id=phase_id,
+            participant_id=participant_id,
+        )
+    )
 
     class RejectingProgressService(FakeProgressService):
         async def submit_word(self, **kwargs):
@@ -346,7 +415,7 @@ async def test_match_ai_turn_service_rejects_agent_answer_like_player_word() -> 
         )
     )
     progress_service = RejectingProgressService()
-    service = MatchAiTurnService(FakeRepository(), agent_client, progress_service)
+    service = MatchAiTurnService(repository, agent_client, progress_service)
 
     event = await service.play_ai_turn(
         game_session_public_id=game_session_public_id,
@@ -378,13 +447,13 @@ async def test_match_ai_turn_service_ignores_answer_when_phase_already_finished(
     participant_id = uuid4()
     now = datetime(2026, 6, 13, tzinfo=KST)
 
-    class FakeRepository:
-        async def get_ai_turn_context(self, **kwargs):
-            return ai_context(
-                game_session_public_id=game_session_public_id,
-                phase_id=phase_id,
-                participant_id=participant_id,
-            )
+    repository = FakeAiTurnRepository(
+        ai_context(
+            game_session_public_id=game_session_public_id,
+            phase_id=phase_id,
+            participant_id=participant_id,
+        )
+    )
 
     class StaleProgressService(FakeProgressService):
         async def submit_word(self, **kwargs):
@@ -405,7 +474,7 @@ async def test_match_ai_turn_service_ignores_answer_when_phase_already_finished(
         )
     )
     progress_service = StaleProgressService()
-    service = MatchAiTurnService(FakeRepository(), agent_client, progress_service)
+    service = MatchAiTurnService(repository, agent_client, progress_service)
 
     event = await service.play_ai_turn(
         game_session_public_id=game_session_public_id,
@@ -423,13 +492,13 @@ async def test_match_ai_turn_service_converts_late_answer_to_turn_timeout() -> N
     participant_id = uuid4()
     now = datetime(2026, 6, 13, 0, 0, 11, tzinfo=KST)
 
-    class FakeRepository:
-        async def get_ai_turn_context(self, **kwargs):
-            return ai_context(
-                game_session_public_id=game_session_public_id,
-                phase_id=phase_id,
-                participant_id=participant_id,
-            )
+    repository = FakeAiTurnRepository(
+        ai_context(
+            game_session_public_id=game_session_public_id,
+            phase_id=phase_id,
+            participant_id=participant_id,
+        )
+    )
 
     class LateProgressService(FakeProgressService):
         def __init__(self) -> None:
@@ -464,7 +533,7 @@ async def test_match_ai_turn_service_converts_late_answer_to_turn_timeout() -> N
         )
     )
     progress_service = LateProgressService()
-    service = MatchAiTurnService(FakeRepository(), agent_client, progress_service)
+    service = MatchAiTurnService(repository, agent_client, progress_service)
 
     event = await service.play_ai_turn(
         game_session_public_id=game_session_public_id,
@@ -485,7 +554,72 @@ async def test_match_ai_turn_service_converts_late_answer_to_turn_timeout() -> N
     assert progress_service.failures == []
 
 
-async def test_match_ai_turn_repository_builds_context_for_ai_actor() -> None:
+async def test_match_ai_turn_service_rejects_missing_session() -> None:
+    service = MatchAiTurnService(
+        FakeAiTurnRepository(None),
+        FakeAgentAnswerClient(result=None),
+        FakeProgressService(),
+    )
+
+    with pytest.raises(AppException) as exc_info:
+        await service.play_ai_turn(
+            game_session_public_id=uuid4(),
+            phase_id=uuid4(),
+            now=datetime(2026, 6, 13, tzinfo=KST),
+        )
+
+    assert exc_info.value.details == {"reason": "game_session_not_found"}
+
+
+async def test_match_ai_turn_service_rejects_missing_active_turn() -> None:
+    context = ai_context(
+        game_session_public_id=uuid4(),
+        phase_id=uuid4(),
+        participant_id=uuid4(),
+    )
+
+    class MissingActiveTurnRepository(FakeAiTurnRepository):
+        async def get_active_turn_actor(self, *, session_id, phase_id):
+            return None
+
+    service = MatchAiTurnService(
+        MissingActiveTurnRepository(context),
+        FakeAgentAnswerClient(result=None),
+        FakeProgressService(),
+    )
+
+    with pytest.raises(AppException) as exc_info:
+        await service.play_ai_turn(
+            game_session_public_id=context.game_session_public_id,
+            phase_id=context.phase_id,
+            now=datetime(2026, 6, 13, tzinfo=KST),
+        )
+
+    assert exc_info.value.details == {"reason": "active_turn_not_found"}
+
+
+async def test_match_ai_turn_service_ignores_non_ai_actor() -> None:
+    context = ai_context(
+        game_session_public_id=uuid4(),
+        phase_id=uuid4(),
+        participant_id=uuid4(),
+    )
+    repository = FakeAiTurnRepository(context)
+    repository.participant.participant_type = "user"
+    agent_client = FakeAgentAnswerClient(result=None)
+    service = MatchAiTurnService(repository, agent_client, FakeProgressService())
+
+    event = await service.play_ai_turn(
+        game_session_public_id=context.game_session_public_id,
+        phase_id=context.phase_id,
+        now=datetime(2026, 6, 13, tzinfo=KST),
+    )
+
+    assert event is None
+    assert agent_client.requests == []
+
+
+async def test_match_ai_turn_repository_returns_rows_for_ai_turn_queries() -> None:
     game_session_public_id = uuid4()
     phase_id = uuid4()
     session_id = uuid4()
@@ -542,20 +676,38 @@ async def test_match_ai_turn_repository_builds_context_for_ai_actor() -> None:
     )
     repository = MatchAiTurnRepository(db_session)
 
-    context = await repository.get_ai_turn_context(
-        game_session_public_id=game_session_public_id,
+    fetched_session = await repository.get_game_session(game_session_public_id)
+    turn_actor = await repository.get_active_turn_actor(
+        session_id=session_id,
         phase_id=phase_id,
     )
+    used_words = await repository.list_used_words(session_id=session_id, round_number=1)
 
-    assert context == AiTurnContext(
-        game_session_public_id=game_session_public_id,
-        phase_id=phase_id,
-        participant_id=participant_id,
-        game_type="word_chain",
-        used_words=["사과"],
-        required_start_char="자",
-    )
+    assert fetched_session is game_session
+    assert turn_actor == (phase, turn, participant)
+    assert used_words == ["사과"]
     used_word_lookup_sql = str(
         db_session.statements[2].compile(compile_kwargs={"literal_binds": True})
     )
     assert "used_words.round_number" in used_word_lookup_sql
+
+
+async def test_match_ai_turn_repository_returns_none_when_session_is_missing() -> None:
+    db_session = FakeDbSession([FakeResult(scalar=None)])
+    repository = MatchAiTurnRepository(db_session)
+
+    game_session = await repository.get_game_session(uuid4())
+
+    assert game_session is None
+
+
+async def test_match_ai_turn_repository_returns_none_when_active_turn_is_missing() -> None:
+    db_session = FakeDbSession([FakeResult(row=None)])
+    repository = MatchAiTurnRepository(db_session)
+
+    turn_actor = await repository.get_active_turn_actor(
+        session_id=uuid4(),
+        phase_id=uuid4(),
+    )
+
+    assert turn_actor is None

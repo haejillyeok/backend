@@ -126,6 +126,7 @@ class LateVoteFakeDbSession:
 async def test_match_vote_service_orchestrates_vote_submission_repository_steps() -> None:
     session_id = uuid4()
     game_session_public_id = uuid4()
+    phase_id = uuid4()
     voter_participant_id = uuid4()
     target_participant_id = uuid4()
     voted_at = datetime(2026, 6, 13, tzinfo=KST)
@@ -136,6 +137,7 @@ async def test_match_vote_service_orchestrates_vote_submission_repository_steps(
         game_type="word_chain",
         status="voting",
         rule_config={"max_rounds": 1, "turn_time_seconds": 10},
+        current_phase_id=phase_id,
     )
     voter = SessionParticipant(
         id=voter_participant_id,
@@ -213,8 +215,10 @@ async def test_match_vote_service_orchestrates_vote_submission_repository_steps(
             assert public_id == game_session_public_id
             return game_session
 
-        async def get_voting_phase(self, *, game_session):
+        async def get_voting_phase(self, *, session_id, phase_id):
             self.calls.append("get_voting_phase")
+            assert session_id == game_session.id
+            assert phase_id == game_session.current_phase_id
             return None
 
         async def get_participant(self, *, session_id, participant_id):
@@ -518,6 +522,76 @@ async def test_match_vote_service_rejects_vote_after_voting_deadline() -> None:
         )
 
     assert exc_info.value.details == {"reason": "vote_deadline_exceeded"}
+    assert db_session.added == []
+
+
+async def test_match_vote_repository_returns_none_when_session_is_missing() -> None:
+    db_session = FakeDbSession([FakeResult(scalar=None)])
+    repository = MatchVoteRepository(db_session)
+
+    game_session = await repository.get_game_session_for_update(uuid4())
+
+    assert game_session is None
+
+
+async def test_match_vote_service_rejects_missing_session() -> None:
+    db_session = FakeDbSession([FakeResult(scalar=None)])
+    repository = MatchVoteRepository(db_session)
+    service = MatchVoteService(repository)
+
+    with pytest.raises(AppException) as exc_info:
+        await service.submit_vote(
+            game_session_public_id=uuid4(),
+            voter_participant_id=uuid4(),
+            target_seat_number=1,
+            now=datetime(2026, 6, 13, tzinfo=KST),
+        )
+
+    assert exc_info.value.details == {"reason": "game_session_not_found"}
+    assert db_session.added == []
+
+
+async def test_match_vote_service_rejects_missing_target_participant() -> None:
+    session_id = uuid4()
+    phase_id = uuid4()
+    game_session = GameSession(
+        id=session_id,
+        public_id=uuid4(),
+        room_id=uuid4(),
+        game_type="word_chain",
+        status="voting",
+        rule_config={"max_rounds": 1, "turn_time_seconds": 10},
+        current_phase_id=phase_id,
+    )
+    voter = SessionParticipant(
+        id=uuid4(),
+        session_id=session_id,
+        user_id=uuid4(),
+        participant_type="user",
+        display_name="1번 손님",
+        seat_number=1,
+        is_uninvited_guest=False,
+    )
+    db_session = FakeDbSession(
+        [
+            FakeResult(scalar=game_session),
+            FakeResult(scalar=None),
+            FakeResult(scalar=voter),
+            FakeResult(scalar=None),
+        ]
+    )
+    repository = MatchVoteRepository(db_session)
+    service = MatchVoteService(repository)
+
+    with pytest.raises(AppException) as exc_info:
+        await service.submit_vote(
+            game_session_public_id=game_session.public_id,
+            voter_participant_id=voter.id,
+            target_seat_number=2,
+            now=datetime(2026, 6, 13, tzinfo=KST),
+        )
+
+    assert exc_info.value.details == {"reason": "target_participant_not_found"}
     assert db_session.added == []
 
 

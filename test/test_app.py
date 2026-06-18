@@ -745,10 +745,12 @@ def test_controller_and_service_dependencies_do_not_own_db_sessions():
 
 async def test_match_ai_turn_calls_agent_outside_repository_scope():
     """AI 외부 API 호출은 DB context 조회 transaction 밖에서 수행합니다."""
+    from app.be.models.game import GameSession, SessionParticipant, SessionPhase, WordTurn
     from app.be.services.match_ai import AiTurnContext, MatchAiTurnService
     from app.shared.clients.agent import AgentAnswerResult
 
     state = {"active_repository_scopes": 0, "agent_called_inside_scope": None}
+    session_id = uuid4()
     context = AiTurnContext(
         game_session_public_id=uuid4(),
         phase_id=uuid4(),
@@ -759,9 +761,50 @@ async def test_match_ai_turn_calls_agent_outside_repository_scope():
     )
 
     class FakeRepository:
-        async def get_ai_turn_context(self, *, game_session_public_id, phase_id):
+        async def get_game_session(self, game_session_public_id):
             assert state["active_repository_scopes"] == 1
-            return context
+            return GameSession(
+                id=session_id,
+                public_id=game_session_public_id,
+                room_id=uuid4(),
+                game_type=context.game_type,
+                status="playing",
+                rule_config={"max_rounds": 8, "turn_time_seconds": 10},
+            )
+
+        async def get_active_turn_actor(self, *, session_id, phase_id):
+            assert state["active_repository_scopes"] == 1
+            return (
+                SessionPhase(
+                    id=phase_id,
+                    session_id=session_id,
+                    phase_type="turn",
+                    phase_number=1,
+                    actor_participant_id=context.participant_id,
+                    condition_payload={"required_start_char": context.required_start_char},
+                ),
+                WordTurn(
+                    id=uuid4(),
+                    phase_id=phase_id,
+                    participant_id=context.participant_id,
+                    round_number=1,
+                    turn_number=1,
+                    condition_payload={"required_start_char": context.required_start_char},
+                ),
+                SessionParticipant(
+                    id=context.participant_id,
+                    session_id=session_id,
+                    user_id=None,
+                    participant_type="ai",
+                    display_name="2번 손님",
+                    seat_number=2,
+                    is_uninvited_guest=True,
+                ),
+            )
+
+        async def list_used_words(self, *, session_id, round_number):
+            assert state["active_repository_scopes"] == 1
+            return context.used_words
 
     @asynccontextmanager
     async def repository_scope():

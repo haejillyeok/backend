@@ -26,8 +26,6 @@ from app.be.services.match_progress import (
     WORD_SUBMIT_ACTION_TYPE,
 )
 from app.be.schemas.game_enum import GameSessionStatus
-from app.shared.core.error_codes import ErrorCode
-from app.shared.core.exceptions import AppException
 from app.shared.core.identifiers import generate_uuid_v7
 
 
@@ -37,40 +35,28 @@ class MatchProgressRepository:
     def __init__(self, db_session: AsyncSession) -> None:
         self.db_session = db_session
 
-    async def get_game_session(self, game_session_public_id: UUID) -> GameSession:
+    async def get_game_session(self, game_session_public_id: UUID) -> GameSession | None:
         """게임 진행 기준 game session row를 조회합니다."""
         result = await self.db_session.execute(
             select(GameSession).where(GameSession.public_id == game_session_public_id)
         )
-        game_session = result.scalar_one_or_none()
-        if game_session is None:
-            raise AppException(
-                code=ErrorCode.GAME_SESSION_ENTRY_FORBIDDEN,
-                details={"reason": "game_session_not_found"},
-            )
-        return game_session
+        return result.scalar_one_or_none()
 
-    async def get_phase(self, *, session_id: UUID, phase_id: UUID) -> SessionPhase:
+    async def get_phase(self, *, session_id: UUID, phase_id: UUID) -> SessionPhase | None:
         """게임 진행 phase row를 잠그고 조회합니다."""
         result = await self.db_session.execute(
             select(SessionPhase)
             .where(SessionPhase.id == phase_id, SessionPhase.session_id == session_id)
             .with_for_update()
         )
-        phase = result.scalar_one_or_none()
-        if phase is None:
-            raise AppException(
-                code=ErrorCode.VALIDATION_ERROR,
-                details={"reason": "phase_not_found"},
-            )
-        return phase
+        return result.scalar_one_or_none()
 
     async def get_turn_actor(
         self,
         *,
         session_id: UUID,
         phase_id: UUID,
-    ) -> tuple[WordTurn, SessionParticipant]:
+    ) -> tuple[WordTurn, SessionParticipant] | None:
         """현재 단어 턴과 담당 참가자를 조회합니다."""
         result = await self.db_session.execute(
             select(WordTurn, SessionParticipant)
@@ -80,20 +66,14 @@ class MatchProgressRepository:
                 SessionParticipant.session_id == session_id,
             )
         )
-        row = result.one_or_none()
-        if row is None:
-            raise AppException(
-                code=ErrorCode.VALIDATION_ERROR,
-                details={"reason": "turn_not_found"},
-            )
-        return row
+        return result.one_or_none()
 
     async def get_participant(
         self,
         *,
         session_id: UUID,
         participant_id: UUID,
-    ) -> SessionParticipant:
+    ) -> SessionParticipant | None:
         """세션 내 참가자 row 하나를 조회합니다."""
         result = await self.db_session.execute(
             select(SessionParticipant).where(
@@ -101,13 +81,7 @@ class MatchProgressRepository:
                 SessionParticipant.session_id == session_id,
             )
         )
-        participant = result.scalar_one_or_none()
-        if participant is None:
-            raise AppException(
-                code=ErrorCode.GAME_SESSION_ENTRY_FORBIDDEN,
-                details={"reason": "participant_not_found"},
-            )
-        return participant
+        return result.scalar_one_or_none()
 
     async def get_valid_word(self, *, game_type: str, normalized_word: str) -> ValidWord | None:
         """활성 사전 단어 row를 조회합니다."""

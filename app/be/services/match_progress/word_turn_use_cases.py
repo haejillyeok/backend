@@ -10,6 +10,8 @@ from app.be.services.match_progress.records import (
     WordSubmissionRecord,
 )
 from app.be.services.match_progress.turn_resolution_payloads import serialize_next_turn
+from app.shared.core.error_codes import ErrorCode
+from app.shared.core.exceptions import AppException
 
 
 class MatchProgressWordTurnUseCaseMixin:
@@ -43,11 +45,27 @@ class MatchProgressWordTurnUseCaseMixin:
     ) -> MatchBroadcastEvent:
         """단어 제출 transaction 안에서 검증, 저장, 다음 턴 생성을 처리합니다."""
         game_session = await self.repository.get_game_session(game_session_public_id)
+        if game_session is None:
+            raise AppException(
+                code=ErrorCode.GAME_SESSION_ENTRY_FORBIDDEN,
+                details={"reason": "game_session_not_found"},
+            )
         phase = await self.repository.get_phase(session_id=game_session.id, phase_id=phase_id)
-        turn, participant = await self.repository.get_turn_actor(
+        if phase is None:
+            raise AppException(
+                code=ErrorCode.VALIDATION_ERROR,
+                details={"reason": "phase_not_found"},
+            )
+        turn_actor = await self.repository.get_turn_actor(
             session_id=game_session.id,
             phase_id=phase.id,
         )
+        if turn_actor is None:
+            raise AppException(
+                code=ErrorCode.VALIDATION_ERROR,
+                details={"reason": "turn_not_found"},
+            )
+        turn, participant = turn_actor
         self.turn_policy.validate_active_turn(
             phase=phase,
             turn=turn,
@@ -221,11 +239,27 @@ class MatchProgressWordTurnUseCaseMixin:
     ) -> MatchBroadcastEvent:
         """단어 거절 transaction 안에서 action, score, event를 확정합니다."""
         game_session = await self.repository.get_game_session(game_session_public_id)
+        if game_session is None:
+            raise AppException(
+                code=ErrorCode.GAME_SESSION_ENTRY_FORBIDDEN,
+                details={"reason": "game_session_not_found"},
+            )
         phase = await self.repository.get_phase(session_id=game_session.id, phase_id=phase_id)
-        turn, participant = await self.repository.get_turn_actor(
+        if phase is None:
+            raise AppException(
+                code=ErrorCode.VALIDATION_ERROR,
+                details={"reason": "phase_not_found"},
+            )
+        turn_actor = await self.repository.get_turn_actor(
             session_id=game_session.id,
             phase_id=phase.id,
         )
+        if turn_actor is None:
+            raise AppException(
+                code=ErrorCode.VALIDATION_ERROR,
+                details={"reason": "turn_not_found"},
+            )
+        turn, participant = turn_actor
         self.turn_policy.validate_active_turn(
             phase=phase,
             turn=turn,

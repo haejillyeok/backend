@@ -17,10 +17,10 @@ from app.be.models.game import (
 
 
 class MatchProgressRepositoryProtocol(Protocol):
-    async def get_game_session(self, game_session_public_id: UUID) -> GameSession:
+    async def get_game_session(self, game_session_public_id: UUID) -> GameSession | None:
         """게임 진행 기준 game session row를 조회합니다."""
 
-    async def get_phase(self, *, session_id: UUID, phase_id: UUID) -> SessionPhase:
+    async def get_phase(self, *, session_id: UUID, phase_id: UUID) -> SessionPhase | None:
         """게임 진행 phase row를 잠그고 조회합니다."""
 
     async def get_turn_actor(
@@ -28,7 +28,7 @@ class MatchProgressRepositoryProtocol(Protocol):
         *,
         session_id: UUID,
         phase_id: UUID,
-    ) -> tuple[WordTurn, SessionParticipant]:
+    ) -> tuple[WordTurn, SessionParticipant] | None:
         """현재 단어 턴과 담당 참가자를 조회합니다."""
 
     async def get_participant(
@@ -36,7 +36,7 @@ class MatchProgressRepositoryProtocol(Protocol):
         *,
         session_id: UUID,
         participant_id: UUID,
-    ) -> SessionParticipant:
+    ) -> SessionParticipant | None:
         """세션 내 참가자 row 하나를 조회합니다."""
 
     async def get_valid_word(self, *, game_type: str, normalized_word: str) -> ValidWord | None:

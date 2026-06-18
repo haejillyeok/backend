@@ -4,9 +4,9 @@
 코드 변경 상세는 Git history, PR, issue에서 확인하고, 이 파일에는 위키 페이지의 지식, 계약, 정책,
 컨벤션이 어떻게 바뀌었는지만 남깁니다.
 
-## [2026-06-18] maintenance | Clarify repository exception boundary
+## [2026-06-18] maintenance | Clarify repository query-only boundary
 
-- `code-conventions.md`에 repository는 조회 실패를 `AppException`/`ErrorCode`로 변환하지 않고 DB 조회 결과를 그대로 반환하며, 예외 변환은 service/usecase에서 담당한다는 기준을 추가했다.
+- `code-conventions.md`에 repository는 쿼리 실행과 DB row/list 반환에 집중하고, 조회 실패의 예외 변환과 row 의미 판단, application DTO 조립은 service/usecase에서 담당한다는 기준을 추가했다.
 
 ## [2026-06-18] maintenance | Add ADR gate ownership and immutability
 
