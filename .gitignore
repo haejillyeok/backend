@@ -44,6 +44,7 @@ pip-wheel-metadata/
 # FastAPI/Uvicorn runtime artifacts
 *.log
 logs/
+.codex/logs/
 *.pid
 *.sock
 
@@ -70,3 +71,5 @@ model/MODEL/
 .vscode/
 .DS_Store
 Thumbs.db
+# Added by code-review-graph
+.code-review-graph/

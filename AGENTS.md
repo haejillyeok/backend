@@ -20,6 +20,10 @@
 - `llm-wiki/wiki/`: 원본과 작업 이력을 바탕으로 LLM이 유지하는 요약, 개념, 결정, 연결
 - `llm-wiki/index.md`: LLM Wiki 콘텐츠 카탈로그. 위키를 읽거나 갱신하기 전에 먼저 확인한다.
 - `llm-wiki/log.md`: LLM Wiki 정보 변경 이력. ingest, query, lint, maintenance를 시간순으로 남기되 코드 변경 로그로 쓰지 않는다.
+- `.codex/`: Codex 전용 작업 운영 레이어. hooks, session context, state를 둔다.
+- `.codex/workflow/CONTEXT.md`: Codex 세션 시작 진입점. `llm-wiki/index.md` 다음으로 확인한다.
+- `docs/adr/`: 사람이 함께 읽는 구조적 결정 기록. 결정이 앞으로의 AI 작업 기준을 바꾸면 `llm-wiki/`에도 현재 규칙으로 반영한다.
+- `docs/postmortems/`: 사람이 함께 읽는 반복 실패, 장애, 검증 누락, 큰 시행착오 회고. 재발 방지 규칙은 `llm-wiki/`에 현재 기준으로 반영한다.
 
 ## Purpose
 
@@ -58,9 +62,10 @@
 ### Session Start
 
 1. `llm-wiki/index.md`를 먼저 읽고 관련 페이지를 찾는다.
-2. 최근 변경 맥락이 필요하면 `llm-wiki/log.md`의 마지막 항목을 확인한다.
-3. 위키에 없는 내용은 코드, 원본 자료, 필요 시 `docs/`에서 확인하고 위키에 정리한다.
-4. `docs/`에만 있는 내용이 AI 작업에 필요하면 `llm-wiki/`에도 반영한다.
+2. `.codex/workflow/CONTEXT.md`를 읽고 Codex 작업 운영, ADR, postmortem gate를 확인한다.
+3. 최근 변경 맥락이 필요하면 `llm-wiki/log.md`의 마지막 항목을 확인한다.
+4. 위키에 없는 내용은 코드, 원본 자료, 필요 시 `docs/`에서 확인하고 위키에 정리한다.
+5. `docs/`에만 있는 내용이 AI 작업에 필요하면 `llm-wiki/`에도 반영한다.
 
 ### Ingest
 
@@ -104,6 +109,7 @@
 - 코드 스타일, 레이어 책임, 테스트 기준은 [llm-wiki/wiki/code-conventions.md](/Users/723poil/Documents/git/haejillyeok/backend/llm-wiki/wiki/code-conventions.md)를 따른다.
 - 커밋 메시지는 [llm-wiki/wiki/code-conventions.md](/Users/723poil/Documents/git/haejillyeok/backend/llm-wiki/wiki/code-conventions.md)의 `<type>: <english summary>` 규칙을 따른다.
 - LLM Wiki를 갱신할 때는 [llm-wiki/wiki/llm-wiki-maintenance.md](/Users/723poil/Documents/git/haejillyeok/backend/llm-wiki/wiki/llm-wiki-maintenance.md)의 저장 범위와 로그 기준을 따른다.
+- Codex 작업 운영, ADR, postmortem 기준은 [llm-wiki/wiki/codex-workflow.md](/Users/723poil/Documents/git/haejillyeok/backend/llm-wiki/wiki/codex-workflow.md)를 따른다.
 - public API 계약이 바뀌면 AI 작업 기준은 `llm-wiki/`에, 사람이 읽는 설명은 필요 시 [docs/api.md](/Users/723poil/Documents/git/haejillyeok/backend/docs/api.md)에 반영한다.
 - 아키텍처 경계가 바뀌면 AI 작업 기준은 `llm-wiki/`에, 사람이 읽는 설명은 필요 시 [docs/architecture.md](/Users/723poil/Documents/git/haejillyeok/backend/docs/architecture.md)에 반영한다.
 
@@ -123,3 +129,42 @@
 - AI가 작업에 쓸 정보가 `docs/`에만 있고 `llm-wiki/`에 빠져 있지는 않은가?
 - 코드 변경이 있었다면 적절한 테스트나 검증을 실행했는가?
 - 코드, 설정, 테스트와 위키 내용이 서로 충돌하지 않는가?
+
+<!-- code-review-graph MCP tools -->
+## MCP Tools: code-review-graph
+
+**IMPORTANT: This project has a knowledge graph. ALWAYS use the
+code-review-graph MCP tools BEFORE using Grep/Glob/Read to explore
+the codebase.** The graph is faster, cheaper (fewer tokens), and gives
+you structural context (callers, dependents, test coverage) that file
+scanning cannot.
+
+### When to use graph tools FIRST
+
+- **Exploring code**: `semantic_search_nodes` or `query_graph` instead of Grep
+- **Understanding impact**: `get_impact_radius` instead of manually tracing imports
+- **Code review**: `detect_changes` + `get_review_context` instead of reading entire files
+- **Finding relationships**: `query_graph` with callers_of/callees_of/imports_of/tests_for
+- **Architecture questions**: `get_architecture_overview` + `list_communities`
+
+Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
+
+### Key Tools
+
+| Tool | Use when |
+| ------ | ---------- |
+| `detect_changes` | Reviewing code changes — gives risk-scored analysis |
+| `get_review_context` | Need source snippets for review — token-efficient |
+| `get_impact_radius` | Understanding blast radius of a change |
+| `get_affected_flows` | Finding which execution paths are impacted |
+| `query_graph` | Tracing callers, callees, imports, tests, dependencies |
+| `semantic_search_nodes` | Finding functions/classes by name or keyword |
+| `get_architecture_overview` | Understanding high-level codebase structure |
+| `refactor_tool` | Planning renames, finding dead code |
+
+### Workflow
+
+1. The graph auto-updates on file changes (via hooks).
+2. Use `detect_changes` for code review.
+3. Use `get_affected_flows` to understand impact.
+4. Use `query_graph` pattern="tests_for" to check coverage.

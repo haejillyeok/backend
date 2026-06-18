@@ -15,6 +15,7 @@
 | [wiki/current-status.md](wiki/current-status.md) | 현재 backend 레포의 실행 구조, 문서 상태, 다음에 확인할 지점 |
 | [wiki/project-map.md](wiki/project-map.md) | 주요 디렉터리와 소유 책임 요약 |
 | [wiki/llm-wiki-maintenance.md](wiki/llm-wiki-maintenance.md) | LLM Wiki에 남길 지식과 남기지 않을 코드 변경 이력의 경계, log.md 운영 기준 |
+| [wiki/codex-workflow.md](wiki/codex-workflow.md) | `.codex/` 기반 Codex 세션 진입점과 `docs/` 기반 ADR, postmortem 운영 기준 |
 | [wiki/backend-guidelines.md](wiki/backend-guidelines.md) | FastAPI, WebSocket, 서버 간 HTTP client 구현 시 AI가 따라야 하는 작업 기준 |
 | [wiki/runtime-configuration.md](wiki/runtime-configuration.md) | 서버 `.env`에서 관리하는 KST timezone, HTTP port, BE-to-Agent client 설정, OpenTelemetry exporter, Docker build/push/runtime/deploy 기준 |
 | [wiki/test-page-harness.md](wiki/test-page-harness.md) | 현재 BE/Agent REST와 WebSocket 기능을 브라우저에서 직접 확인하는 `test-page/` 정적 harness 기준 |

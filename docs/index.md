@@ -11,6 +11,8 @@
 - [k6 BE Load Test Plan](load-testing/k6-be-load-test-plan.md): 로컬 BE E2E 부하테스트 계획, Docker 리소스 제한, k6/Grafana 관측 기준
 - [Backend Guidelines](backend-guidelines.md): FastAPI, WebSocket 적용 기준
 - [Code Conventions](code-conventions.md): Python 코드 스타일, 레이어 규칙, 테스트 기준
+- [ADR Index](adr/index.md): 사람이 함께 읽는 구조적 결정 기록
+- [Postmortem Index](postmortems/index.md): 반복 실패, 장애, 검증 누락, 큰 시행착오 회고
 
 ## Docs vs LLM Wiki
 

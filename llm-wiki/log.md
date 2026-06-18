@@ -4,6 +4,36 @@
 코드 변경 상세는 Git history, PR, issue에서 확인하고, 이 파일에는 위키 페이지의 지식, 계약, 정책,
 컨벤션이 어떻게 바뀌었는지만 남깁니다.
 
+## [2026-06-18] maintenance | Clarify repository exception boundary
+
+- `code-conventions.md`에 repository는 조회 실패를 `AppException`/`ErrorCode`로 변환하지 않고 DB 조회 결과를 그대로 반환하며, 예외 변환은 service/usecase에서 담당한다는 기준을 추가했다.
+
+## [2026-06-18] maintenance | Add ADR gate ownership and immutability
+
+- `codex-workflow.md`에 Codex가 작업 시작과 설계 중 ADR 필요 여부를 먼저 판단한다는 운영 기준을 추가했다.
+- `accepted` ADR은 의미를 바꾸지 않고, 결정 변경이 필요하면 새 ADR로 supersede한다는 불변성 기준을 추가했다.
+- ADR의 장기 작업 기준은 계속 `llm-wiki/`에 현재 규칙으로만 요약한다는 경계를 유지했다.
+
+## [2026-06-18] maintenance | Make ADR and postmortem templates report-oriented
+
+- `codex-workflow.md`에서 ADR은 의사결정 보고서, postmortem은 회고 보고서로 사람이 읽을 수 있게 작성한다는 기준을 명시했다.
+- ADR/postmortem은 배경, 영향, 대안, 검증, 재발 방지 규칙을 보존하고 장기 작업 기준만 `llm-wiki/`에 요약한다는 경계를 유지했다.
+
+## [2026-06-18] maintenance | Add project identity to Codex context
+
+- `codex-workflow.md`에 `.codex/workflow/CONTEXT.md`가 세션 시작 시 프로젝트 정체성과 도메인 북극성을 함께 확인하는 진입점이라는 기준을 추가했다.
+- 상세 도메인 계약은 계속 `sunset-game-domain.md`와 사람용 `docs/sunset-domain.md`를 기준으로 확인한다는 경계를 유지했다.
+
+## [2026-06-18] maintenance | Move ADR and postmortem records to docs
+
+- `codex-workflow.md`에서 `.codex/`는 세션 운영 레이어로 한정하고 ADR과 postmortem은 사람이 함께 읽는 `docs/adr/`, `docs/postmortems/`에서 관리한다는 기준으로 정정했다.
+- ADR/postmortem의 장기 작업 기준은 계속 `llm-wiki/`에 현재 규칙으로 요약한다는 경계를 유지했다.
+
+## [2026-06-18] maintenance | Add Codex workflow operating layer
+
+- `codex-workflow.md`에 `.codex/`를 Codex 세션 운영, ADR, postmortem 레이어로 사용하는 기준을 추가했다.
+- `llm-wiki/`는 canonical knowledge layer로 유지하고 `.codex/workflow/CONTEXT.md`는 세션 시작 진입점으로만 둔다는 경계를 정리했다.
+
 ## [2026-06-18] maintenance | Exclude Grafana dashboards from pytest suite
 
 - `code-conventions.md`에 Grafana dashboard JSON은 일반 pytest suite에 포함하지 않는다는 기준을 추가했다.
