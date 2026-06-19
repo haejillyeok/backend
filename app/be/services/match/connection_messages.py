@@ -2,6 +2,7 @@ from typing import Any
 
 from app.be.services.match.connection_records import MatchConnection
 from app.be.services.match.snapshots import MatchSnapshotResult
+from app.be.services.match_vote.result_events import score_breakdown_to_payload
 from app.shared.core.timezone import to_kst_isoformat
 
 
@@ -83,6 +84,7 @@ def match_snapshot_message(snapshot: MatchSnapshotResult) -> MatchMessage:
                     "rank": result.rank,
                     "is_winner": result.is_winner,
                     "vote_score_delta": result.vote_score_delta,
+                    "score_breakdown": score_breakdown_to_payload(result.score_breakdown),
                     "is_me": result.is_me,
                 }
                 for result in snapshot.results

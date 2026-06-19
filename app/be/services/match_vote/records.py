@@ -1,6 +1,20 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from uuid import UUID
+
+
+@dataclass(frozen=True)
+class ScoreBreakdownItem:
+    reason: str
+    score_delta: int
+
+
+@dataclass(frozen=True)
+class ScoreBreakdownPayload:
+    word_score: int
+    vote_score: int
+    penalty_score: int
+    items: list[ScoreBreakdownItem] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -23,6 +37,13 @@ class MatchResultParticipantPayload:
     is_winner: bool
     revealed_participant_type: str
     vote_score_delta: int
+    score_breakdown: ScoreBreakdownPayload = field(
+        default_factory=lambda: ScoreBreakdownPayload(
+            word_score=0,
+            vote_score=0,
+            penalty_score=0,
+        )
+    )
 
 
 @dataclass(frozen=True)

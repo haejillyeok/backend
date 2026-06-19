@@ -327,6 +327,12 @@ def test_match_websocket_snapshot_includes_published_results_for_reconnect() -> 
             "rank": 1,
             "is_winner": True,
             "vote_score_delta": 10,
+            "score_breakdown": {
+                "word_score": 0,
+                "vote_score": 0,
+                "penalty_score": 0,
+                "items": [],
+            },
             "is_me": True,
         },
         {
@@ -339,6 +345,12 @@ def test_match_websocket_snapshot_includes_published_results_for_reconnect() -> 
             "rank": 2,
             "is_winner": False,
             "vote_score_delta": -5,
+            "score_breakdown": {
+                "word_score": 0,
+                "vote_score": 0,
+                "penalty_score": 0,
+                "items": [],
+            },
             "is_me": False,
         },
     ]

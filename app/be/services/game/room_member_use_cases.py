@@ -15,6 +15,47 @@ from app.be.services.game.records import (
 
 
 class GameRoomMemberUseCaseMixin:
+    async def quick_join_room(self, *, user: CurrentUser) -> RoomJoinResult:
+        """빠른입장용으로 참여 가능한 대기 room을 고르거나 새 room을 만든 뒤 참여시킵니다.
+
+        대상 room 선택과 기존 로비 membership 정리는 유저 단위 advisory lock 안에서 처리해 한 유저가
+        여러 대기 room에 active member로 남는 상황을 피합니다.
+        """
+        async with self.repository_scope():
+            await self.repository.lock_waiting_room_membership_for_user(user_id=user.id)
+            room = await self.repository.get_oldest_joinable_waiting_room_for_update(
+                user_id=user.id,
+            )
+            created_room = room is None
+            if room is None:
+                await self._leave_existing_rooms_for_lobby_move(user=user)
+                room = await self.repository.create_room(
+                    owner_user_id=user.id,
+                    name=f"{user.nickname}의 객실",
+                    game_type="word_chain",
+                    status=WAITING_ROOM_STATUS,
+                    max_players=4,
+                )
+            else:
+                await self._leave_existing_rooms_for_lobby_move(
+                    user=user,
+                    excluded_room_public_id=room.public_id,
+                )
+            member = await self.repository.create_room_member(
+                room_id=room.id,
+                user_id=user.id,
+                nickname=user.nickname,
+            )
+            await self.repository.commit()
+            return RoomJoinResult(
+                room_public_id=room.public_id,
+                user_public_id=user.public_id,
+                nickname=member.nickname,
+                joined_at=member.joined_at,
+                already_member=False,
+                created_room=created_room,
+            )
+
     async def join_room(self, *, room_public_id: UUID, user: CurrentUser) -> RoomJoinResult:
         """로그인 유저를 대기 중인 room의 활성 멤버로 참여시킵니다.
 

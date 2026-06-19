@@ -63,6 +63,8 @@ class RoomJoinResponse(SchemaModel):
     nickname: str
     joined_at: datetime
     already_member: bool
+    created_room: bool
+    lobby_websocket_path: str
 
 
 class RoomLeaveResponse(SchemaModel):

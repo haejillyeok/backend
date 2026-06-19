@@ -11,8 +11,9 @@ from app.be.models.user import (
 from app.be.schemas.base import SchemaModel
 
 
-MIN_PASSWORD_LENGTH = 8
+MIN_PASSWORD_LENGTH = 6
 MAX_PASSWORD_LENGTH = 20
+PASSWORD_PATTERN = r"^[!-~]+$"
 
 
 class LoginRequest(SchemaModel):
@@ -26,6 +27,7 @@ class LoginRequest(SchemaModel):
     password: str = Field(
         min_length=MIN_PASSWORD_LENGTH,
         max_length=MAX_PASSWORD_LENGTH,
+        pattern=PASSWORD_PATTERN,
         description="계정 ID에 연결된 비밀번호입니다.",
         examples=["secret-password"],
     )
@@ -49,6 +51,7 @@ class SignupRequest(SchemaModel):
     password: str = Field(
         min_length=MIN_PASSWORD_LENGTH,
         max_length=MAX_PASSWORD_LENGTH,
+        pattern=PASSWORD_PATTERN,
         description="계정 ID에 연결된 비밀번호입니다.",
         examples=["secret-password"],
     )

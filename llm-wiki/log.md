@@ -4,6 +4,31 @@
 코드 변경 상세는 Git history, PR, issue에서 확인하고, 이 파일에는 위키 페이지의 지식, 계약, 정책,
 컨벤션이 어떻게 바뀌었는지만 남깁니다.
 
+## [2026-06-19] maintenance | Add final score breakdown contract
+
+- `match.result.published.payload.results[]`와 결과 상태 `match.snapshot.results[]`가 `score_breakdown`을 포함한다는 기준을 정리했다.
+- `score_breakdown`은 `word_score`, `vote_score`, `penalty_score`, `items[]`로 구성하고 `items[]`는 `ScoreLedger` 사유와 점수 변화량을 설명한다는 계약을 추가했다.
+
+## [2026-06-19] maintenance | Clarify match result announcement contract
+
+- `realtime-websocket.md`에 `match.result.published.payload.results[]`가 익명 participant wrapper, 최종 점수, 순위, 우승 여부, 투표 점수 변화, AI 공개 타입을 함께 제공한다는 기준을 명확히 했다.
+- 결과 화면은 root-level winner 목록 없이 `results[].is_winner`와 `participant.revealed_participant_type`으로 우승 배너와 AI 공개 표시를 만든다는 계약을 정리했다.
+
+## [2026-06-19] maintenance | Enrich room lobby snapshot contract
+
+- `realtime-websocket.md`에 room lobby snapshot이 객실 설정, 활성 멤버 수, 방장, 멤버 목록을 함께 담아 대기방 화면 복구 기준이 된다는 계약을 정리했다.
+- `/ws/lobby/rooms/{room_public_id}` 재접속 시 별도 REST fetch 없이 snapshot으로 초기화하고 이후 room event로 변경분을 반영한다는 기준을 명시했다.
+
+## [2026-06-19] maintenance | Align auth input validation with screen rules
+
+- 유저 입력 기준에서 비밀번호를 공백 없는 ASCII 문자/숫자/특수자 6~20자로 정리했다.
+- 계정 ID는 영어 문자/숫자/`_`, 닉네임은 한글/영어/숫자/`_` 3~20자 기준을 유지한다는 현재 규칙을 명확히 했다.
+
+## [2026-06-19] maintenance | Add quick-entry room contract
+
+- `sunset-game-domain.md`에 빠른입장이 가장 오래된 참여 가능 대기 room을 선택하고, 없으면 기본 word-chain room을 생성한다는 REST 계약을 추가했다.
+- 빠른입장 응답의 `created_room`, `lobby_websocket_path`와 기존 room 참여 시 `lobby.room.joined` broadcast 기준을 정리했다.
+
 ## [2026-06-19] maintenance | Expand word-chain dueum rule coverage
 
 - `sunset-game-domain.md`의 끝말잇기 두음법칙 기준을 `ㄴ/ㄹ` 초성과 `ㅣ/y` 계열 중성 전체, 종성 보존 규칙으로 명시했다.

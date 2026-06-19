@@ -11,10 +11,58 @@ from app.be.models.game import (
     WordTurn,
 )
 from app.be.repository.match import MatchRepository
-from app.be.services.match import MatchService, MatchSnapshotResult
+from app.be.services.match import MatchResultSnapshot, MatchService, MatchSnapshotResult
+from app.be.services.match.connection_messages import match_snapshot_message
+from app.be.services.match_vote import ScoreBreakdownItem, ScoreBreakdownPayload
 
 
 KST = ZoneInfo("Asia/Seoul")
+
+
+def test_match_snapshot_result_shape_matches_result_event_shape() -> None:
+    snapshot = MatchSnapshotResult(
+        game_session_public_id=uuid4(),
+        status="result",
+        rule_config={"max_rounds": 8, "turn_time_seconds": 10},
+        participants=[],
+        current_round_number=None,
+        current_turn=None,
+        used_words=[],
+        scoreboard=[],
+        server_time=datetime.now(KST),
+        results=[
+            MatchResultSnapshot(
+                display_name="2번 손님",
+                seat_number=2,
+                revealed_participant_type="ai",
+                final_score=-5,
+                rank=2,
+                is_winner=False,
+                vote_score_delta=-5,
+                is_me=False,
+                score_breakdown=ScoreBreakdownPayload(
+                    word_score=0,
+                    vote_score=-5,
+                    penalty_score=0,
+                    items=[ScoreBreakdownItem(reason="voted_as_ai", score_delta=-5)],
+                ),
+            )
+        ],
+    )
+
+    message = match_snapshot_message(snapshot)
+
+    result = message["payload"]["results"][0]
+    assert result["participant"]["display_name"] == "2번 손님"
+    assert result["participant"]["seat_number"] == 2
+    assert result["participant"]["revealed_participant_type"] == "ai"
+    assert result["final_score"] == -5
+    assert result["rank"] == 2
+    assert result["is_winner"] is False
+    assert result["vote_score_delta"] == -5
+    assert result["score_breakdown"]["vote_score"] == -5
+    assert result["score_breakdown"]["items"] == [{"reason": "voted_as_ai", "score_delta": -5}]
+    assert result["is_me"] is False
 
 
 class FakeScalarCollection:
@@ -307,6 +355,13 @@ async def test_match_repository_includes_result_snapshot_after_session_result() 
             FakeResult(scalar=game_session),
             FakeResult(scalars=[user_participant, ai_participant]),
             FakeResult(rows=[(user_participant_id, 20), (ai_participant_id, -5)]),
+            FakeResult(
+                rows=[
+                    (user_participant_id, "word_accepted", 10),
+                    (user_participant_id, "vote_correct", 10),
+                    (ai_participant_id, "voted_as_ai", -5),
+                ]
+            ),
             FakeResult(rows=[(user_result, user_participant), (ai_result, ai_participant)]),
         ]
     )
@@ -327,11 +382,13 @@ async def test_match_repository_includes_result_snapshot_after_session_result() 
             result.rank,
             result.is_winner,
             result.vote_score_delta,
+            result.score_breakdown.word_score,
+            result.score_breakdown.vote_score,
             result.is_me,
         )
         for result in snapshot.results
     ] == [
-        ("1번 손님", 1, "user", 20, 1, True, 10, True),
-        ("2번 손님", 2, "ai", -5, 2, False, -5, False),
+        ("1번 손님", 1, "user", 20, 1, True, 10, 10, 10, True),
+        ("2번 손님", 2, "ai", -5, 2, False, -5, 0, -5, False),
     ]
     assert "방장" not in str(snapshot)

@@ -63,6 +63,8 @@ def map_room_join_result(result: RoomJoinResult) -> RoomJoinResponse:
         nickname=result.nickname,
         joined_at=result.joined_at,
         already_member=result.already_member,
+        created_room=result.created_room,
+        lobby_websocket_path=build_lobby_websocket_path(result.room_public_id),
     )
 
 

@@ -2,6 +2,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from uuid import UUID
 
+from app.be.services.match_vote import ScoreBreakdownPayload
+
 
 @dataclass(frozen=True)
 class MatchParticipantSnapshot:
@@ -53,6 +55,13 @@ class MatchResultSnapshot:
     is_winner: bool
     vote_score_delta: int
     is_me: bool
+    score_breakdown: ScoreBreakdownPayload = field(
+        default_factory=lambda: ScoreBreakdownPayload(
+            word_score=0,
+            vote_score=0,
+            penalty_score=0,
+        )
+    )
 
 
 @dataclass(frozen=True)

@@ -5,6 +5,8 @@ from app.be.services.match_vote.constants import (
 )
 from app.be.services.match_vote.records import (
     MatchResultParticipantPayload,
+    ScoreBreakdownItem,
+    ScoreBreakdownPayload,
     VoteAcceptedRecord,
     VoteSubmissionRecord,
 )
@@ -18,6 +20,8 @@ __all__ = [
     "MatchResultParticipantPayload",
     "MatchVoteRepositoryProtocol",
     "MatchVoteService",
+    "ScoreBreakdownItem",
+    "ScoreBreakdownPayload",
     "VoteAcceptedRecord",
     "VoteSubmissionRecord",
 ]

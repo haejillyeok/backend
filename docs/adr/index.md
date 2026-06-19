@@ -17,7 +17,7 @@ public API, WebSocket 계약, DB schema, 모듈 경계, 배포/운영 기준, �
 
 ## Records
 
-아직 기록된 ADR이 없다.
+- [2026-06-19 Auth Input Rules](2026-06-19-auth-input-rules.md)
 
 ## Template
 

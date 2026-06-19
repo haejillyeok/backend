@@ -13,6 +13,7 @@ from app.be.services.game import (
     GameRoomListItem,
     GameRoomListResult,
     RoomCreateResult,
+    RoomJoinResult,
     RoomLeaveResult,
     RoomUpdateResult,
 )
@@ -166,6 +167,41 @@ def test_create_game_room_rejects_unknown_game_type() -> None:
     assert body["success"] is False
     assert body["error"]["code"] == "VALIDATION_ERROR"
     assert body["error"]["details"][0]["field"] == "body.game_type"
+
+
+def test_quick_join_room_api_returns_lobby_websocket_path() -> None:
+    user = current_user()
+    room_public_id = uuid4()
+    joined_at = datetime(2026, 6, 12, tzinfo=KST)
+
+    class FakeGameService:
+        async def quick_join_room(self, *, user: CurrentUser) -> RoomJoinResult:
+            return RoomJoinResult(
+                room_public_id=room_public_id,
+                user_public_id=user.public_id,
+                nickname=user.nickname,
+                joined_at=joined_at,
+                already_member=False,
+                created_room=False,
+            )
+
+    app = create_app()
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_game_service] = lambda: FakeGameService()
+    client = TestClient(app)
+
+    response = client.post("/api/v1/game/rooms/quick-join")
+
+    assert response.status_code == 200
+    assert response.json()["data"] == {
+        "room_public_id": str(room_public_id),
+        "user_public_id": str(user.public_id),
+        "nickname": "초보자",
+        "joined_at": "2026-06-12T00:00:00+09:00",
+        "already_member": False,
+        "created_room": False,
+        "lobby_websocket_path": f"/ws/lobby/rooms/{room_public_id}",
+    }
 
 
 def test_leave_game_room_returns_leave_state_for_authenticated_member() -> None:

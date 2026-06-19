@@ -1,6 +1,22 @@
 from app.be.services.match_progress import MatchBroadcastEvent
 from app.be.services.match_vote.constants import RESULT_PUBLISHED_MESSAGE_TYPE
-from app.be.services.match_vote.records import VoteSubmissionRecord
+from app.be.services.match_vote.records import ScoreBreakdownPayload, VoteSubmissionRecord
+
+
+def score_breakdown_to_payload(breakdown: ScoreBreakdownPayload) -> dict:
+    """점수 breakdown record를 WebSocket JSON payload로 변환합니다."""
+    return {
+        "word_score": breakdown.word_score,
+        "vote_score": breakdown.vote_score,
+        "penalty_score": breakdown.penalty_score,
+        "items": [
+            {
+                "reason": item.reason,
+                "score_delta": item.score_delta,
+            }
+            for item in breakdown.items
+        ],
+    }
 
 
 def result_event_from_vote_record(record: VoteSubmissionRecord) -> MatchBroadcastEvent:
@@ -22,6 +38,7 @@ def result_event_from_vote_record(record: VoteSubmissionRecord) -> MatchBroadcas
                         "rank": result.rank,
                         "is_winner": result.is_winner,
                         "vote_score_delta": result.vote_score_delta,
+                        "score_breakdown": score_breakdown_to_payload(result.score_breakdown),
                     }
                     for result in record.result or []
                 ],

@@ -24,6 +24,7 @@ from app.be.services.game import (
     RoomLobbySnapshotResult,
 )
 from app.be.services.lobby import LobbyConnectionManager, lobby_connection_manager
+from app.be.services.lobby.connection_messages import lobby_snapshot_message
 
 
 KST = ZoneInfo("Asia/Seoul")
@@ -120,6 +121,12 @@ def build_lobby_snapshot(
     """WebSocket 연결 테스트에서 사용할 최소 room snapshot을 만듭니다."""
     return RoomLobbySnapshotResult(
         room_public_id=room_public_id,
+        name="달빛 객실",
+        game_type="word_chain",
+        status="waiting",
+        max_players=4,
+        member_count=1,
+        rule_config={"max_rounds": 8, "turn_time_seconds": 10},
         owner_user_public_id=owner.public_id,
         members=[
             RoomLobbyMemberSnapshot(
@@ -130,6 +137,29 @@ def build_lobby_snapshot(
             )
         ],
     )
+
+
+def test_lobby_snapshot_message_includes_room_settings() -> None:
+    snapshot = RoomLobbySnapshotResult(
+        room_public_id=uuid4(),
+        name="달빛 객실",
+        game_type="word_chain",
+        status="waiting",
+        max_players=4,
+        member_count=1,
+        rule_config={"max_rounds": 8, "turn_time_seconds": 10},
+        owner_user_public_id=uuid4(),
+        members=[],
+    )
+
+    message = lobby_snapshot_message(snapshot)
+
+    assert message["payload"]["name"] == "달빛 객실"
+    assert message["payload"]["game_type"] == "word_chain"
+    assert message["payload"]["status"] == "waiting"
+    assert message["payload"]["max_players"] == 4
+    assert message["payload"]["member_count"] == 1
+    assert message["payload"]["rule_config"] == {"max_rounds": 8, "turn_time_seconds": 10}
 
 
 class FakeAuthService:
@@ -181,6 +211,12 @@ def test_room_lobby_websocket_connects_with_path_room_id_and_cleans_up() -> None
                 room_public_id=room_public_id,
                 snapshot=RoomLobbySnapshotResult(
                     room_public_id=room_public_id,
+                    name="달빛 객실",
+                    game_type="word_chain",
+                    status="waiting",
+                    max_players=4,
+                    member_count=2,
+                    rule_config={"max_rounds": 8, "turn_time_seconds": 10},
                     owner_user_public_id=user.public_id,
                     members=[
                         RoomLobbyMemberSnapshot(
@@ -222,6 +258,12 @@ def test_room_lobby_websocket_connects_with_path_room_id_and_cleans_up() -> None
             "type": "lobby.room.snapshot",
             "payload": {
                 "room_public_id": str(room_public_id),
+                "name": "달빛 객실",
+                "game_type": "word_chain",
+                "status": "waiting",
+                "max_players": 4,
+                "member_count": 2,
+                "rule_config": {"max_rounds": 8, "turn_time_seconds": 10},
                 "owner_user_public_id": str(user.public_id),
                 "members": [
                     {
@@ -601,6 +643,8 @@ def test_join_room_api_broadcasts_to_lobby_room_subscribers() -> None:
             "nickname": "초보자",
             "joined_at": "2026-06-12T00:00:00+09:00",
             "already_member": False,
+            "created_room": False,
+            "lobby_websocket_path": f"/ws/lobby/rooms/{room_public_id}",
         }
         assert websocket.receive_json() == {
             "type": "lobby.room.joined",

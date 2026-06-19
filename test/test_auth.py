@@ -467,6 +467,77 @@ def test_login_endpoint_validates_account_id_and_password_rules(payload, field):
     assert body["error"]["details"][0]["field"] == field
 
 
+def test_login_endpoint_accepts_six_character_ascii_password():
+    app = create_app()
+
+    class FakeAuthService:
+        async def login(
+            self,
+            *,
+            account_id: str,
+            password: str,
+            last_access_ip: str | None,
+            user_agent: str | None,
+        ):
+            assert account_id == "player_001"
+            assert password == "abc123"
+            return type(
+                "AuthResult",
+                (),
+                {
+                    "user": type(
+                        "AuthUser",
+                        (),
+                        {"public_id": uuid4(), "account_id": account_id, "nickname": "초보자"},
+                    )(),
+                    "session_token": "plain-session-token",
+                    "expires_at": datetime.now(KST) + timedelta(days=1),
+                },
+            )()
+
+    async def override_get_auth_service(request: Request) -> FakeAuthService:
+        return FakeAuthService()
+
+    app.dependency_overrides[get_auth_service] = override_get_auth_service
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/v1/auth/login",
+        json={"account_id": "player_001", "password": "abc123"},
+    )
+
+    assert response.status_code == 200
+
+
+@pytest.mark.parametrize(
+    ("payload", "field"),
+    [
+        ({"account_id": "player_001", "password": "한글pass1"}, "body.password"),
+        ({"account_id": "player_001", "password": "pass word"}, "body.password"),
+    ],
+)
+def test_login_endpoint_rejects_non_ascii_or_spaced_password(payload, field):
+    app = create_app()
+
+    class FakeAuthService:
+        async def login(self, **kwargs):
+            raise AssertionError("validation 실패 요청은 service까지 도달하지 않아야 합니다.")
+
+    async def override_get_auth_service(request: Request) -> FakeAuthService:
+        return FakeAuthService()
+
+    app.dependency_overrides[get_auth_service] = override_get_auth_service
+    client = TestClient(app)
+
+    response = client.post("/api/v1/auth/login", json=payload)
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["success"] is False
+    assert body["error"]["code"] == "VALIDATION_ERROR"
+    assert body["error"]["details"][0]["field"] == field
+
+
 def test_signup_endpoint_sets_session_cookie_for_auth_success():
     app = create_app()
 

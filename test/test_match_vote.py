@@ -17,12 +17,90 @@ from app.be.models.game import (
 )
 from app.be.repository.match_vote import MatchVoteRepository
 from app.be.services.match_vote import (
+    MatchResultParticipantPayload,
     MatchVoteService,
+    ScoreBreakdownItem,
+    ScoreBreakdownPayload,
+    VoteAcceptedRecord,
+    VoteSubmissionRecord,
 )
+from app.be.services.match_vote.result_events import result_event_from_vote_record
 from app.shared.core.exceptions import AppException
 
 
 KST = ZoneInfo("Asia/Seoul")
+
+
+def test_match_vote_records_expose_score_breakdown_payloads() -> None:
+    item = ScoreBreakdownItem(reason="word_accepted", score_delta=10)
+    breakdown = ScoreBreakdownPayload(
+        word_score=10,
+        vote_score=0,
+        penalty_score=0,
+        items=[item],
+    )
+
+    assert breakdown.items[0].reason == "word_accepted"
+    assert breakdown.word_score == 10
+
+
+def test_result_event_publishes_winner_and_ai_reveal_fields() -> None:
+    record = VoteSubmissionRecord(
+        accepted=VoteAcceptedRecord(
+            game_session_public_id=uuid4(),
+            event_sequence=7,
+            voter_display_name="1번 손님",
+            voter_seat_number=1,
+            submitted_vote_count=2,
+            required_vote_count=2,
+            created_at=datetime.now(KST),
+        ),
+        result=[
+            MatchResultParticipantPayload(
+                display_name="1번 손님",
+                seat_number=1,
+                revealed_participant_type="user",
+                final_score=20,
+                rank=1,
+                is_winner=True,
+                vote_score_delta=10,
+                score_breakdown=ScoreBreakdownPayload(
+                    word_score=10,
+                    vote_score=10,
+                    penalty_score=0,
+                    items=[
+                        ScoreBreakdownItem(reason="word_accepted", score_delta=10),
+                        ScoreBreakdownItem(reason="vote_correct", score_delta=10),
+                    ],
+                ),
+            ),
+            MatchResultParticipantPayload(
+                display_name="2번 손님",
+                seat_number=2,
+                revealed_participant_type="ai",
+                final_score=-5,
+                rank=2,
+                is_winner=False,
+                vote_score_delta=-5,
+            ),
+        ],
+        result_event_sequence=8,
+        result_created_at=datetime.now(KST),
+    )
+
+    event = result_event_from_vote_record(record)
+
+    payload = event.message["payload"]
+    assert payload["event_sequence"] == 8
+    assert payload["results"][0]["is_winner"] is True
+    assert payload["results"][0]["participant"]["revealed_participant_type"] == "user"
+    assert payload["results"][0]["score_breakdown"]["word_score"] == 10
+    assert payload["results"][0]["score_breakdown"]["vote_score"] == 10
+    assert payload["results"][0]["score_breakdown"]["items"] == [
+        {"reason": "word_accepted", "score_delta": 10},
+        {"reason": "vote_correct", "score_delta": 10},
+    ]
+    assert payload["results"][1]["participant"]["revealed_participant_type"] == "ai"
 
 
 class FakeScalarCollection:
@@ -393,6 +471,14 @@ async def test_match_vote_service_publishes_result_when_all_users_voted() -> Non
             FakeResult(rows=[(first_voter_id, 10)]),
             FakeResult(scalar=2),
             FakeResult(scalar=3),
+            FakeResult(
+                rows=[
+                    (first_voter_id, "word_accepted", 10),
+                    (first_voter_id, "vote_correct", 10),
+                    (voter_id, "vote_wrong", -5),
+                    (ai_id, "voted_as_ai", -5),
+                ]
+            ),
             FakeResult(scalar=room),
         ]
     )
@@ -457,6 +543,9 @@ async def test_match_vote_service_publishes_result_when_all_users_voted() -> Non
         2,
         3,
     ]
+    first_result = events[1].message["payload"]["results"][0]
+    assert first_result["score_breakdown"]["word_score"] == 10
+    assert first_result["score_breakdown"]["vote_score"] == 10
     assert db_session.committed is True
 
 
@@ -662,6 +751,12 @@ async def test_match_vote_service_publishes_result_on_vote_timeout() -> None:
             FakeResult(scalars=[existing_vote]),
             FakeResult(rows=[]),
             FakeResult(scalar=4),
+            FakeResult(
+                rows=[
+                    (first_voter_id, "vote_correct", 10),
+                    (ai_id, "voted_as_ai", -5),
+                ]
+            ),
             FakeResult(scalar=room),
         ]
     )
@@ -705,6 +800,8 @@ async def test_match_vote_service_publishes_result_on_vote_timeout() -> None:
     ]
     assert events[0].message["payload"]["submitted_vote_count"] == 1
     assert events[1].message["payload"]["event_sequence"] == 6
+    assert events[1].message["payload"]["results"][0]["score_breakdown"]["vote_score"] == 10
+    assert events[1].message["payload"]["results"][1]["score_breakdown"]["word_score"] == 0
     assert db_session.committed is True
 
 

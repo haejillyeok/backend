@@ -20,6 +20,45 @@ router = APIRouter()
 
 
 @router.post(
+    "/rooms/quick-join",
+    response_model=SuccessResponse[RoomJoinResponse],
+    status_code=status.HTTP_200_OK,
+    summary="로비 객실 빠른입장",
+    operation_id="be_game_quick_join_room",
+    responses=error_responses_by_status(
+        codes=[
+            ErrorCode.SESSION_EXPIRED,
+            ErrorCode.GAME_ROOM_NOT_JOINABLE,
+            ErrorCode.VALIDATION_ERROR,
+        ],
+    ),
+)
+async def quick_join_game_room(
+    request: Request,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    game_service: Annotated[GameService, Depends(get_game_service)],
+) -> SuccessResponse[RoomJoinResponse]:
+    """로그인 유저를 참여 가능한 대기 객실에 빠르게 입장시키고 필요하면 새 객실을 만듭니다."""
+    result = await game_service.quick_join_room(user=current_user)
+    response = map_room_join_result(result)
+    if not result.created_room:
+        await lobby_connection_manager.broadcast_room(
+            result.room_public_id,
+            {
+                "type": "lobby.room.joined",
+                "payload": response.model_dump(mode="json"),
+            },
+        )
+        get_websocket_metrics(request.app).record_message(
+            ws_route="/ws/lobby/rooms/{room_public_id}",
+            ws_endpoint="lobby",
+            message_type="lobby.room.joined",
+            direction="outbound",
+        )
+    return ok(response)
+
+
+@router.post(
     "/rooms/{room_public_id}/join",
     response_model=SuccessResponse[RoomJoinResponse],
     status_code=status.HTTP_200_OK,

@@ -75,6 +75,13 @@ Backend가 소유하는 게임 상태, WebSocket event, Agent 경계를 우선�
   - `session_token` 쿠키로 현재 유저를 인증한다.
   - 기존 active membership을 정리한 뒤 `waiting` 상태 room을 생성하고 방장을 첫 활성 `game.room_members`로 등록한다.
   - 성공 응답의 `room_public_id`로 `/ws/lobby/rooms/{room_public_id}`에 연결할 수 있다.
+- `POST /api/v1/game/rooms/quick-join`
+  - `session_token` 쿠키로 현재 유저를 인증한다.
+  - 서버가 현재 유저가 active member가 아닌 `waiting` room 중 활성 멤버 수가 `max_players`보다 작은 가장 오래된 room을 row lock으로 선택해 참여시킨다.
+  - 참여 가능한 room이 없으면 기본 `game_type=word_chain`, `max_players=4`, 기본 `rule_config`의 새 대기 room을 만들고 현재 유저를 방장 겸 첫 멤버로 등록한다.
+  - 기존 active membership 정리 규칙은 객실 생성/직접 입장과 같다.
+  - 응답에는 `room_public_id`, `already_member=false`, `created_room`, `/ws/lobby/rooms/{room_public_id}` 연결 path를 포함한다.
+  - 기존 room에 새 멤버가 들어간 경우 같은 room 연결에 `lobby.room.joined`를 broadcast하고, 새 room 생성은 기존 구독자가 없으므로 room event를 보내지 않는다.
 - `POST /api/v1/game/rooms/{room_public_id}/join`
   - `session_token` 쿠키로 현재 유저를 인증한다.
   - room row를 lock한 뒤 `waiting` 상태와 정원을 확인한다.
@@ -263,6 +270,8 @@ Cycle은 도메인 개념으로 남겨두되, 현재 Backend MVP는 Cycle row를
 - AI로 지목된 경우 AI Guest는 투표 수당 `-5`를 받는다.
 - 동률이면 공동 표시한다.
 - 투표 결과를 포함한 최종 점수로 플레이어 등수를 표시한다.
+- 최종 결과 payload는 `final_score`만 보내지 않고 `score_breakdown.word_score`, `vote_score`,
+  `penalty_score`, `items[]`로 `ScoreLedger` 사유별 합산을 함께 제공한다.
 - 투표 진행 중에는 다른 참가자의 target을 broadcast하지 않고, 모든 실제 유저 투표 완료 후 결과 event에서
   `revealed_participant_type`으로 AI 여부를 공개한다.
 
@@ -427,7 +436,7 @@ idle -> matching -> settled -> countdown -> transitioning -> playing
 - 여러 match 연결이 같은 투표 deadline을 감지할 수 있으므로 이미 `result` 상태가 된 세션의 stale timeout은
   추가 event 없이 무시한다.
 - 결과 확정 이후 재접속한 참가자는 `match.snapshot.results`로 `SessionResult` 기반 최종 점수, 순위, 우승
-  여부, 공개 participant type, vote score delta를 복구한다.
+  여부, 공개 participant type, vote score delta, score breakdown을 복구한다.
 - 점수 계산은 누적 total이 아니라 ScoreLedger event 합산으로 설명 가능해야 한다.
 - 로비/객실/매치 snapshot은 재접속과 화면 복구의 기준 데이터가 되어야 한다.
 - command-response 패턴은 `request_id`로 매칭하고, broadcast는 `sequence`로 순서를 관리한다.

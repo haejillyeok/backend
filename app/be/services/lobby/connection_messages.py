@@ -24,6 +24,12 @@ def lobby_snapshot_message(snapshot: RoomLobbySnapshotResult) -> LobbyMessage:
         "type": "lobby.room.snapshot",
         "payload": {
             "room_public_id": snapshot.room_public_id,
+            "name": snapshot.name,
+            "game_type": snapshot.game_type,
+            "status": snapshot.status,
+            "max_players": snapshot.max_players,
+            "member_count": snapshot.member_count,
+            "rule_config": snapshot.rule_config,
             "owner_user_public_id": snapshot.owner_user_public_id,
             "members": [
                 {

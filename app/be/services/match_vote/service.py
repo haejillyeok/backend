@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import datetime
 from uuid import UUID
 
@@ -79,6 +80,21 @@ class MatchVoteService(
                     score_delta=-5,
                     now=now,
                 )
+
+        breakdown_items_by_participant = await self.repository.list_score_breakdown_items(
+            game_session.id
+        )
+        result_records = [
+            replace(
+                result,
+                score_breakdown=self.result_policy.build_score_breakdown(
+                    breakdown_items_by_participant.get(
+                        participants_by_seat[result.seat_number].id, []
+                    )
+                ),
+            )
+            for result in result_records
+        ]
 
         for result in result_records:
             await self.repository.create_session_result(

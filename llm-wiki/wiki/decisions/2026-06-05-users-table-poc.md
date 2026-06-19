@@ -1,7 +1,7 @@
 ---
 title: PoC Users Table
 type: decision
-updated: 2026-06-09
+updated: 2026-06-19
 audience: ai
 ---
 
@@ -28,7 +28,7 @@ PoC 게임 이용자는 `users` table로 관리한다. 계정 ID와 비밀번호
 
 - 계정 ID는 영어 문자, 숫자, `_`만 허용하고 3~20자만 허용한다.
 - 닉네임은 한글, 영어, 숫자, `_`만 허용하고 3~20자만 허용한다.
-- 비밀번호는 한글, 영어, 숫자, 특수자 입력이 가능하고 8~20자만 허용한다.
+- 비밀번호는 공백 없는 ASCII 문자, 숫자, 특수자 입력이 가능하고 6~20자만 허용한다.
 - PostgreSQL column은 `varchar(15)`가 아니라 `text`를 사용하고, 길이 제한은 코드 단에서 검증한다.
 - 비밀번호는 평문이나 단순 `salt + sha256`으로 저장하지 않는다.
 - 표준 라이브러리의 PBKDF2-HMAC-SHA256을 사용하고, 저장 문자열에 algorithm, iteration, salt, digest를 포함한다.

@@ -44,6 +44,12 @@ class GameRoomLobbyUseCaseMixin:
             room_public_id=room.public_id,
             snapshot=RoomLobbySnapshotResult(
                 room_public_id=room.public_id,
+                name=room.name,
+                game_type=room.game_type,
+                status=room.status,
+                max_players=room.max_players,
+                member_count=len(members),
+                rule_config=room.rule_config,
                 owner_user_public_id=owner.user_public_id if owner else None,
                 members=[
                     RoomLobbyMemberSnapshot(

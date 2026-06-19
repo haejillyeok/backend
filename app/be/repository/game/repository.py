@@ -151,6 +151,50 @@ class GameRepository:
         await self.db_session.flush()
         return self._room_to_record(room)
 
+    @traced_method("GameRepository.get_oldest_joinable_waiting_room_for_update", layer="repository")
+    async def get_oldest_joinable_waiting_room_for_update(
+        self,
+        *,
+        user_id: UUID,
+    ) -> GameRoomRecord | None:
+        """빠른입장 후보 room 하나를 잠그고 조회합니다.
+
+        집계 query에 직접 row lock을 걸 수 없으므로 active member 수와 현재 유저 membership 여부는
+        correlated subquery로 판단하고, 최종 room row만 `FOR UPDATE SKIP LOCKED`로 잠급니다.
+        """
+        active_member_count = (
+            select(func.count(RoomMember.id))
+            .where(RoomMember.room_id == Room.id, RoomMember.left_at.is_(None))
+            .correlate(Room)
+            .scalar_subquery()
+        )
+        current_user_member_exists = (
+            select(RoomMember.id)
+            .where(
+                RoomMember.room_id == Room.id,
+                RoomMember.user_id == user_id,
+                RoomMember.left_at.is_(None),
+            )
+            .exists()
+        )
+        statement = (
+            select(Room)
+            .where(
+                Room.status == RoomStatus.WAITING.value,
+                Room.closed_at.is_(None),
+                active_member_count < Room.max_players,
+                ~current_user_member_exists,
+            )
+            .order_by(Room.created_at.asc())
+            .limit(1)
+            .with_for_update(skip_locked=True)
+        )
+        result = await self.db_session.execute(statement)
+        room = result.scalar_one_or_none()
+        if room is None:
+            return None
+        return self._room_to_record(room)
+
     @traced_method("GameRepository.get_room_by_public_id", layer="repository")
     async def get_room_by_public_id(self, room_public_id: UUID) -> GameRoomRecord | None:
         """WebSocket 로비 연결 권한 확인용으로 room을 lock 없이 조회합니다."""

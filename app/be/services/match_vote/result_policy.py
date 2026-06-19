@@ -1,7 +1,14 @@
 from uuid import UUID
 
 from app.be.models.game import SessionParticipant, Vote
-from app.be.services.match_vote.records import MatchResultParticipantPayload
+from app.be.services.match_vote.records import (
+    MatchResultParticipantPayload,
+    ScoreBreakdownItem,
+    ScoreBreakdownPayload,
+)
+
+
+VOTE_SCORE_REASONS = {"vote_correct", "vote_wrong", "voted_as_ai"}
 
 
 class MatchVoteResultPolicy:
@@ -47,6 +54,25 @@ class MatchVoteResultPolicy:
                 previous_score = score
             ranks[participant_id] = previous_rank
         return ranks
+
+    def build_score_breakdown(self, items: list[ScoreBreakdownItem]) -> ScoreBreakdownPayload:
+        """점수 원장 사유를 frontend 설명용 범주별 점수로 묶습니다."""
+        word_score = 0
+        vote_score = 0
+        penalty_score = 0
+        for item in items:
+            if item.reason in VOTE_SCORE_REASONS:
+                vote_score += item.score_delta
+            elif item.score_delta < 0:
+                penalty_score += item.score_delta
+            else:
+                word_score += item.score_delta
+        return ScoreBreakdownPayload(
+            word_score=word_score,
+            vote_score=vote_score,
+            penalty_score=penalty_score,
+            items=items,
+        )
 
     def _vote_deltas_by_participant(
         self,

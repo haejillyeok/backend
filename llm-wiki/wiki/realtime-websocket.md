@@ -1,7 +1,7 @@
 ---
 title: Realtime WebSocket
 type: api-contract
-updated: 2026-06-14
+updated: 2026-06-19
 audience: ai
 ---
 
@@ -98,10 +98,11 @@ message direction, endpoint별 message contract, error/close code를 분리해 �
 path의 `room_public_id`와 user_id로 활성 `game.room_members` 존재 여부를 확인한다. 인증 실패, 객실
 없음, 활성 멤버 아님은 `1008` close code로 닫는다. 성공하면 `lobby.room.connected` event로
 `room_public_id`와 현재 유저 identity를 보내고, 이어서 `lobby.room.snapshot` event로 현재 활성
-room member 목록을 `joined_at` 오름차순으로 보낸다. Snapshot member에는 `user_public_id`, `nickname`,
-`is_owner`, `joined_at`을 담고, payload root에는 현재 `owner_user_public_id`를 둔다. 클라이언트는
-방 화면 진입/재접속 시 snapshot으로 멤버 목록을 초기화하고 이후 `lobby.room.joined`,
-`lobby.room.left` event로 변경분을 반영한다.
+room member 목록을 `joined_at` 오름차순으로 보낸다. Snapshot root에는 `room_public_id`, `name`,
+`game_type`, `status`, `max_players`, `member_count`, `rule_config`, `owner_user_public_id`를 담고,
+member에는 `user_public_id`, `nickname`, `is_owner`, `joined_at`을 담는다. 클라이언트는 방 화면
+진입/재접속 시 별도 REST fetch 없이 snapshot만으로 대기방 화면을 초기화하고 이후 `lobby.room.joined`,
+`lobby.room.left`, `lobby.room.updated` event로 변경분을 반영한다.
 
 지원하는 client message type은 `ping` 하나이며, 같은 payload를 `lobby.pong`으로 반환한다. 별도
 `lobby.subscribe_room`/`lobby.unsubscribe_room` 메시지는 사용하지 않는다. path의 room public_id가
@@ -203,12 +204,17 @@ seat number를 target participant로 해석한다. 투표 저장 후 `match.vote
 투표하면 Backend가 투표 점수와 최종 순위를 저장하고 `match.result.published`를 broadcast한다. 결과
 event에서만 `revealed_participant_type`으로 `user`/`ai`를 공개한다. 투표 접수, 투표 timeout, 결과 공개
 event도 모두 `server_time`을 포함한다. 미투표자는 투표 점수 0점으로 남긴다.
+`match.result.published.payload.results[]`는 `participant.display_name`, `participant.seat_number`,
+`participant.revealed_participant_type`, `final_score`, `rank`, `is_winner`, `vote_score_delta`,
+`score_breakdown`을 담는다. `score_breakdown`은 `word_score`, `vote_score`, `penalty_score`, `items[]`로
+구성하며, `items[]`에는 `score_ledger`의 `reason`, `score_delta`를 담아 최종 점수를 설명할 수 있게 한다.
+Frontend는 `is_winner`로 우승 배너를 만들고 `participant.revealed_participant_type == "ai"`로 AI 공개 표시를 한다.
 deadline 이후 도착한 `vote.submit`은 저장하지 않고 WebSocket 연결 오류도 내지 않으며, 같은 timeout 확정
 경로로 `match.vote.timeout`과 `match.result.published`를 broadcast한다.
 여러 `/ws/match` 연결의 timer가 같은 voting deadline을 감지할 수 있으므로, 이미 `result` 상태가 된 세션의
 stale vote timeout 시도는 추가 event 없이 무시한다.
 결과 확정 이후 재접속한 client를 위해 `match.snapshot`은 `results` 배열에 `session_results` 기반 최종 점수,
-순위, 우승 여부, 공개 participant type, vote score delta, `is_me`를 포함한다.
+순위, 우승 여부, 공개 participant type, vote score delta, `score_breakdown`, `is_me`를 포함한다.
 
 ## Design Notes
 

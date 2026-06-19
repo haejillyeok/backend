@@ -9,6 +9,7 @@ from app.be.models.user import User
 from app.be.models.user_session import UserSession
 from app.be.repository.auth import AuthRepository
 from app.be.repository.game import GameRepository, waiting_membership_lock_key
+from app.be.repository.match_vote import MatchVoteRepository
 from app.be.services.game import GameSessionParticipantRecord
 
 KST = ZoneInfo("Asia/Seoul")
@@ -262,6 +263,26 @@ async def test_game_repository_locks_waiting_room_membership_by_user() -> None:
     compiled_sql = str(statement.compile(compile_kwargs={"literal_binds": True}))
     assert "pg_advisory_xact_lock" in compiled_sql
     assert str(waiting_membership_lock_key(user_id)) in compiled_sql
+
+
+async def test_match_vote_repository_lists_score_breakdown_items() -> None:
+    session_id = uuid4()
+    participant_id = uuid4()
+    rows = [
+        (participant_id, "word_accepted", 10),
+        (participant_id, "vote_correct", 10),
+    ]
+    db_session = FakeDbSession([FakeResult(rows=rows)])
+    repository = MatchVoteRepository(db_session)
+
+    result = await repository.list_score_breakdown_items(session_id)
+
+    statement = db_session.executed_statements[0]
+    compiled_sql = str(statement.compile(compile_kwargs={"literal_binds": True}))
+    assert result[participant_id][0].reason == "word_accepted"
+    assert result[participant_id][0].score_delta == 10
+    assert result[participant_id][1].reason == "vote_correct"
+    assert "score_ledger.session_id" in compiled_sql
 
 
 async def test_game_repository_creates_waiting_room_record() -> None:

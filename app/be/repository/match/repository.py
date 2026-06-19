@@ -14,6 +14,8 @@ from app.be.models.game import (
     WordTurn,
 )
 from app.be.services.match.snapshots import MatchResultSnapshot, MatchTurnSnapshot
+from app.be.services.match_vote import ScoreBreakdownItem
+from app.be.services.match_vote.result_policy import MatchVoteResultPolicy
 
 
 class MatchRepository:
@@ -114,12 +116,14 @@ class MatchRepository:
         participant_id: UUID,
     ) -> list[MatchResultSnapshot]:
         """참가자별 최종 결과 snapshot row를 seat 순서로 조회합니다."""
+        score_breakdown_items = await self._list_score_breakdown_items(game_session_id)
         result = await self.db_session.execute(
             select(SessionResult, SessionParticipant)
             .join(SessionParticipant, SessionParticipant.id == SessionResult.participant_id)
             .where(SessionResult.session_id == game_session_id)
             .order_by(SessionParticipant.seat_number.asc())
         )
+        result_policy = MatchVoteResultPolicy()
         return [
             MatchResultSnapshot(
                 display_name=participant.display_name,
@@ -130,6 +134,26 @@ class MatchRepository:
                 is_winner=session_result.is_winner,
                 vote_score_delta=int(session_result.result_payload.get("vote_score_delta", 0)),
                 is_me=participant.id == participant_id,
+                score_breakdown=result_policy.build_score_breakdown(
+                    score_breakdown_items.get(participant.id, [])
+                ),
             )
             for session_result, participant in result.all()
         ]
+
+    async def _list_score_breakdown_items(
+        self,
+        game_session_id: UUID,
+    ) -> dict[UUID, list[ScoreBreakdownItem]]:
+        """결과 재접속 snapshot용 점수 원장 항목을 참가자별로 조회합니다."""
+        result = await self.db_session.execute(
+            select(ScoreLedger.participant_id, ScoreLedger.reason, ScoreLedger.score_delta)
+            .where(ScoreLedger.session_id == game_session_id)
+            .order_by(ScoreLedger.participant_id.asc(), ScoreLedger.created_at.asc())
+        )
+        breakdown_by_participant_id: dict[UUID, list[ScoreBreakdownItem]] = {}
+        for row_participant_id, reason, score_delta in result.all():
+            breakdown_by_participant_id.setdefault(row_participant_id, []).append(
+                ScoreBreakdownItem(reason=reason, score_delta=int(score_delta))
+            )
+        return breakdown_by_participant_id

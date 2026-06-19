@@ -38,6 +38,13 @@ class GameRepositoryProtocol(Protocol):
     ) -> GameRoomRecord:
         """대기 상태 room을 생성하고 service record로 변환합니다."""
 
+    async def get_oldest_joinable_waiting_room_for_update(
+        self,
+        *,
+        user_id: UUID,
+    ) -> GameRoomRecord | None:
+        """빠른입장 대상이 될 가장 오래된 참여 가능 대기 room을 잠그고 조회합니다."""
+
     async def get_room_by_public_id(self, room_public_id: UUID) -> GameRoomRecord | None:
         """WebSocket 로비 연결 권한 확인용으로 room을 lock 없이 조회합니다."""
 

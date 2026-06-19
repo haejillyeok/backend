@@ -116,14 +116,22 @@ Payload:
 
 발생 시점: `lobby.room.connected` 전송 직후
 
-목적: 방 화면 진입 또는 재접속 시 현재 활성 멤버 리스트를 초기화합니다. 이후 변경분은
-`lobby.room.joined`, `lobby.room.left` 이벤트로 반영합니다.
+목적: 방 화면 진입 또는 재접속 시 객실 설정과 현재 활성 멤버 리스트를 초기화합니다. 클라이언트는
+별도 REST fetch 없이 이 snapshot만으로 대기방 화면을 복구하고, 이후 변경분은 `lobby.room.joined`,
+`lobby.room.left`, `lobby.room.updated` 이벤트로 반영합니다.
 
 Payload:
 
 | 필드 | 타입 | 설명 |
 | --- | --- | --- |
 | `room_public_id` | uuid | snapshot 대상 객실 public ID |
+| `name` | string | 객실 이름 |
+| `game_type` | string | 게임 종류 |
+| `status` | string | 객실 상태 |
+| `max_players` | number | AI를 제외한 실제 유저 최대 인원 |
+| `member_count` | number | 현재 활성 room member 수 |
+| `rule_config.max_rounds` | number | 끝말잇기 판 수 |
+| `rule_config.turn_time_seconds` | number | 기본 턴 제한 시간 |
 | `owner_user_public_id` | uuid 또는 null | 현재 방장 public ID |
 | `members` | array | 활성 room member 목록. `joined_at` 오름차순 |
 | `members[].user_public_id` | uuid | 멤버 유저 public ID |
@@ -138,6 +146,15 @@ Payload:
   "type": "lobby.room.snapshot",
   "payload": {
     "room_public_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7e",
+    "name": "첫 객실",
+    "game_type": "word_chain",
+    "status": "waiting",
+    "max_players": 4,
+    "member_count": 2,
+    "rule_config": {
+      "max_rounds": 8,
+      "turn_time_seconds": 10
+    },
     "owner_user_public_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7f",
     "members": [
       {
@@ -386,6 +403,12 @@ Payload 주요 필드:
 | `results[].rank` | number | 동점 공동 등수를 반영한 순위 |
 | `results[].is_winner` | boolean | 최종 공동/단독 우승 여부 |
 | `results[].vote_score_delta` | number | 투표로 발생한 점수 변화 |
+| `results[].score_breakdown.word_score` | number | 단어 제출 성공 등 단어 게임에서 발생한 점수 합계 |
+| `results[].score_breakdown.vote_score` | number | AI 지목 투표에서 발생한 점수 합계 |
+| `results[].score_breakdown.penalty_score` | number | 단어 게임/투표 외 penalty성 점수 합계 |
+| `results[].score_breakdown.items[]` | array | `score_ledger` 사유별 점수 변화 목록 |
+| `results[].score_breakdown.items[].reason` | string | 점수 변화 사유. 예: `word_accepted`, `vote_correct`, `vote_wrong`, `voted_as_ai` |
+| `results[].score_breakdown.items[].score_delta` | number | 해당 사유로 발생한 점수 변화 |
 | `results[].is_me` | boolean | 현재 연결 참가자 여부 |
 
 ### 요청(Request): `ping`
@@ -620,8 +643,68 @@ Payload:
 | `results[].rank` | number | 동점 공동 등수를 반영한 순위 |
 | `results[].is_winner` | boolean | 최종 공동/단독 우승 여부 |
 | `results[].vote_score_delta` | number | 투표로 발생한 점수 변화 |
+| `results[].score_breakdown.word_score` | number | 단어 제출 성공 등 단어 게임에서 발생한 점수 합계 |
+| `results[].score_breakdown.vote_score` | number | AI 지목 투표에서 발생한 점수 합계 |
+| `results[].score_breakdown.penalty_score` | number | 단어 게임/투표 외 penalty성 점수 합계 |
+| `results[].score_breakdown.items[]` | array | `score_ledger` 사유별 점수 변화 목록 |
+| `results[].score_breakdown.items[].reason` | string | 점수 변화 사유. 예: `word_accepted`, `vote_correct`, `vote_wrong`, `voted_as_ai` |
+| `results[].score_breakdown.items[].score_delta` | number | 해당 사유로 발생한 점수 변화 |
 | `created_at` | datetime | 서버가 결과를 확정한 시각 |
 | `server_time` | datetime | 이 이벤트를 만든 서버 기준 현재 시각 |
+
+예시:
+
+```json
+{
+  "type": "match.result.published",
+  "payload": {
+    "event_sequence": 8,
+    "results": [
+      {
+        "participant": {
+          "display_name": "1번 손님",
+          "seat_number": 1,
+          "revealed_participant_type": "user"
+        },
+        "final_score": 20,
+        "rank": 1,
+        "is_winner": true,
+        "vote_score_delta": 10,
+        "score_breakdown": {
+          "word_score": 10,
+          "vote_score": 10,
+          "penalty_score": 0,
+          "items": [
+            {"reason": "word_accepted", "score_delta": 10},
+            {"reason": "vote_correct", "score_delta": 10}
+          ]
+        }
+      },
+      {
+        "participant": {
+          "display_name": "2번 손님",
+          "seat_number": 2,
+          "revealed_participant_type": "ai"
+        },
+        "final_score": -5,
+        "rank": 2,
+        "is_winner": false,
+        "vote_score_delta": -5,
+        "score_breakdown": {
+          "word_score": 0,
+          "vote_score": -5,
+          "penalty_score": 0,
+          "items": [
+            {"reason": "voted_as_ai", "score_delta": -5}
+          ]
+        }
+      }
+    ],
+    "created_at": "2026-06-19T13:15:53+09:00",
+    "server_time": "2026-06-19T13:15:53+09:00"
+  }
+}
+```
 
 ## Realtime WebSocket
 

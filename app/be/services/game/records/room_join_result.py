@@ -10,3 +10,4 @@ class RoomJoinResult:
     nickname: str
     joined_at: datetime
     already_member: bool
+    created_room: bool = False

@@ -13,7 +13,7 @@ from app.be.models.game import (
     SessionResult,
     Vote,
 )
-from app.be.services.match_vote.records import MatchResultParticipantPayload
+from app.be.services.match_vote.records import MatchResultParticipantPayload, ScoreBreakdownItem
 
 
 class MatchVoteRepositoryProtocol(Protocol):
@@ -55,6 +55,11 @@ class MatchVoteRepositoryProtocol(Protocol):
 
     async def get_score_totals(self, session_id: UUID) -> dict[UUID, int]:
         """참가자별 누적 점수를 조회합니다."""
+
+    async def list_score_breakdown_items(
+        self, session_id: UUID
+    ) -> dict[UUID, list[ScoreBreakdownItem]]:
+        """참가자별 점수 원장 breakdown 항목을 조회합니다."""
 
     async def get_next_action_number(self, session_id: UUID) -> int:
         """다음 participant action 번호를 조회합니다."""

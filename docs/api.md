@@ -112,7 +112,7 @@ Response:
 계정 ID와 닉네임은 타 유저와 중복될 수 없습니다.
 
 - 계정 ID: 영어 문자, 숫자, `_`만 허용, 3~20자
-- 비밀번호: 한글, 영어, 숫자, 특수자 입력 가능, 8~20자
+- 비밀번호: 공백 없는 ASCII 문자, 숫자, 특수자 입력 가능, 6~20자
 - 닉네임: 한글, 영어, 숫자, `_`만 허용, 3~20자
 
 ### POST `/api/v1/auth/login`
@@ -222,6 +222,11 @@ Swagger에는 게임 API의 닫힌 문자열 값을 enum으로 노출합니다.
 `room_members.left_at`을 기록해 퇴장 처리합니다. 퇴장 확정 후 같은 방 연결에는 `lobby.room.left`
 event를 broadcast합니다.
 
+`/ws/lobby/rooms/{room_public_id}` 연결 성공 직후 서버는 `lobby.room.snapshot`으로 객실 이름, 게임 종류,
+상태, 최대 인원, 활성 멤버 수, `rule_config`, 방장 public ID, 활성 멤버 목록을 함께 보냅니다. 클라이언트는
+방 화면 진입이나 재접속 복구 시 이 snapshot만으로 대기방 화면을 초기화하고, 이후 입장/퇴장/설정 변경은
+`lobby.room.joined`, `lobby.room.left`, `lobby.room.updated` 이벤트로 반영합니다.
+
 이후 `/ws/lobby/rooms/{room_public_id}`를 붙일 때는 게임 시작 API handler가 DB commit 이후
 lobby connection manager를 호출해 이미 열려 있는 room 연결에 `game.started` event를 broadcast합니다.
 API가 WebSocket 연결 객체를 클라이언트에 전달하는 것이 아니라, 서버 process 안의 connection registry에서
@@ -322,6 +327,40 @@ Response:
 | `401` / `SESSION_EXPIRED` | 로그인 세션 없음, 만료, 폐기 |
 | `422` / `VALIDATION_ERROR` | 요청 body validation 실패 |
 
+### POST `/api/v1/game/rooms/quick-join`
+
+로그인 유저를 빠르게 로비 객실에 입장시킵니다. 서버는 현재 유저가 활성 멤버가 아닌 객실 중
+`waiting` 상태이고 활성 멤버 수가 `max_players`보다 작은 가장 오래된 객실을 선택해 row lock을 잡고
+참여시킵니다. 참여 가능한 객실이 없으면 기본 `word_chain`, `max_players=4`, 기본 room rule 설정으로
+새 대기 객실을 만들고 현재 유저를 방장 겸 첫 멤버로 등록합니다.
+
+기존 active membership 정리 규칙은 직접 객실 생성/입장 API와 같습니다. 기존 객실에 새 멤버로 추가된
+경우 서버는 해당 room의 `/ws/lobby/rooms/{room_public_id}` 연결에 `lobby.room.joined` event를
+broadcast합니다. 새 객실을 만든 경우에는 기존 room 구독자가 없으므로 room event를 보내지 않습니다.
+
+Response:
+
+```json
+{
+  "success": true,
+  "data": {
+    "room_public_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7e",
+    "user_public_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7f",
+    "nickname": "초보자",
+    "joined_at": "2026-06-12T00:00:00+09:00",
+    "already_member": false,
+    "created_room": false,
+    "lobby_websocket_path": "/ws/lobby/rooms/018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7e"
+  }
+}
+```
+
+| Status | Meaning |
+| --- | --- |
+| `200` | 기존 객실 참여 또는 새 객실 생성 후 참여 성공 |
+| `401` / `SESSION_EXPIRED` | 로그인 세션 없음, 만료, 폐기 |
+| `409` / `GAME_ROOM_NOT_JOINABLE` | 선택된 객실이 더 이상 참여 가능하지 않음 |
+
 ### PATCH `/api/v1/game/rooms/{room_public_id}`
 
 방장이 대기 중인 객실의 이름, 최대 실제 유저 수, 게임 시작 전 룰 설정을 수정합니다. 이 API는
@@ -392,7 +431,9 @@ Response:
     "user_public_id": "018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7f",
     "nickname": "초보자",
     "joined_at": "2026-06-12T00:00:00+09:00",
-    "already_member": false
+    "already_member": false,
+    "created_room": false,
+    "lobby_websocket_path": "/ws/lobby/rooms/018fd0c5-6e1a-7c8e-9b1d-4f99e4a20b7e"
   }
 }
 ```

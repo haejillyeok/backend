@@ -22,7 +22,8 @@ from app.be.repository.match_vote.constants import (
     VOTE_TIMEOUT_EVENT_TYPE,
 )
 from app.be.schemas.game_enum import GameSessionStatus, RoomStatus
-from app.be.services.match_vote.records import MatchResultParticipantPayload
+from app.be.services.match_vote.records import MatchResultParticipantPayload, ScoreBreakdownItem
+from app.be.services.match_vote.result_events import score_breakdown_to_payload
 from app.shared.core.identifiers import generate_uuid_v7
 
 
@@ -114,6 +115,22 @@ class MatchVoteRepository:
             .group_by(ScoreLedger.participant_id)
         )
         return {participant_id: int(score or 0) for participant_id, score in result.all()}
+
+    async def list_score_breakdown_items(
+        self, session_id: UUID
+    ) -> dict[UUID, list[ScoreBreakdownItem]]:
+        """결과 설명에 사용할 참가자별 점수 원장 항목을 조회합니다."""
+        result = await self.db_session.execute(
+            select(ScoreLedger.participant_id, ScoreLedger.reason, ScoreLedger.score_delta)
+            .where(ScoreLedger.session_id == session_id)
+            .order_by(ScoreLedger.participant_id.asc(), ScoreLedger.created_at.asc())
+        )
+        breakdown_by_participant_id: dict[UUID, list[ScoreBreakdownItem]] = {}
+        for participant_id, reason, score_delta in result.all():
+            breakdown_by_participant_id.setdefault(participant_id, []).append(
+                ScoreBreakdownItem(reason=reason, score_delta=int(score_delta))
+            )
+        return breakdown_by_participant_id
 
     async def get_next_action_number(self, session_id: UUID) -> int:
         """다음 participant action 번호를 조회합니다."""
@@ -331,6 +348,7 @@ class MatchVoteRepository:
                         "rank": result.rank,
                         "is_winner": result.is_winner,
                         "vote_score_delta": result.vote_score_delta,
+                        "score_breakdown": score_breakdown_to_payload(result.score_breakdown),
                     }
                     for result in results
                 ]

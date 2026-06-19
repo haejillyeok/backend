@@ -85,6 +85,7 @@ class FakeGameRepository(GameRepositoryProtocol):
         active_session: object | None = None,
         active_room_public_ids: list[object] | None = None,
         active_waiting_room_public_ids: list[object] | None = None,
+        quick_joinable_room: GameRoomRecord | None = None,
     ) -> None:
         room_records = rooms or ([room] if room is not None else [])
         self.rooms_by_public_id = {record.public_id: record for record in room_records}
@@ -92,6 +93,7 @@ class FakeGameRepository(GameRepositoryProtocol):
         self.members = members or []
         self.participant = participant
         self.active_session = active_session
+        self.quick_joinable_room = quick_joinable_room
         self.active_room_public_ids = active_room_public_ids or []
         self.active_waiting_room_public_ids = active_waiting_room_public_ids or []
         self.created_sessions: list[dict[str, object]] = []
@@ -166,6 +168,10 @@ class FakeGameRepository(GameRepositoryProtocol):
     async def get_room_by_public_id_for_update(self, room_public_id):
         self.locked_room_public_ids.append(room_public_id)
         return self.rooms_by_public_id.get(room_public_id)
+
+    async def get_oldest_joinable_waiting_room_for_update(self, *, user_id):
+        _ = user_id
+        return self.quick_joinable_room
 
     async def get_active_game_session_for_room(self, room_id):
         room = self._room_for_room_id(room_id)
@@ -563,6 +569,112 @@ def test_game_service_joins_waiting_room_and_persists_membership():
     assert result.user_public_id == user.public_id
     assert result.nickname == "초보자"
     assert result.already_member is False
+    assert repository.created_members[0].user_id == user.id
+    assert repository.committed is True
+
+
+def test_room_lobby_connection_snapshot_includes_room_settings():
+    user = CurrentUser(
+        id=uuid4(),
+        public_id=uuid4(),
+        account_id="player_001",
+        nickname="방장",
+    )
+    room_id = uuid4()
+    room_public_id = uuid4()
+    repository = FakeGameRepository(
+        room=GameRoomRecord(
+            id=room_id,
+            public_id=room_public_id,
+            owner_user_id=user.id,
+            name="달빛 객실",
+            game_type="word_chain",
+            status="waiting",
+            max_players=4,
+            rule_config={"max_rounds": 8, "turn_time_seconds": 10},
+        ),
+        members=[
+            RoomMemberRecord(
+                room_id=room_id,
+                user_id=user.id,
+                user_public_id=user.public_id,
+                nickname=user.nickname,
+                joined_at=datetime.now(KST),
+            )
+        ],
+    )
+    service = GameService(repository)
+
+    result = asyncio.run(
+        service.authorize_room_lobby_connection(
+            room_public_id=room_public_id,
+            user_id=user.id,
+        )
+    )
+
+    assert result.snapshot.name == "달빛 객실"
+    assert result.snapshot.game_type == "word_chain"
+    assert result.snapshot.status == "waiting"
+    assert result.snapshot.max_players == 4
+    assert result.snapshot.member_count == 1
+    assert result.snapshot.rule_config == {"max_rounds": 8, "turn_time_seconds": 10}
+
+
+def test_game_service_quick_join_uses_oldest_joinable_waiting_room():
+    user = CurrentUser(
+        id=uuid4(),
+        public_id=uuid4(),
+        account_id="player_001",
+        nickname="초보자",
+    )
+    room_id = uuid4()
+    room_public_id = uuid4()
+    repository = FakeGameRepository(
+        room=None,
+        quick_joinable_room=GameRoomRecord(
+            id=room_id,
+            public_id=room_public_id,
+            owner_user_id=uuid4(),
+            name="첫 객실",
+            game_type="word_chain",
+            status="waiting",
+            max_players=4,
+        ),
+    )
+    service = GameService(repository)
+
+    result = asyncio.run(service.quick_join_room(user=user))
+
+    assert result.room_public_id == room_public_id
+    assert result.already_member is False
+    assert result.created_room is False
+    assert repository.created_members[0].room_id == room_id
+    assert repository.created_members[0].user_id == user.id
+    assert repository.created_rooms == []
+    assert repository.committed is True
+
+
+def test_game_service_quick_join_creates_room_when_none_is_joinable():
+    user = CurrentUser(
+        id=uuid4(),
+        public_id=uuid4(),
+        account_id="player_001",
+        nickname="초보자",
+    )
+    repository = FakeGameRepository(room=None)
+    service = GameService(repository)
+
+    result = asyncio.run(service.quick_join_room(user=user))
+
+    assert result.room_public_id == repository.room.public_id
+    assert result.created_room is True
+    assert len(repository.created_rooms) == 1
+    assert repository.created_rooms[0]["owner_user_id"] == user.id
+    assert repository.created_rooms[0]["name"] == "초보자의 객실"
+    assert repository.created_rooms[0]["game_type"] == "word_chain"
+    assert repository.created_rooms[0]["status"] == "waiting"
+    assert repository.created_rooms[0]["max_players"] == 4
+    assert repository.created_members[0].room_id == repository.room.id
     assert repository.created_members[0].user_id == user.id
     assert repository.committed is True
 
@@ -1428,7 +1540,9 @@ def test_game_service_uses_random_round_start_actor_for_initial_turn():
 
     class FixedInitialTurnPolicy(SessionInitialTurnPolicy):
         def choose_round_start_participant(self, participant_rows):
-            return next(participant for participant in participant_rows if participant.seat_number == 2)
+            return next(
+                participant for participant in participant_rows if participant.seat_number == 2
+            )
 
     repository = FakeGameRepository(
         room=GameRoomRecord(
@@ -1456,8 +1570,14 @@ def test_game_service_uses_random_round_start_actor_for_initial_turn():
 
     assert result.current_turn is not None
     assert result.current_turn.actor_seat_number == 2
-    assert repository.created_phases[0].actor_participant_id == repository.created_turns[0].participant_id
-    assert repository.created_phases[0].actor_participant_id != repository.created_participants[0].participant_id
+    assert (
+        repository.created_phases[0].actor_participant_id
+        == repository.created_turns[0].participant_id
+    )
+    assert (
+        repository.created_phases[0].actor_participant_id
+        != repository.created_participants[0].participant_id
+    )
 
 
 def test_game_service_uses_injected_session_participant_policy():
