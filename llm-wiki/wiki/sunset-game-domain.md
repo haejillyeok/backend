@@ -1,7 +1,7 @@
 ---
 title: Sunset Game Domain
 type: domain-model
-updated: 2026-06-15
+updated: 2026-06-18
 audience: ai
 ---
 
@@ -110,7 +110,7 @@ Backend가 소유하는 게임 상태, WebSocket event, Agent 경계를 우선�
   - 시작 시점의 room `rule_config`를 `game_sessions.rule_config`에 snapshot으로 고정한다.
   - 끝말잇기 세션 시작 시 첫 번째 턴 phase와 `word_game.turns` row를 함께 생성하고 `game_sessions.current_phase_id`로 지정한다.
   - `game_sessions.current_phase_id`는 `session_phases.id` FK이므로 시작 transaction은 game session과 participants를 먼저 flush하고, 첫 phase와 turn을 flush한 뒤 마지막에 `current_phase_id`를 갱신한다.
-  - 첫 턴은 `round_number=1`, `turn_number=1`, actor는 `seat_number=1`이다.
+  - 첫 턴은 `round_number=1`, `turn_number=1`이며, actor는 AI 손님을 포함해 확정된 참가자 중 무작위로 고른다.
   - 각 라운드 첫 턴의 `required_start_char`는 `word_game.valid_words`의 활성 단어가 실제로 가진
     `starts_with` 중 하나를 무작위로 선택한다. 후보 단어셋이 비어 있을 때만 `null`로 시작한다.
   - 첫 턴 `started_at`은 시작 확정 시각보다 5초 뒤이고, `deadline_at`은 그 `started_at`에 `turn_time_seconds`를 더한 시각이다.
@@ -196,13 +196,16 @@ lobby
 
 - 첫 플레이어는 자유롭게 단어를 입력한다.
 - 다음 플레이어는 이전 단어의 마지막 글자로 시작하는 단어를 입력한다.
+- 시작 글자 검증은 두음법칙을 허용한다. `ㄴ`이 `ㅣ/y` 계열 중성(`ㅑ`, `ㅒ`, `ㅕ`, `ㅖ`, `ㅛ`, `ㅠ`, `ㅣ`) 앞에 오면
+  `ㅇ` 시작 단어도 인정하고, `ㄹ`은 같은 계열 앞에서는 `ㅇ`, 그 외 중성 앞에서는 `ㄴ` 시작 단어도 인정한다.
+  종성은 보존한다. 예: `녀→여`, `냬→얘`, `라→나`, `락→낙`, `력→역`, `륙→육`, `리→이`.
 - 이미 사용된 단어는 다시 사용할 수 없다.
 - 제한 시간 내 입력하지 못하면 실패 처리된다.
 - 플레이어당 기본 입력 시간은 room `rule_config.turn_time_seconds`이며 기본값은 10초다.
 - 성공한 단어 제출은 같은 Round 안의 다음 Turn으로 이어진다.
-- 단어 실패와 AI 답변 실패는 공개 판정으로 기록하되 현재 턴을 유지한다.
+- 단어 거절과 AI 답변 실패는 공개 판정으로 기록하되 현재 턴 deadline은 유지한다.
 - 제한 시간 초과는 현재 Round를 종료한다.
-- 남은 Round가 있으면 다음 Round의 첫 Turn으로 넘어가고, `rule_config.max_rounds`를 채우면 AI 지목 투표로 넘어간다.
+- 남은 Round가 있으면 다음 Round의 첫 Turn으로 넘어가고, 다음 라운드 첫 actor도 참가자 중 무작위로 고른다. `rule_config.max_rounds`를 채우면 AI 지목 투표로 넘어간다.
 - `max_rounds=8`이면 한 게임 세션에서 끝말잇기 8판을 마친 뒤 투표로 넘어간다.
 
 Cycle은 도메인 개념으로 남겨두되, 현재 Backend MVP는 Cycle row를 저장하거나 Cycle 종료마다 시간을 줄이지 않는다.
@@ -363,7 +366,8 @@ idle -> matching -> settled -> countdown -> transitioning -> playing
   같은 세션에 broadcast한다. `match.round.finished` payload에는 종료된 `round_number`, 원인 참가자,
   `next_turn` 또는 `next_status`/`voting_deadline_at`, `created_at`, `server_time`을 포함해 클라이언트가
   큰 전환 UI를 분명히 표시할 수 있게 한다.
-- 남은 판이 있어 다음 라운드 첫 턴이 생성되면 첫 턴의 `started_at`과 `deadline_at`을 라운드 종료 확정
+- 남은 판이 있어 다음 라운드 첫 턴이 생성되면 첫 actor는 AI 손님을 포함한 참가자 중 무작위로 고르고,
+  첫 턴의 `started_at`과 `deadline_at`을 라운드 종료 확정
   시각보다 5초 뒤로 민다. `match.round.finished` 뒤에는 5초 텀을 둔 다음 `match.round.started`를
   broadcast한다. `match.round.started`에는 시작된 `round_number`와 `current_turn`을 담고, 투표로 넘어가는
   마지막 라운드에서는 보내지 않는다. 다음 라운드 첫 턴의 `required_start_char`도 활성 유효 단어셋의
@@ -373,7 +377,11 @@ idle -> matching -> settled -> countdown -> transitioning -> playing
 - AI answer 요청은 Backend가 현재 GameSession 상태를 검증한 뒤 Agent에 보낸다.
 - Agent answer 요청에는 현재 라운드의 `used_words`와 현재 턴의 `required_start_char`를
   `last_char`, `condition.last_char`로 함께 보낸다.
-- Agent가 `no_candidate`를 반환하고 제출 단어가 없으면 Backend가 AI 손님의 실패/대체 정책을 결정한다.
+- Agent가 Backend DB/Qdrant에서 끝말잇기 정답 후보를 찾을 때도 두음법칙 허용 시작 글자를 함께 조회한다.
+  예를 들어 `required_start_char=라`이면 `start_word in [라, 나]` 후보를 답으로 고를 수 있다.
+- Agent가 `no_candidate`를 반환하고 제출 단어가 없으면 Backend는 내부 `null`을 공개 payload의 빈 문자열
+  `word=""`, `normalized_word=""`로 변환해 먼저 `payload.result=failed`를 broadcast한다. 그 뒤 짧은 지연 후
+  같은 AI phase에 Agent answer API를 다시 요청할 수 있다.
 - Agent가 `no_candidate` 상태라도 제출 단어를 함께 반환했다면 Backend는 일반 참가자 단어 제출처럼
   `word_reject` 경로로 처리한다.
 - Agent API timeout, 네트워크 오류, 4xx/5xx, invalid payload처럼 답변이 돌아오지 않는 경우도 Backend가
@@ -390,7 +398,8 @@ idle -> matching -> settled -> countdown -> transitioning -> playing
 - 단어가 없는 AI 실패는 현재 phase를 종료하거나 다음 턴/투표로 전환하지 않는다. 현재 턴은 deadline까지 유지하고,
   실제 턴 종료와 다음 판/투표 전환은 `turn_timeout` 확정 경로만 담당한다.
 - 단어가 없는 AI 실패 뒤에도 `/ws/match` loop는 같은 AI phase deadline timer를 유지한다. deadline 전까지 같은
-  phase가 다시 감지되면 Agent answer API를 재호출할 수 있고, deadline이 지나면 timeout 경로로 확정한다.
+  phase가 다시 감지되거나 빈 답변 retry가 예약되면 Agent answer API를 재호출할 수 있고, deadline이 지나면
+  timeout 경로로 확정한다.
 - Agent 호출 대기 중 서버 timeout 등으로 phase가 이미 종료된 경우, 뒤늦게 도착한 AI 성공/실패는 추가 event 없이
   무시한다.
 - AI 성공 답변이 도착했더라도 서버 deadline이 이미 지났으면 단어 제출로 저장하지 않고 `turn_timeout`으로

@@ -285,7 +285,7 @@ async def test_match_ai_turn_service_records_failure_when_agent_has_no_candidate
             "phase_id": phase_id,
             "participant_id": participant_id,
             "reason": "no_candidate",
-            "details": {"agent_reason": "no_available_word"},
+            "details": {"agent_reason": "no_available_word", "agent_answer": ""},
         }
     ]
     assert event is not None

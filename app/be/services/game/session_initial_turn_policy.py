@@ -1,6 +1,9 @@
+import random
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import Sequence
 
+from app.be.models.game import SessionParticipant
 from app.be.services.game.records import INITIAL_TURN_START_DELAY_SECONDS
 from app.shared.core.timezone import kst_now
 
@@ -21,6 +24,18 @@ class InitialWordTurnDraft:
 
 class SessionInitialTurnPolicy:
     """게임 세션 시작 시 필요한 첫 턴 정책을 DB 의존 없이 계산합니다."""
+
+    def __init__(self, random_source: random.Random | None = None) -> None:
+        self._random = random_source or random.SystemRandom()
+
+    def choose_round_start_participant(
+        self,
+        participant_rows: Sequence[SessionParticipant],
+    ) -> SessionParticipant:
+        """라운드 시작 actor를 참가자 확정 이후 무작위로 선택합니다."""
+        if not participant_rows:
+            raise ValueError("participant_rows must not be empty")
+        return self._random.choice(list(participant_rows))
 
     def build_word_chain_initial_turn(
         self,

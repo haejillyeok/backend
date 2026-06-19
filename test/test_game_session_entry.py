@@ -23,6 +23,7 @@ from app.be.services.game import (
     GameSessionEntryForbiddenError,
     GameSessionParticipantRecord,
     GameSessionStartResult,
+    SessionInitialTurnPolicy,
     RoomCreateResult,
     RoomLeaveResult,
     RoomMemberRecord,
@@ -1418,6 +1419,45 @@ def test_game_service_starts_session_for_room_owner_and_freezes_allowed_members(
     }
     assert repository.locked_room_public_ids == [room_public_id]
     assert repository.committed is True
+
+
+def test_game_service_uses_random_round_start_actor_for_initial_turn():
+    owner_id = uuid4()
+    room_id = uuid4()
+    room_public_id = uuid4()
+
+    class FixedInitialTurnPolicy(SessionInitialTurnPolicy):
+        def choose_round_start_participant(self, participant_rows):
+            return next(participant for participant in participant_rows if participant.seat_number == 2)
+
+    repository = FakeGameRepository(
+        room=GameRoomRecord(
+            id=room_id,
+            public_id=room_public_id,
+            owner_user_id=owner_id,
+            name="첫 객실",
+            game_type="word_chain",
+            status="waiting",
+            max_players=4,
+            rule_config={"max_rounds": 8, "turn_time_seconds": 10},
+        ),
+        members=[
+            RoomMemberRecord(
+                room_id=room_id,
+                user_id=owner_id,
+                nickname="방장",
+                joined_at=datetime(2026, 6, 11, tzinfo=KST),
+            )
+        ],
+    )
+    service = GameService(repository, initial_turn_policy=FixedInitialTurnPolicy())
+
+    result = asyncio.run(service.start_session(room_public_id=room_public_id, user_id=owner_id))
+
+    assert result.current_turn is not None
+    assert result.current_turn.actor_seat_number == 2
+    assert repository.created_phases[0].actor_participant_id == repository.created_turns[0].participant_id
+    assert repository.created_phases[0].actor_participant_id != repository.created_participants[0].participant_id
 
 
 def test_game_service_uses_injected_session_participant_policy():

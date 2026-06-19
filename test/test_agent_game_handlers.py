@@ -30,6 +30,32 @@ def test_word_chain_filter_uses_fallback_and_excludes_used_words() -> None:
     assert query_filter.must_not[0].match.any == ["줄넘기"]
 
 
+def test_word_chain_filter_includes_dueum_start_word_candidates() -> None:
+    request = AgentAnswerRequest(
+        room_id="room-1",
+        game_type="word_chain",
+        used_words=[],
+        last_char="륙",
+    )
+    query_filter = WordChainHandler().build_filter(request, set())
+
+    assert query_filter.must[0].key == "start_word"
+    assert query_filter.must[0].match.any == ["륙", "육"]
+
+
+def test_word_chain_filter_includes_full_dueum_start_word_candidates() -> None:
+    request = AgentAnswerRequest(
+        room_id="room-1",
+        game_type="word_chain",
+        used_words=[],
+        last_char="냬",
+    )
+    query_filter = WordChainHandler().build_filter(request, set())
+
+    assert query_filter.must[0].key == "start_word"
+    assert query_filter.must[0].match.any == ["냬", "얘"]
+
+
 def test_chosung_and_contains_filters() -> None:
     chosung_request = AgentAnswerRequest(
         room_id="room-1",

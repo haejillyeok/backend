@@ -4,6 +4,7 @@ from app.agent.core.exceptions import InvalidGameCondition
 from app.agent.schemas.request.answer import AgentAnswerRequest
 from app.agent.services.game_handlers.base import GameHandler
 from app.agent.utils.korean import normalize_word
+from app.shared.core.korean import allowed_start_chars_with_dueum
 
 
 class WordChainHandler(GameHandler):
@@ -21,7 +22,13 @@ class WordChainHandler(GameHandler):
         return value
 
     def condition_filter(self, condition: str) -> models.FieldCondition:
+        allowed_start_chars = sorted(allowed_start_chars_with_dueum(condition))
+        if len(allowed_start_chars) == 1:
+            return models.FieldCondition(
+                key="start_word",
+                match=models.MatchValue(value=condition),
+            )
         return models.FieldCondition(
             key="start_word",
-            match=models.MatchValue(value=condition),
+            match=models.MatchAny(any=allowed_start_chars),
         )

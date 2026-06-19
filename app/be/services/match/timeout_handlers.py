@@ -2,6 +2,7 @@ from datetime import datetime
 from uuid import UUID
 
 from app.be.services.match.connection_manager import MatchConnectionManager
+from app.be.services.match.ai_turn_followups import append_ai_turn_if_needed
 from app.be.services.match.round_events import broadcast_match_event_with_round_finished
 from app.be.services.match.timers import (
     MatchTimer,
@@ -31,17 +32,39 @@ async def process_match_turn_timeout(
     )
     if event is None:
         return None
-    await broadcast_match_event_with_round_finished(manager=manager, event=event, now=now)
+    broadcast_messages = await broadcast_match_event_with_round_finished(
+        manager=manager,
+        event=event,
+        now=now,
+    )
     next_timer = next_match_timer_from_message(event.message)
     if ai_turn_service is not None and isinstance(next_timer, MatchTurnTimer):
-        ai_event = await ai_turn_service.play_ai_turn(
+        await append_ai_turn_if_needed(
+            manager=manager,
+            ai_turn_service=ai_turn_service,
+            message=event.message,
             game_session_public_id=event.game_session_public_id,
-            phase_id=next_timer.phase_id,
             now=kst_now(),
+            broadcast_messages=broadcast_messages,
         )
-        if ai_event is not None:
-            await broadcast_match_event_with_round_finished(manager=manager, event=ai_event)
-            return next_match_timer_from_message(ai_event.message) or next_timer
+        next_timer = _next_timer_after_ai_messages(
+            current_timer=next_timer,
+            broadcast_messages=broadcast_messages,
+        )
+    return next_timer
+
+
+def _next_timer_after_ai_messages(
+    *,
+    current_timer: MatchTimer | None,
+    broadcast_messages: list[dict],
+) -> MatchTimer | None:
+    """AI 후속 broadcast 결과를 반영해 다음 서버 timer를 계산합니다."""
+    next_timer = current_timer
+    for message in broadcast_messages:
+        message_timer = next_match_timer_from_message(message)
+        if message_timer is not None:
+            next_timer = message_timer
     return next_timer
 
 

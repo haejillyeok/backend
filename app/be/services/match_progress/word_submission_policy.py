@@ -8,6 +8,7 @@ from app.be.models.game import (
     WordTurn,
 )
 from app.be.services.match_progress.word_turn_drafts import NextWordTurnDraft
+from app.shared.core.korean import allowed_start_chars_with_dueum
 from app.shared.core.error_codes import ErrorCode
 from app.shared.core.exceptions import AppException
 from app.shared.core.identifiers import generate_uuid_v7
@@ -27,7 +28,10 @@ class WordSubmissionPolicy:
         required_start_char: str | None,
     ) -> None:
         """현재 턴의 시작 글자 조건을 만족하는지 확인합니다."""
-        if required_start_char and not normalized_word.startswith(required_start_char):
+        if required_start_char and (
+            not normalized_word
+            or normalized_word[0] not in allowed_start_chars_with_dueum(required_start_char)
+        ):
             raise AppException(
                 code=ErrorCode.VALIDATION_ERROR,
                 details={

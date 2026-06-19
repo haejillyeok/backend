@@ -19,7 +19,7 @@ def serialize_next_turn(next_turn: MatchTurnEventPayload) -> dict[str, Any]:
 def submitted_word_from_ai_failure_details(details: dict[str, Any]) -> str | None:
     """AI 답변 검증 실패 details에서 유저에게 공개할 제출 단어를 꺼냅니다."""
     agent_answer = details.get("agent_answer")
-    if isinstance(agent_answer, str) and agent_answer:
+    if isinstance(agent_answer, str):
         return agent_answer
     return None
 

@@ -14,10 +14,35 @@ from app.be.models.game import (
 from app.be.models.game import SessionPhase, UsedWord, WordSubmission, WordTurn
 from app.be.repository.match_progress import MatchProgressRepository
 from app.be.services.match_progress import MatchProgressService
+from app.be.services.match_progress.turn_policy import MatchProgressTurnPolicy
+from app.be.services.match_progress.word_submission_policy import WordSubmissionPolicy
+from app.shared.core.korean import allowed_start_chars_with_dueum
 from app.shared.core.exceptions import AppException
 
 
 KST = ZoneInfo("Asia/Seoul")
+
+
+@pytest.mark.parametrize(
+    ("required_start_char", "allowed_start_chars"),
+    [
+        ("녀", {"녀", "여"}),
+        ("냬", {"냬", "얘"}),
+        ("라", {"라", "나"}),
+        ("락", {"락", "낙"}),
+        ("뢰", {"뢰", "뇌"}),
+        ("륙", {"륙", "육"}),
+        ("력", {"력", "역"}),
+        ("럐", {"럐", "얘"}),
+        ("나", {"나"}),
+        ("가", {"가"}),
+    ],
+)
+def test_allowed_start_chars_with_dueum_covers_initial_sound_law(
+    required_start_char: str,
+    allowed_start_chars: set[str],
+) -> None:
+    assert allowed_start_chars_with_dueum(required_start_char) == allowed_start_chars
 
 
 class FakeResult:
@@ -94,6 +119,27 @@ def build_session(session_id: UUID, public_id: UUID) -> GameSession:
         status="in_progress",
         rule_config={"max_rounds": 8, "turn_time_seconds": 10},
         started_at=datetime(2026, 6, 13, tzinfo=KST),
+    )
+
+
+def test_word_submission_policy_accepts_dueum_start_char_variants() -> None:
+    policy = WordSubmissionPolicy()
+
+    policy.ensure_word_starts_with_required_char(
+        normalized_word="여자",
+        required_start_char="녀",
+    )
+    policy.ensure_word_starts_with_required_char(
+        normalized_word="나라",
+        required_start_char="라",
+    )
+    policy.ensure_word_starts_with_required_char(
+        normalized_word="육상",
+        required_start_char="륙",
+    )
+    policy.ensure_word_starts_with_required_char(
+        normalized_word="얘기",
+        required_start_char="냬",
     )
 
 
@@ -642,7 +688,12 @@ async def test_match_progress_service_commits_turn_timeout_and_returns_broadcast
             self.calls.append("commit")
 
     repository = FakeRepository()
-    service = MatchProgressService(repository)
+
+    class FixedTurnPolicy(MatchProgressTurnPolicy):
+        def choose_round_start_participant(self, participants):
+            return next_participant
+
+    service = MatchProgressService(repository, turn_policy=FixedTurnPolicy())
 
     event = await service.timeout_turn_if_due(
         game_session_public_id=game_session_public_id,
@@ -698,7 +749,7 @@ async def test_match_progress_service_orchestrates_word_submission_repository_st
         phase_type="turn",
         phase_number=1,
         actor_participant_id=participant_id,
-        condition_payload={"required_start_char": None},
+        condition_payload={"required_start_char": "륙"},
         time_limit_seconds=10,
         started_at=datetime(2026, 6, 13, tzinfo=KST),
         deadline_at=datetime(2026, 6, 13, 0, 0, 10, tzinfo=KST),
@@ -709,7 +760,7 @@ async def test_match_progress_service_orchestrates_word_submission_repository_st
         participant_id=participant_id,
         round_number=1,
         turn_number=1,
-        condition_payload={"required_start_char": None},
+        condition_payload={"required_start_char": "륙"},
     )
     participant = SessionParticipant(
         id=participant_id,
@@ -737,7 +788,7 @@ async def test_match_progress_service_orchestrates_word_submission_repository_st
         action_type="word_submit",
         action_number=3,
         attempt_number=1,
-        payload={"word": "사과", "normalized_word": "사과"},
+        payload={"word": "육상", "normalized_word": "육상"},
         submitted_at=now,
         response_ms=None,
         is_valid=True,
@@ -746,8 +797,8 @@ async def test_match_progress_service_orchestrates_word_submission_repository_st
         id=uuid4(),
         action_id=action.id,
         turn_id=turn.id,
-        word="사과",
-        normalized_word="사과",
+        word="육상",
+        normalized_word="육상",
         dictionary_payload=None,
     )
 
@@ -772,7 +823,7 @@ async def test_match_progress_service_orchestrates_word_submission_repository_st
         async def get_valid_word(self, *, game_type, normalized_word):
             self.calls.append("get_valid_word")
             assert game_type == game_session.game_type
-            assert normalized_word == "사과"
+            assert normalized_word == "육상"
             return object()
 
         async def get_used_word(self, *, session_id, round_number, normalized_word):
@@ -789,7 +840,7 @@ async def test_match_progress_service_orchestrates_word_submission_repository_st
 
         async def create_word_submit_action(self, **kwargs):
             self.calls.append("create_word_submit_action")
-            assert kwargs["normalized_word"] == "사과"
+            assert kwargs["normalized_word"] == "육상"
             return action
 
         async def flush(self):
@@ -848,7 +899,7 @@ async def test_match_progress_service_orchestrates_word_submission_repository_st
         game_session_public_id=game_session_public_id,
         phase_id=phase_id,
         participant_id=participant_id,
-        word=" 사과 ",
+        word=" 육상 ",
         now=now,
     )
 
@@ -877,7 +928,7 @@ async def test_match_progress_service_orchestrates_word_submission_repository_st
         "commit",
     ]
     assert event.message["payload"]["result"] == "accepted"
-    assert event.message["payload"]["next_turn"]["required_start_char"] == "과"
+    assert event.message["payload"]["next_turn"]["required_start_char"] == "상"
 
 
 async def test_match_progress_service_commits_word_rejection_and_returns_broadcast_event() -> None:
@@ -1421,7 +1472,12 @@ async def test_match_progress_repository_starts_next_round_after_timeout_before_
         ]
     )
     repository = MatchProgressRepository(db_session)
-    service = MatchProgressService(repository)
+
+    class FixedTurnPolicy(MatchProgressTurnPolicy):
+        def choose_round_start_participant(self, participants):
+            return next_participant
+
+    service = MatchProgressService(repository, turn_policy=FixedTurnPolicy())
 
     event_message = await service.timeout_turn_if_due(
         game_session_public_id=game_session_public_id,
@@ -1463,6 +1519,86 @@ async def test_match_progress_repository_starts_next_round_after_timeout_before_
         "GameEvent",
     ]
     assert db_session.flushed_game_session_current_phase_ids[0] == [phase_id]
+
+
+async def test_match_progress_timeout_uses_random_round_start_actor() -> None:
+    session_id = uuid4()
+    game_session_public_id = uuid4()
+    phase_id = uuid4()
+    participant_id = uuid4()
+    next_participant_id = uuid4()
+    now = datetime(2026, 6, 13, 0, 0, 11, tzinfo=KST)
+    game_session = build_session(session_id, game_session_public_id)
+    game_session.rule_config = {"max_rounds": 2, "turn_time_seconds": 10}
+    game_session.current_phase_id = phase_id
+    phase = SessionPhase(
+        id=phase_id,
+        session_id=session_id,
+        phase_type="turn",
+        phase_number=4,
+        actor_participant_id=participant_id,
+        condition_payload={"required_start_char": "과"},
+        time_limit_seconds=10,
+        started_at=datetime(2026, 6, 13, tzinfo=KST),
+        deadline_at=datetime(2026, 6, 13, 0, 0, 10, tzinfo=KST),
+    )
+    turn = WordTurn(
+        id=uuid4(),
+        phase_id=phase_id,
+        participant_id=participant_id,
+        round_number=1,
+        turn_number=4,
+        condition_payload={"required_start_char": "과"},
+    )
+    participant = SessionParticipant(
+        id=participant_id,
+        session_id=session_id,
+        user_id=uuid4(),
+        participant_type="user",
+        display_name="1번 손님",
+        seat_number=1,
+        is_uninvited_guest=False,
+    )
+    next_participant = SessionParticipant(
+        id=next_participant_id,
+        session_id=session_id,
+        user_id=None,
+        participant_type="ai",
+        display_name="2번 손님",
+        seat_number=2,
+        is_uninvited_guest=True,
+    )
+
+    class FixedTurnPolicy(MatchProgressTurnPolicy):
+        def choose_round_start_participant(self, participants):
+            return participant
+
+    db_session = FakeDbSession(
+        [
+            FakeResult(scalar=game_session),
+            FakeResult(scalar=phase),
+            FakeResult(scalar=participant),
+            FakeResult(row=(turn, participant)),
+            FakeResult(scalars=[participant, next_participant]),
+            FakeResult(scalar=8),
+            FakeResult(scalar="나"),
+            FakeResult(scalar=12),
+        ]
+    )
+    repository = MatchProgressRepository(db_session)
+    service = MatchProgressService(repository, turn_policy=FixedTurnPolicy())
+
+    event_message = await service.timeout_turn_if_due(
+        game_session_public_id=game_session_public_id,
+        phase_id=phase_id,
+        now=now,
+    )
+
+    _action, next_phase, next_turn, _event = db_session.added
+    assert next_phase.actor_participant_id == participant_id
+    assert next_turn.participant_id == participant_id
+    assert event_message is not None
+    assert event_message.message["payload"]["next_turn"]["actor_seat_number"] == 1
     assert db_session.flushed_game_session_current_phase_ids[1] == [phase_id]
     assert db_session.flushed_game_session_current_phase_ids[2] == [next_phase.id]
 

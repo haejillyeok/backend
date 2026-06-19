@@ -1,4 +1,6 @@
+import random
 from datetime import datetime
+from typing import Sequence
 from uuid import UUID
 
 from app.be.models.game import SessionParticipant, SessionPhase, WordTurn
@@ -8,6 +10,9 @@ from app.shared.core.exceptions import AppException
 
 class MatchProgressTurnPolicy:
     """현재 턴 검증과 참가자 순서 계산 규칙을 담당합니다."""
+
+    def __init__(self, random_source: random.Random | None = None) -> None:
+        self._random = random_source or random.SystemRandom()
 
     def validate_active_turn(
         self,
@@ -54,6 +59,18 @@ class MatchProgressTurnPolicy:
             None,
         )
         return later_participant or participants[0]
+
+    def choose_round_start_participant(
+        self,
+        participants: Sequence[SessionParticipant],
+    ) -> SessionParticipant:
+        """새 라운드 첫 actor를 참가자 목록에서 무작위로 선택합니다."""
+        if not participants:
+            raise AppException(
+                code=ErrorCode.VALIDATION_ERROR,
+                details={"reason": "participants_missing"},
+            )
+        return self._random.choice(list(participants))
 
     def normalize_word(self, word: str) -> str:
         """제출 단어의 앞뒤 공백을 제거하고 빈 단어를 거부합니다."""

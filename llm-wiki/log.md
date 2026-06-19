@@ -4,6 +4,11 @@
 코드 변경 상세는 Git history, PR, issue에서 확인하고, 이 파일에는 위키 페이지의 지식, 계약, 정책,
 컨벤션이 어떻게 바뀌었는지만 남깁니다.
 
+## [2026-06-19] maintenance | Expand word-chain dueum rule coverage
+
+- `sunset-game-domain.md`의 끝말잇기 두음법칙 기준을 `ㄴ/ㄹ` 초성과 `ㅣ/y` 계열 중성 전체, 종성 보존 규칙으로 명시했다.
+- Backend 제출 검증과 Agent 정답 후보 조회가 `륙→육`, `력→역`, `락→낙`, `냬→얘` 같은 전체 두음법칙 허용 집합을 같은 기준으로 사용한다는 정책을 정리했다.
+
 ## [2026-06-18] maintenance | Clarify repository query-only boundary
 
 - `code-conventions.md`에 repository는 쿼리 실행과 DB row/list 반환에 집중하고, 조회 실패의 예외 변환과 row 의미 판단, application DTO 조립은 service/usecase에서 담당한다는 기준을 추가했다.
@@ -515,6 +520,12 @@
 - Qdrant local PV와 vLLM 단일 GPU replica, 모델 hostPath, `enableServiceLinks=false`를 배포 기준으로 고정했다.
 - 회사 NodePort `31080`에서 Azure localhost로 이어지는 SSH reverse tunnel과 Azure Nginx를 외부 연결 경계로 기록했다.
 - Agent API, 한국어 처리, Qdrant 중복 적재, k3s manifest 테스트를 추가했다.
+
+## [2026-06-18] maintenance | Update word-chain turn and AI retry rules
+
+- `sunset-game-domain.md`에 라운드 첫 actor는 AI 손님 포함 참가자 중 무작위로 정한다는 기준을 반영했다.
+- 끝말잇기 시작 글자 검증과 Agent 정답 후보 조회에 두음법칙 허용 기준을 추가했다.
+- Agent 빈 답변은 공개 payload에서 빈 문자열로 보내고, 같은 AI phase에 짧은 지연 retry를 할 수 있다는 기준을 정리했다.
 
 ## [2026-06-11] maintenance | Separate socket router from API router
 

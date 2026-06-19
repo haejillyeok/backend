@@ -54,7 +54,8 @@ def ai_answer_rejection_details(
 
 def ai_no_candidate_details(answer: str | None, reason: str | None) -> dict[str, object]:
     """Agent가 실패 상태와 함께 후보 단어를 돌려준 경우 UI에 공개할 수 있게 보존합니다."""
-    failure_details: dict[str, object] = {"agent_reason": reason}
-    if answer:
-        failure_details["agent_answer"] = answer
+    failure_details: dict[str, object] = {
+        "agent_reason": reason,
+        "agent_answer": answer or "",
+    }
     return failure_details

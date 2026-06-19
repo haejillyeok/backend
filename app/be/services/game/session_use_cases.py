@@ -163,7 +163,9 @@ class GameSessionUseCaseMixin:
         required_start_char = await self.repository.get_random_round_start_char(
             game_type=room.game_type,
         )
-        first_participant = min(participant_rows, key=lambda participant: participant.seat_number)
+        first_participant = self.initial_turn_policy.choose_round_start_participant(
+            participant_rows
+        )
         draft = self.initial_turn_policy.build_word_chain_initial_turn(
             rule_config=room.rule_config,
             required_start_char=required_start_char,

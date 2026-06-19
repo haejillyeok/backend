@@ -244,7 +244,7 @@ class MatchProgressAiFailureUseCaseMixin:
         await self.repository.mark_phase_timeout(phase=phase, now=now)
 
         max_rounds = int(game_session.rule_config.get("max_rounds", 8))
-        next_participant = self.turn_policy.next_participant(participants, participant)
+        next_participant = self.turn_policy.choose_round_start_participant(participants)
         round_start_char = None
         if turn.round_number < max_rounds:
             round_start_char = await self.repository.get_random_round_start_char(
